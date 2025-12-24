@@ -125,12 +125,17 @@ You should understand:
 ### Notes Section (write these down):
 ```
 Key differences from JavaScript I noticed:
-1. 
-2. 
+1. Everything must be done in a certain way
+2. Looks like C
 3. 
 
 Questions I have:
 1. 
+2. 
+
+
+Observations I made:
+1. You must use `var` outside a function, you can use `:=`
 2. 
 ```
 
