@@ -159,7 +159,7 @@ go mod init github.com/yourusername/activelog
 **2. Create Project Structure (10 min)**
 ```bash
 # Create the directory structure
-mkdir -p cmd/api
+mkdir -p cmd/api 
 mkdir -p internal/handlers
 mkdir -p internal/models
 mkdir -p pkg/response
@@ -229,7 +229,10 @@ What worked:
 - 
 
 What confused me:
-- 
+-  func(w http.ResponseWriter, r *http.Request){}
+
+Observation:
+- go.mod == package.json
 
 Questions for Saturday:
 - 
