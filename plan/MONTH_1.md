@@ -647,16 +647,18 @@ curl -X POST http://localhost:8080/api/v1/activities
 ### Saturday Reflection (15 min):
 ```
 What I built today:
-- 
+- the reusable JSON sender
+- the activity route
 
 What made sense:
-- 
+- the handlers and route flow
 
 What's still confusing:
-- 
+- why the health handler needed to have a serve http but the activity handler did not need to have
+- the difference between Handle and HandleFunc
 
 How does this compare to Express/JavaScript?
-- 
+- the intention and logic is almost the same. Just a few differnces like Handle and HandleFunc
 ```
 
 ---
