@@ -11,7 +11,17 @@ func NewActivityHandler() *ActivityHandler {
 	return &ActivityHandler{}
 }
 
-func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r http.Request) {
+func (a *ActivityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	responseData := map[string]string{
+		"status":  "healthy",
+		"service": "activelog-api",
+	}
+
+	response.SendJSON(w, http.StatusOK, responseData)
+}
+
+func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request) {
 	activities := []map[string]interface{}{
 		{
 			"id":       1,
@@ -32,7 +42,7 @@ func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r http.Request) 
 	})
 }
 
-func (a *ActivityHandler) CreateActivity(w http.ResponseWriter, r http.Request) {
+func (a *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request) {
 
 	response.SendJSON(w, http.StatusOK, map[string]string{
 		"message": "Activity create (mock)",
