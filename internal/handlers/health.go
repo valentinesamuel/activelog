@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
+	"github.com/valentinesamuel/activelog/pkg/response"
 	"net/http"
 )
 
@@ -12,12 +12,11 @@ func NewHealthHandler() *HealthHandler {
 }
 
 func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 
-	response := map[string]string{
+	responseData := map[string]string{
 		"status":  "healthy",
 		"service": "activelog-api",
 	}
 
-	json.NewEncoder(w).Encode(response)
+	response.SendJSON(w, http.StatusOK, responseData)
 }
