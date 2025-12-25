@@ -226,13 +226,15 @@ curl http://localhost:8080
 ### Notes Section:
 ```
 What worked:
-- 
+- http server
 
 What confused me:
 -  func(w http.ResponseWriter, r *http.Request){}
 
 Observation:
 - go.mod == package.json
+- func(w http.ResponseWriter, r *http.Request){} === app.get('/', (req, res) => { ... })
+- not to call the ListenAndServe inside the HandleFunc method if not, the server would start and close immediately
 
 Questions for Saturday:
 - 
