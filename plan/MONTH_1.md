@@ -1352,10 +1352,10 @@ migrate -path migrations -database "postgres://activelog_user:your_secure_passwo
 ### Notes:
 ```
 Why migrations instead of just CREATE TABLE in code?
-- 
+- for automatic creation
 
 What happens if I run the up migration twice?
-- 
+- nothing happens. they are atomic
 ```
 
 ---
@@ -1502,7 +1502,7 @@ Create(&activity)
 ### Notes:
 ```
 What clicked about pointers:
--
+- The key rules were all i needed to know as to when to use pointer and when not to
 
 What's still confusing:
 -

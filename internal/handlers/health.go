@@ -1,8 +1,10 @@
 package handlers
 
 import (
-	"github.com/valentinesamuel/activelog/pkg/response"
 	"net/http"
+
+	"github.com/valentinesamuel/activelog/internal/practice"
+	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
 type HealthHandler struct{}
@@ -12,6 +14,8 @@ func NewHealthHandler() *HealthHandler {
 }
 
 func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	practice.DemoPointers()
 
 	responseData := map[string]string{
 		"status":  "healthy",
