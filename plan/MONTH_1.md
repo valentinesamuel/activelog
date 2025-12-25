@@ -991,35 +991,36 @@ You went from "I only know main.go" to having a properly structured Go API with:
 **What felt easy?**
 ```
 Your answer:
-
+Understanding the router.HandleFunc("/path", handler).Methods("GET")
 ```
 
 **What felt hard?**
 ```
 Your answer:
-
+- Undersatnding interfaces
+- Understanding the difference between HandleFunc and Handle
 ```
 
 **What's still confusing?**
 ```
 Your answer:
-
+- Nothing for now
 ```
 
 **How confident do you feel (1-10)?**
 ```
-Your rating: __/10
+Your rating: 8/10
 
 Why this rating:
-
+Because after leanrning the differences between javascript and Go, i am now startig to see that they are doing the exact same thing but Javascript lets you do it and Go tells you how to do it
 ```
 
 **Ready for Week 2?**
 ```
 Yes / Need more practice
-
+Yes
 If more practice needed, what specifically:
-
+Nil
 ```
 
 ---
@@ -1249,10 +1250,10 @@ With proper configuration:
 ### Notes:
 ```
 How does this compare to JavaScript database libraries?
-- 
+- Normally, i would use typeorm but i think they do the same thing but JS is more accomodating and abstracts more stuff away from you. But as for connection pooling, i like that the settings are documented and described compared to typeorm
 
 Questions:
-- 
+- nil
 ```
 
 ---
