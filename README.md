@@ -121,11 +121,30 @@ go fmt ./...
 - [x] JSON response helpers
 - [x] Basic tests
 
-### Week 2 (Next)
-- [ ] PostgreSQL integration
-- [ ] Database models
-- [ ] Real CRUD operations
-- [ ] Error handling
+### Week 2✅
+Add database setup instructions:
+
+## Database Setup
+1. Create database and user:
+```bash
+psql postgres
+CREATE DATABASE activelog_dev;
+CREATE USER activelog_user WITH PASSWORD 'your_secure_password';
+GRANT ALL PRIVILEGES ON DATABASE activelog_dev TO activelog_user;
+\q
+```
+
+2. Run migrations:
+```bash
+migrate -path migrations -database "postgres://activelog_user:your_secure_password@localhost/activelog_dev?sslmode=disable" up
+```
+
+3. Create a test user:
+```bash
+psql activelog_dev -U activelog_user
+INSERT INTO users (email, username) VALUES ('test@example.com', 'testuser');
+\q
+```
 
 ## Learning Notes
 
