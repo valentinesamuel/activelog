@@ -60,7 +60,7 @@ func (a *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activity, err := a.repo.GetByID(ctx, id)
+	activity, err := a.repo.GetByID(ctx, int64(id))
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "Activity not found")
 		return
