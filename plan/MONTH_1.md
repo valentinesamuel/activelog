@@ -2345,24 +2345,25 @@ You connected a real database and implemented proper data persistence:
 **What made sense this week?**
 ```
 Your answer:
-
+- writing the app error handler
+- testing
 ```
 
 **What's still unclear?**
 ```
 Your answer:
-
+- when to use the likes of %v, %s, etc
 ```
 
 **How confident with databases in Go (1-10)?**
 ```
-Your rating: __/10
+Your rating: 5/10
 ```
 
 **Biggest challenge this week?**
 ```
 Your answer:
-
+Getting the test database migration to run
 ```
 
 ---
