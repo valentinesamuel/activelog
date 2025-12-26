@@ -12,11 +12,11 @@ import (
 func Connect(databaseUrl string) (*sql.DB, error) {
 	db, err := sql.Open("postgres", databaseUrl)
 	if err != nil {
-		return nil, fmt.Errorf("❌ Error opening a coonnection to the db: %w", err)
+		return nil, fmt.Errorf("❌ Error opening a coonnection to the db: \n🛑 %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("❌ Error connecting to the db: %w", err)
+		return nil, fmt.Errorf("❌ Error connecting to the db: \n🛑 %w", err)
 	}
 
 	db.SetMaxOpenConns(25)

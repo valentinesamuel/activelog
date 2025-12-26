@@ -6,40 +6,44 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/valentinesamuel/activelog/internal/config"
+	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/handlers"
+	"github.com/valentinesamuel/activelog/internal/repository"
 )
 
 func main() {
-	fmt.Println("Starting ActiveLog API...")
+	fmt.Println("🚒 Starting ActiveLog API...")
+
+	cfg := config.Load()
+
+	db, err := database.Connect(cfg.DatabaseUrl)
+	if err != nil {
+		log.Fatal("❌ 🛢️ Failed to connect to database \n", err)
+	}
+	defer db.Close()
 
 	router := mux.NewRouter()
 
-	healthHandler := handlers.NewHealthHandler()
-	activityHandler := handlers.NewActivityHandler()
+	activityRepo := repository.NewActivityRepository(db)
 
-	api := router.PathPrefix("/api/v1").Subrouter()
+	healthHandler := handlers.NewHealthHandler()
+	activityHandler := handlers.NewActivityHandler(activityRepo)
 
 	router.Handle("/health", healthHandler).Methods("GET")
 
+	api := router.PathPrefix("/api/v1").Subrouter()
+
 	api.HandleFunc("/activities", activityHandler.ListActivities).Methods("GET")
 	api.HandleFunc("/activities", activityHandler.CreateActivity).Methods("POST")
+	api.HandleFunc("/activities/{id}", activityHandler.GetActivity).Methods("POST")
 
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"message":"Welcome to ActiveLog API"}`))
-
+		w.Write([]byte(`{"message": "🪵 ActiveLog API v1", "version": "0.1.0"}`))
 	}).Methods("GET")
 
-	log.Println("Server starting on :8080")
-
-	// http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-	// 	w.Header().Set("Content-Type", "application/json")
-	// 	w.Write([]byte(`{"message":"Welcome to ActiveLog API"}`))
-	// if err := http.ListenAndServe(":8080", nil); err != nil {
-	// 	log.Fatal(err)
-	// }
-	// })
-
-	log.Fatal(http.ListenAndServe(":8080", router))
+	log.Printf("🚒 Server starting on :%s\n", cfg.ServerPort)
+	log.Fatal(http.ListenAndServe(":"+cfg.ServerPort, router))
 
 }

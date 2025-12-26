@@ -9,7 +9,7 @@ type Config struct {
 
 func Load() *Config {
 	return &Config{
-		DatabaseUrl: getEnv("DATABASE_URL", "postgres://activelog_user:your_secure_password@localhost/activelog?sslmode=disable"),
+		DatabaseUrl: getEnv("DATABASE_URL", "postgres://activelog_user:activelog@localhost:5444/activelog?sslmode=disable"),
 		ServerPort:  getEnv("PORT", "8080"),
 	}
 }
