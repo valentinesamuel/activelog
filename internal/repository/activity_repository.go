@@ -22,7 +22,7 @@ func (ar *ActivityRepository) Create(ctx context.Context, activity *models.Activ
 	query := `
 		INSERT INTO activities 
 		(user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date) 
-		VALUES ($1, $1, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -37,7 +37,7 @@ func (ar *ActivityRepository) Create(ctx context.Context, activity *models.Activ
 	return nil
 }
 
-func (ar *ActivityRepository) GetByID(ctx context.Context, id int) (*models.Activity, error) {
+func (ar *ActivityRepository) GetByID(ctx context.Context, id int64) (*models.Activity, error) {
 	query := `
 		SELECT id, user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date, created_at, updated_at
 		FROM activities
