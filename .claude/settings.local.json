@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(psql:*)",
+      "Bash(go version:*)",
+      "Bash(go test:*)"
+    ]
+  }
+}
