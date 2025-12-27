@@ -7,8 +7,10 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog/log"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	"github.com/valentinesamuel/activelog/internal/validator"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
@@ -30,6 +32,19 @@ func (a *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	err := validator.Validate(&req)
+	if err != nil {
+		validationErrors := validator.FormatValidationErrors(err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "Validation failed",
+			"fields": validationErrors,
+		},
+		)
+		return
+	}
+
 	activity := &models.Activity{
 		UserID:          1,
 		ActivityType:    req.ActivityType,
@@ -43,10 +58,12 @@ func (a *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := a.repo.Create(ctx, activity); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create activity")
+		log.Error().Err(err).Msg("❌ Failed to create activity")
+		response.Error(w, http.StatusInternalServerError, "❌ Failed to create activity")
 		return
 	}
 
+	log.Info().Int("activityId", int(activity.ID)).Msg("✅ Activity Created")
 	response.SendJSON(w, http.StatusCreated, activity)
 }
 
