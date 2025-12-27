@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/valentinesamuel/activelog/internal/models"
+	"github.com/valentinesamuel/activelog/pkg/errors"
 )
 
 type ActivityRepository struct {
@@ -71,11 +72,15 @@ func (ar *ActivityRepository) GetByID(ctx context.Context, id int64) (*models.Ac
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("❌ Activity not found")
+		return nil, errors.ErrNotFound
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("❌ Error fetching activity: %w", err)
+		return nil, &errors.DatabaseError{
+			Op:    "SELECT",
+			Table: "activities",
+			Err:   err,
+		}
 	}
 
 	fmt.Println("✅ Activity fetched successfully!")

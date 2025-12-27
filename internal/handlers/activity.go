@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/validator"
+	appErrors "github.com/valentinesamuel/activelog/pkg/errors"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
@@ -80,7 +82,13 @@ func (a *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 
 	activity, err := a.repo.GetByID(ctx, int64(id))
 	if err != nil {
-		response.Error(w, http.StatusNotFound, "Activity not found")
+		if errors.Is(err, appErrors.ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "Activity not found")
+			return
+		}
+
+		log.Error().Err(err).Int("id", id).Msg("Failed to get activity")
+		response.Error(w, http.StatusInternalServerError, "Failed to fetch activity")
 		return
 	}
 	response.SendJSON(w, http.StatusOK, activity)
