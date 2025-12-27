@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/handlers"
+	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	"github.com/valentinesamuel/activelog/pkg/logger"
 )
 
 func main() {
@@ -23,12 +26,16 @@ func main() {
 	}
 	defer db.Close()
 
-	router := mux.NewRouter()
-
 	activityRepo := repository.NewActivityRepository(db)
 
 	healthHandler := handlers.NewHealthHandler()
 	activityHandler := handlers.NewActivityHandler(activityRepo)
+
+	router := mux.NewRouter()
+
+	router.Use(middleware.LoggingMiddleware)
+	router.Use(middleware.CORS)
+	router.Use(middleware.SecurityHeaders)
 
 	router.Handle("/health", healthHandler).Methods("GET")
 
@@ -43,7 +50,15 @@ func main() {
 		w.Write([]byte(`{"message": "🪵 ActiveLog API v1", "version": "0.1.0"}`))
 	}).Methods("GET")
 
-	log.Printf("🚒 Server starting on :%s\n", cfg.ServerPort)
-	log.Fatal(http.ListenAndServe(":"+cfg.ServerPort, router))
+	server := &http.Server{
+		Addr:         ":" + cfg.ServerPort,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	logger.Info().Str("port", cfg.ServerPort).Msg("🚒 Server starting ...")
+	log.Fatal(server.ListenAndServe())
 
 }

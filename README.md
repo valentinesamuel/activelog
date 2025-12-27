@@ -58,28 +58,62 @@ Response:
 }
 ```
 
-### List Activities (Mock)
+Add filtering examples:
+```markdown
+## API Endpoints
+
+### List Activities
 ```bash
-GET /api/v1/activities
+GET /api/v1/activities?type=running&limit=10&offset=0&start_date=2024-12-01T00:00:00Z
 ```
+
+Query Parameters:
+- `type` - Filter by activity type
+- `limit` - Number of results (max 100, default 10)
+- `offset` - Pagination offset
+- `start_date` - Filter activities after this date (RFC3339 format)
+- `end_date` - Filter activities before this date (RFC3339 format)
 
 Response:
 ```json
 {
   "activities": [...],
-  "count": 2
+  "count": 10,
+  "total": 45,
+  "limit": 10,
+  "offset": 0
 }
 ```
 
-### Create Activity (Mock)
+### Create Activity
 ```bash
 POST /api/v1/activities
+Content-Type: application/json
+
+{
+  "activity_type": "running",
+  "title": "Morning Run",
+  "duration_minutes": 30,
+  "distance_km": 5.2,
+  "activity_date": "2024-12-24T07:00:00Z"
+}
 ```
 
-Response:
+Validation Rules:
+- `activity_type`: required, 2-50 characters
+- `title`: optional, max 255 characters
+- `duration_minutes`: optional, 1-1440 (max 24 hours)
+- `distance_km`: optional, must be positive
+- `activity_date`: required, RFC3339 format
+
+Error Response:
 ```json
 {
-  "message": "Activity created (mock)"
+  "error": "Validation failed",
+  "fields": {
+    "activity_type": "activity_type is required",
+    "activity_date": "activity_date is required"
+  }
 }
 ```
 

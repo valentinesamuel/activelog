@@ -124,3 +124,92 @@ func (ar *ActivityRepository) ListByUser(ctx context.Context, UserID int) ([]*mo
 
 	return activities, nil
 }
+
+func (ar *ActivityRepository) ListByUserWithFilters(UserID int, filters models.ActivityFilters) ([]*models.Activity, error) {
+	query := `
+		SELECT id, user_id, activity_type, title, description, duration_minutes,
+			distance_km, calories_burned, notes, activity_date, created_at, updated_at
+		FROM activities
+		WHERE user_id = $1
+	`
+
+	args := []interface{}{UserID}
+	argsCount := 1
+
+	// add activity filter type
+	if filters.ActivityType != "" {
+		argsCount++
+		query += fmt.Sprintf(" AND activity_type = $%d", argsCount)
+		args = append(args, filters.ActivityType)
+	}
+
+	if filters.StartDate != nil {
+		argsCount++
+		query += fmt.Sprintf(" AND activity_date >= $%d", argsCount)
+		args = append(args, filters.StartDate)
+	}
+
+	if filters.EndDate != nil {
+		argsCount++
+		query += fmt.Sprintf(" AND activity_date <= $%d", argsCount)
+		args = append(args, filters.EndDate)
+	}
+
+	query += " ORDER BY activity_date DESC"
+
+	// add pagination
+	if filters.Limit > 0 {
+		argsCount++
+		query += fmt.Sprintf(" LIMIT $%d", argsCount)
+		args = append(args, filters.Limit)
+	}
+
+	if filters.Offset > 0 {
+		argsCount++
+		query += fmt.Sprintf(" OFFSET $%d", argsCount)
+		args = append(args, filters.Limit)
+	}
+
+	rows, err := ar.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("❌ Error listing activities: %w", err)
+	}
+
+	defer rows.Close()
+
+	var activities []*models.Activity
+
+	for rows.Next() {
+		activity := &models.Activity{}
+		err := rows.Scan(
+			&activity.ID,
+			&activity.UserID,
+			&activity.ActivityType,
+			&activity.Title,
+			&activity.Description,
+			&activity.DurationMinutes,
+			&activity.DistanceKm,
+			&activity.CaloriesBurned,
+			&activity.Notes,
+			&activity.ActivityDate,
+			&activity.CreatedAt,
+			&activity.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("❌ Error scanning activity: %w", err)
+		}
+		activities = append(activities, activity)
+	}
+
+	fmt.Println("✅ Activities fetched successfully!")
+
+	return activities, rows.Err()
+}
+
+func (ar *ActivityRepository) Count(userID int) (int, error) {
+	var count int
+	query := "SELECT COUNT(*) FROM activities WHERE user_id = $1"
+	err := ar.db.QueryRow(query, userID).Scan(&count)
+	return count, err
+}

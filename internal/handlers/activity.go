@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
@@ -86,19 +87,67 @@ func (a *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 
 	UserID := 1
 
-	activities, err := a.repo.ListByUser(ctx, UserID)
+	filters := models.ActivityFilters{
+		ActivityType: r.URL.Query().Get("type"),
+		Limit:        10,
+		Offset:       0,
+	}
+
+	parsedFilters := parseFilters(w, r, &filters)
+
+	fmt.Println(filters)
+
+	activities, err := a.repo.ListByUserWithFilters(UserID, parsedFilters)
 	if err != nil {
-		fmt.Println("🛑 Error fetching activities: \n🛑", err)
+		log.Error().Err(err).Msg("❌ Failed to list activities")
 		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
 		return
+	}
+
+	total, err := a.repo.Count(UserID)
+	if err != nil {
+		log.Err(err).Msg("❌ Failed to count activities")
+		total = len(activities)
 	}
 
 	response.SendJSON(w, http.StatusOK, map[string]interface{}{
 		"activities": activities,
 		"count":      len(activities),
+		"total":      total,
+		"limit":      filters.Limit,
+		"offset":     filters.Offset,
 	})
+}
+
+func parseFilters(w http.ResponseWriter, r *http.Request, filters *models.ActivityFilters) models.ActivityFilters {
+	// parse limit
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			if limit > 100 {
+				limit = 100
+			}
+			filters.Limit = limit
+		}
+	}
+	// Parse offset
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
+			filters.Offset = offset
+		}
+	}
+	// Parse date range
+	if startStr := r.URL.Query().Get("startDate"); startStr != "" {
+		if startDate, err := time.Parse(time.RFC3339, startStr); err == nil {
+			filters.StartDate = &startDate
+		}
+	}
+	if endStr := r.URL.Query().Get("endDate"); endStr != "" {
+		if endDate, err := time.Parse(time.RFC3339, endStr); err == nil {
+			filters.EndDate = &endDate
+		}
+	}
+	return *filters
 }
