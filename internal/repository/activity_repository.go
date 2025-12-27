@@ -4,12 +4,21 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/valentinesamuel/activelog/internal/models"
 )
 
 type ActivityRepository struct {
 	db *sql.DB
+}
+
+type ActivityStats struct {
+	TotalActivities int
+	TotalDuration   int
+	TotalDistance   float64
+	TotalCalories   int
+	ActivityTypes   map[string]int
 }
 
 func NewActivityRepository(db *sql.DB) *ActivityRepository {
@@ -262,4 +271,86 @@ func (r *ActivityRepository) Delete(id int, userID int) error {
 	}
 
 	return nil
+}
+
+func (r *ActivityRepository) GetStats(userID int, startDate, endDate *time.Time) (*ActivityStats, error) {
+
+	query := `
+	SELECT 
+		COUNT(*) as total,
+		COALESCE(SUM(duration_minutes), 0) as total_duration,
+		COALESCE(SUM(distance_km), 0) as total_distance,
+		COALESCE(SUM(calories_burned), 0) as total_calories
+	FROM activities
+	WHERE user_id = $1
+	`
+
+	args := []interface{}{userID}
+	argsCount := 1
+
+	if startDate != nil {
+		argsCount++
+		query += fmt.Sprintf(" AND activity_date >= $%d", argsCount)
+		args = append(args, startDate)
+	}
+
+	if endDate != nil {
+		argsCount++
+		query += fmt.Sprintf(" AND activity_date <= $%d", argsCount)
+		args = append(args, endDate)
+	}
+
+	stats := &ActivityStats{
+		ActivityTypes: make(map[string]int),
+	}
+
+	err := r.db.QueryRow(query, args...).Scan(
+		&stats.TotalActivities,
+		&stats.TotalDuration,
+		&stats.TotalDistance,
+		&stats.TotalCalories,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	typeQuery := `
+		SELECT activity_type, COUNT(*)
+		FROM activities
+		WHERE user_id = $1
+	`
+
+	typeArgs := []interface{}{userID}
+	typeArgCount := 1
+
+	if startDate != nil {
+		typeArgCount++
+		typeQuery += fmt.Sprintf(" AND activity_date >= $%d", typeArgCount)
+		typeArgs = append(typeArgs, startDate)
+	}
+	if endDate != nil {
+		typeArgCount++
+		typeQuery += fmt.Sprintf(" AND activity_date <= $%d", typeArgCount)
+		typeArgs = append(typeArgs, endDate)
+	}
+
+	typeQuery += " GROUP BY activity_type"
+
+	rows, err := r.db.Query(typeQuery, typeArgs...)
+	if err != nil {
+		return stats, nil
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var activityType string
+		var count int
+		if err := rows.Scan(&activityType, &count); err == nil {
+			stats.ActivityTypes[activityType] = count
+		}
+	}
+
+	return stats, nil
 }

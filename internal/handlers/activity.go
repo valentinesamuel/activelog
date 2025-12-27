@@ -241,3 +241,30 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *ActivityHandler) GetStats(w http.ResponseWriter, r *http.Request) {
+	userID := 1
+
+	var startDate, endDate *time.Time
+
+	if startStr := r.URL.Query().Get("startDate"); startStr != "" {
+		if parsed, err := time.Parse(time.RFC3339, startStr); err == nil {
+			startDate = &parsed
+		}
+	}
+
+	if endStr := r.URL.Query().Get("endDate"); endStr != "" {
+		if parsed, err := time.Parse(time.RFC3339, endStr); err == nil {
+			endDate = &parsed
+		}
+	}
+
+	stats, err := h.repo.GetStats(userID, startDate, endDate)
+	if err != nil {
+		log.Error().Err(err).Msg("❌ Failed to get stats")
+		response.Error(w, http.StatusInternalServerError, "Failed to get statistics")
+		return
+	}
+
+	response.SendJSON(w, http.StatusOK, stats)
+}
