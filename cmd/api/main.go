@@ -43,7 +43,10 @@ func main() {
 
 	api.HandleFunc("/activities", activityHandler.ListActivities).Methods("GET")
 	api.HandleFunc("/activities", activityHandler.CreateActivity).Methods("POST")
-	api.HandleFunc("/activities/{id}", activityHandler.GetActivity).Methods("POST")
+	api.HandleFunc("/activities/stats", activityHandler.GetStats).Methods("GET")
+	api.HandleFunc("/activities/{id}", activityHandler.GetActivity).Methods("GET")
+	api.HandleFunc("/activities/{id}", activityHandler.UpdateActivity).Methods("PATCH")
+	api.HandleFunc("/activities/{id}", activityHandler.DeleteActivity).Methods("DELETE")
 
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
