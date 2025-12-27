@@ -2520,7 +2520,7 @@ func FormatValidationErrors(err error) map[string]string {
 ### Notes:
 ```
 How is this different from JavaScript validation libraries?
-- 
+- A lot more painful work compared to class validator
 
 Questions:
 - 
