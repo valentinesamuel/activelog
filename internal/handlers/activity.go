@@ -151,3 +151,93 @@ func parseFilters(w http.ResponseWriter, r *http.Request, filters *models.Activi
 	}
 	return *filters
 }
+
+func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
+		return
+	}
+
+	var req models.UpdateActivityRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	// Validate
+	if err := validator.Validate(&req); err != nil {
+		validationErrors := validator.FormatValidationErrors(err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "Validation failed",
+			"fields": validationErrors,
+		})
+		return
+	}
+
+	// Fetch existing activity
+	userID := 1
+	activity, err := h.repo.GetByID(ctx, int64(id))
+	if err != nil || activity.UserID != userID {
+		response.Error(w, http.StatusNotFound, "Activity not found")
+		return
+	}
+
+	// Apply updates
+	if req.ActivityType != nil {
+		activity.ActivityType = *req.ActivityType
+	}
+	if req.Title != nil {
+		activity.Title = *req.Title
+	}
+	if req.Description != nil {
+		activity.Description = *req.Description
+	}
+	if req.DurationMinutes != nil {
+		activity.DurationMinutes = *req.DurationMinutes
+	}
+	if req.DistanceKm != nil {
+		activity.DistanceKm = *req.DistanceKm
+	}
+	if req.CaloriesBurned != nil {
+		activity.CaloriesBurned = *req.CaloriesBurned
+	}
+	if req.Notes != nil {
+		activity.Notes = *req.Notes
+	}
+	if req.ActivityDate != nil {
+		activity.ActivityDate = *req.ActivityDate
+	}
+
+	// Save
+	if err := h.repo.Update(id, activity); err != nil {
+		log.Error().Err(err).Msg("Failed to update activity")
+		response.Error(w, http.StatusInternalServerError, "Failed to update activity")
+		return
+	}
+
+	response.SendJSON(w, http.StatusOK, activity)
+}
+
+func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
+		return
+	}
+
+	userID := 1
+
+	if err := h.repo.Delete(id, userID); err != nil {
+		log.Error().Err(err).Int("id", id).Msg("Failed to delete activity")
+		response.Error(w, http.StatusNotFound, "Activity not found")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

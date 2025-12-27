@@ -213,3 +213,53 @@ func (ar *ActivityRepository) Count(userID int) (int, error) {
 	err := ar.db.QueryRow(query, userID).Scan(&count)
 	return count, err
 }
+
+func (r *ActivityRepository) Update(id int, activity *models.Activity) error {
+	query := `
+		UPDATE activities
+		SET activity_type = $1, title = $2, description = $3,
+			duration_minutes = $4, distance_km = $5, calories_burned = $6,
+			notes = $7, activity_date = $8, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $9 AND user_id = $10
+		RETURNING updated_at
+	`
+
+	err := r.db.QueryRow(
+		query,
+		activity.ActivityType,
+		activity.Title,
+		activity.Description,
+		activity.DurationMinutes,
+		activity.DistanceKm,
+		activity.CaloriesBurned,
+		activity.Notes,
+		activity.ActivityDate,
+		id,
+		activity.UserID,
+	).Scan(&activity.UpdatedAt)
+
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("❌ Activity not found")
+	}
+
+	return err
+}
+
+func (r *ActivityRepository) Delete(id int, userID int) error {
+	query := "DELETE FROM activities WHERE id = $1 AND user_id = $2"
+	result, err := r.db.Exec(query, id, userID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("❌ Activity not found")
+	}
+
+	return nil
+}

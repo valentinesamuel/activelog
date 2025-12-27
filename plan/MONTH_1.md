@@ -3273,18 +3273,19 @@ git tag week-3
 **What felt natural this week?**
 ```
 Your answer:
-
+- the validation
 ```
 
 **What's still tricky?**
 ```
 Your answer:
-
+- the way time is being handled. It's more low-level in Go
 ```
 
 **Confidence level (1-10)?**
 ```
-Your rating: __/10
+Your rating: 8/10
+I might not be so familiar with every syntax but i am getting used to the low-levelness.
 ```
 
 ---
@@ -3358,7 +3359,7 @@ func (r *ActivityRepository) Update(id int, activity *models.Activity) error {
 	).Scan(&activity.UpdatedAt)
 
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("activity not found")
+		return fmt.Errorf("❌ Activity not found")
 	}
 
 	return err
@@ -3378,7 +3379,7 @@ func (r *ActivityRepository) Delete(id int, userID int) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("activity not found")
+		return fmt.Errorf("❌ Activity not found")
 	}
 
 	return nil
