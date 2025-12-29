@@ -276,6 +276,392 @@ func (c *SafeCounter) Increment() {
 
 ---
 
+# WEEKLY TASK BREAKDOWNS
+
+## Week 25: Goroutines Fundamentals
+
+### 📋 Implementation Tasks
+
+**Task 1: Learn Goroutine Basics** (60 min)
+- [ ] Create `examples/goroutines/` directory for practice
+- [ ] Write example: simple goroutine with `go func()`
+- [ ] Write example: goroutine with parameters
+- [ ] Write example: multiple goroutines
+- [ ] Understand goroutine vs thread differences
+- [ ] Learn about the Go scheduler
+
+**Task 2: Implement Parallel Statistics Calculation** (90 min)
+- [ ] Update `internal/services/stats_service.go`
+- [ ] Implement `CalculateUserStats(ctx, userID)` with parallel queries
+- [ ] Launch 4 goroutines for different stats (total activities, distance, duration, streak)
+- [ ] Use channel to collect results
+- [ ] Handle errors from any goroutine
+- [ ] Compare performance: sequential vs parallel
+
+**Task 3: Add WaitGroup for Goroutine Coordination** (60 min)
+- [ ] Refactor parallel stats to use `sync.WaitGroup`
+- [ ] Add `wg.Add(1)` before launching goroutine
+- [ ] Use `defer wg.Done()` in each goroutine
+- [ ] Call `wg.Wait()` to wait for all goroutines
+- [ ] Test goroutines complete before function returns
+
+**Task 4: Implement Concurrent Photo Processing** (120 min)
+- [ ] Update photo upload handler
+- [ ] Process multiple photos concurrently
+- [ ] Use semaphore pattern to limit concurrency (max 5)
+- [ ] Resize and generate thumbnail in parallel
+- [ ] Upload both versions to S3 concurrently
+- [ ] Collect all results before responding
+
+**Task 5: Handle Goroutine Errors Properly** (45 min)
+- [ ] Create error channel for goroutine errors
+- [ ] Send errors to channel instead of ignoring
+- [ ] Collect first error and cancel remaining work
+- [ ] Test error handling (simulate failure in one goroutine)
+
+**Task 6: Write Tests for Concurrent Code** (60 min)
+- [ ] Test parallel stats calculation
+- [ ] Test concurrent photo processing
+- [ ] Test error handling in goroutines
+- [ ] Run with race detector: `go test -race ./...`
+- [ ] Fix any race conditions found
+
+### 📦 Files You'll Create/Modify
+
+```
+examples/
+└── goroutines/
+    ├── basic.go                   [CREATE]
+    ├── waitgroup.go               [CREATE]
+    └── errors.go                  [CREATE]
+
+internal/
+├── services/
+│   └── stats_service.go           [MODIFY - parallel queries]
+└── handlers/
+    └── photo_handler.go           [MODIFY - concurrent processing]
+```
+
+### 🔄 Implementation Order
+
+1. **Learn**: Practice goroutines basics with examples
+2. **Apply**: Parallel stats calculation
+3. **Coordinate**: Add WaitGroup for proper synchronization
+4. **Scale**: Concurrent photo processing with semaphore
+5. **Error handling**: Proper error collection from goroutines
+6. **Test**: Write tests and use race detector
+
+### ⚠️ Blockers to Watch For
+
+- **Forgetting to wait**: Goroutines may not complete before function returns
+- **Race conditions**: Accessing shared data without synchronization
+- **Goroutine leaks**: Goroutines that never exit
+- **Too many goroutines**: Can exhaust resources
+- **Error handling**: Errors in goroutines easily lost
+- **Panic handling**: Panic in goroutine crashes entire program
+
+### ✅ Definition of Done
+
+- [ ] Understand goroutines vs threads
+- [ ] Can launch and coordinate multiple goroutines
+- [ ] Parallel stats 2-3x faster than sequential
+- [ ] Concurrent photo processing working
+- [ ] All goroutine errors handled properly
+- [ ] No race conditions (race detector passes)
+- [ ] All tests passing
+
+---
+
+## Week 26: Channels (Buffered/Unbuffered)
+
+### 📋 Implementation Tasks
+
+**Task 1: Learn Channel Basics** (60 min)
+- [ ] Create examples for unbuffered channels
+- [ ] Create examples for buffered channels
+- [ ] Understand blocking vs non-blocking behavior
+- [ ] Practice channel direction (send-only, receive-only)
+- [ ] Learn proper channel closing
+
+**Task 2: Implement Worker Pool Pattern** (120 min)
+- [ ] Create `pkg/workers/pool.go`
+- [ ] Implement `WorkerPool` struct with job/result channels
+- [ ] Create worker goroutines that process from job channel
+- [ ] Send jobs to channel, collect results from result channel
+- [ ] Close channels properly when done
+- [ ] Test with batch photo processing
+
+**Task 3: Implement Pipeline Pattern** (90 min)
+- [ ] Create image processing pipeline:
+  - Stage 1: Read images from input channel
+  - Stage 2: Resize images
+  - Stage 3: Generate thumbnails
+  - Stage 4: Upload to S3
+- [ ] Chain stages with channels
+- [ ] Test pipeline processes images correctly
+
+**Task 4: Add Fan-Out, Fan-In Pattern** (90 min)
+- [ ] Implement fan-out: distribute work to N workers
+- [ ] Implement fan-in: collect results from N workers
+- [ ] Use for parallel database queries
+- [ ] Test performance improvement
+
+**Task 5: Handle Channel Errors and Cancellation** (60 min)
+- [ ] Add error channel to worker pool
+- [ ] Handle errors from workers
+- [ ] Implement graceful cancellation
+- [ ] Close all channels properly on error
+
+**Task 6: Implement Activity Feed with Channels** (75 min)
+- [ ] Fetch activities from multiple friends concurrently
+- [ ] Use channels to collect activities
+- [ ] Merge and sort activities by date
+- [ ] Limit concurrency to avoid overwhelming database
+
+### 📦 Files You'll Create/Modify
+
+```
+examples/
+└── channels/
+    ├── basic.go                   [CREATE]
+    ├── buffered.go                [CREATE]
+    └── pipeline.go                [CREATE]
+
+pkg/
+└── workers/
+    ├── pool.go                    [CREATE]
+    ├── pool_test.go               [CREATE]
+    └── patterns.go                [CREATE]
+
+internal/
+└── services/
+    └── feed_service.go            [MODIFY - concurrent fetching]
+```
+
+### 🔄 Implementation Order
+
+1. **Learn**: Channel basics (buffered/unbuffered)
+2. **Worker pool**: Implement reusable worker pool
+3. **Pipeline**: Image processing pipeline
+4. **Fan-out/in**: Parallel work distribution
+5. **Error handling**: Channel error handling
+6. **Apply**: Activity feed with concurrent fetching
+
+### ⚠️ Blockers to Watch For
+
+- **Deadlock**: Sending to channel with no receiver
+- **Channel leaks**: Not closing channels causes memory leaks
+- **Closing twice**: Panic when closing already-closed channel
+- **Send on closed**: Panic when sending to closed channel
+- **Buffer size**: Too small = blocking, too large = memory waste
+- **Only sender closes**: Receiver should never close channel
+
+### ✅ Definition of Done
+
+- [ ] Understand buffered vs unbuffered channels
+- [ ] Worker pool pattern implemented and tested
+- [ ] Pipeline pattern working for image processing
+- [ ] Fan-out/fan-in pattern working
+- [ ] Channels closed properly (no leaks)
+- [ ] Activity feed faster with concurrent fetching
+- [ ] All tests passing
+
+---
+
+## Week 27: Select Statements + Sync Primitives
+
+### 📋 Implementation Tasks
+
+**Task 1: Learn Select Statement** (60 min)
+- [ ] Create examples for select with multiple channels
+- [ ] Create example with timeout using `time.After()`
+- [ ] Create example with default case (non-blocking)
+- [ ] Practice select for multiplexing channels
+
+**Task 2: Implement Request Timeouts** (90 min)
+- [ ] Add timeout to database queries using select
+- [ ] Add timeout to S3 uploads using select
+- [ ] Add timeout to external API calls
+- [ ] Test timeout triggers correctly
+- [ ] Return appropriate error on timeout
+
+**Task 3: Learn Mutex and RWMutex** (60 min)
+- [ ] Create examples for `sync.Mutex`
+- [ ] Create examples for `sync.RWMutex`
+- [ ] Understand difference between Lock() and RLock()
+- [ ] Learn when to use each type
+
+**Task 4: Implement Thread-Safe Cache** (90 min)
+- [ ] Create `pkg/cache/memory_cache.go`
+- [ ] Use `sync.RWMutex` for concurrent access
+- [ ] Implement `Get(key)` with RLock (multiple readers)
+- [ ] Implement `Set(key, value)` with Lock (single writer)
+- [ ] Implement `Delete(key)` with Lock
+- [ ] Add TTL support
+- [ ] Test concurrent access (no races)
+
+**Task 5: Use sync.Once for Initialization** (45 min)
+- [ ] Implement singleton pattern with `sync.Once`
+- [ ] Use for one-time database connection initialization
+- [ ] Use for one-time S3 client initialization
+- [ ] Test thread-safety (multiple goroutines, one initialization)
+
+**Task 6: Add Connection Pool with Sync Primitives** (75 min)
+- [ ] Create connection pool for external services
+- [ ] Use channel as semaphore for pool size
+- [ ] Use mutex for pool state management
+- [ ] Implement acquire/release pattern
+- [ ] Test pool prevents resource exhaustion
+
+### 📦 Files You'll Create/Modify
+
+```
+examples/
+└── sync/
+    ├── select.go                  [CREATE]
+    ├── mutex.go                   [CREATE]
+    ├── rwmutex.go                 [CREATE]
+    └── once.go                    [CREATE]
+
+pkg/
+└── cache/
+    ├── memory_cache.go            [CREATE]
+    ├── memory_cache_test.go       [CREATE]
+    └── connection_pool.go         [CREATE]
+```
+
+### 🔄 Implementation Order
+
+1. **Select**: Learn and practice select statements
+2. **Timeouts**: Add request timeouts with select
+3. **Mutex**: Learn mutex and RWMutex
+4. **Cache**: Thread-safe in-memory cache
+5. **Once**: Singleton initialization
+6. **Pool**: Connection pool with sync primitives
+
+### ⚠️ Blockers to Watch For
+
+- **Deadlock**: Waiting for channel that never sends
+- **Lock contention**: Too much locking = poor performance
+- **Forgetting unlock**: Always use `defer mu.Unlock()`
+- **RLock vs Lock**: Using wrong lock type
+- **Select default**: Default makes select non-blocking
+- **Nested locks**: Can cause deadlock
+
+### ✅ Definition of Done
+
+- [ ] Understand select statement multiplexing
+- [ ] Timeouts implemented for slow operations
+- [ ] Thread-safe cache with RWMutex working
+- [ ] Singleton pattern with sync.Once
+- [ ] Connection pool limiting concurrent connections
+- [ ] No race conditions (race detector clean)
+- [ ] All tests passing
+
+---
+
+## Week 28: Context for Cancellation + Race Detection
+
+### 📋 Implementation Tasks
+
+**Task 1: Learn Context Package** (60 min)
+- [ ] Create examples for `context.WithTimeout`
+- [ ] Create examples for `context.WithCancel`
+- [ ] Create examples for `context.WithDeadline`
+- [ ] Create examples for `context.WithValue` (use sparingly)
+- [ ] Understand context propagation
+
+**Task 2: Add Context to All Repository Methods** (90 min)
+- [ ] Update all repository methods to accept `context.Context`
+- [ ] Pass context to all database queries
+- [ ] Test query cancellation when context cancelled
+- [ ] Verify context deadline respected
+
+**Task 3: Implement Request-Scoped Cancellation** (75 min)
+- [ ] Extract request context in handlers
+- [ ] Pass context through service layer
+- [ ] Pass context to repository layer
+- [ ] Test cancellation propagates through entire stack
+- [ ] Verify work stops when request cancelled
+
+**Task 4: Add Context to Background Jobs** (60 min)
+- [ ] Update job handlers to use context
+- [ ] Set timeout context for each job type
+- [ ] Handle `context.DeadlineExceeded` error
+- [ ] Test job cancellation on timeout
+
+**Task 5: Implement Graceful Degradation** (90 min)
+- [ ] If cache query times out, fall back to database
+- [ ] If S3 upload times out, retry with exponential backoff
+- [ ] If external API times out, return cached data
+- [ ] Log timeouts for monitoring
+
+**Task 6: Run Race Detector on Entire Codebase** (120 min)
+- [ ] Run `go test -race ./...` on all packages
+- [ ] Fix all race conditions found
+- [ ] Common issues to fix:
+  - Concurrent map access
+  - Shared variable access without mutex
+  - Channel operations without sync
+- [ ] Re-run until no races detected
+
+**Task 7: Add CI Check for Race Conditions** (30 min)
+- [ ] Add race detector to GitHub Actions workflow
+- [ ] Make race detection required for PR merge
+- [ ] Document race detector usage in README
+
+### 📦 Files You'll Create/Modify
+
+```
+examples/
+└── context/
+    ├── timeout.go                 [CREATE]
+    ├── cancel.go                  [CREATE]
+    └── values.go                  [CREATE]
+
+internal/
+├── repository/
+│   └── *.go                       [MODIFY - add context]
+├── services/
+│   └── *.go                       [MODIFY - pass context]
+└── jobs/
+    └── handlers.go                [MODIFY - use context]
+
+.github/workflows/
+└── test.yml                       [MODIFY - add race detector]
+```
+
+### 🔄 Implementation Order
+
+1. **Learn**: Context package examples
+2. **Repository**: Add context to all queries
+3. **Propagation**: Pass context through layers
+4. **Jobs**: Add context to background jobs
+5. **Degradation**: Graceful fallback on timeout
+6. **Race detection**: Fix all race conditions
+7. **CI**: Automate race detection
+
+### ⚠️ Blockers to Watch For
+
+- **Context leaks**: Always call cancel() (use defer)
+- **Ignoring context**: Not respecting context cancellation
+- **Wrong context**: Using Background() instead of request context
+- **Value overuse**: Don't abuse context.WithValue
+- **Race conditions**: Concurrent access without synchronization
+- **False positives**: Some races are benign (investigate carefully)
+
+### ✅ Definition of Done
+
+- [ ] All repository methods accept context
+- [ ] Request cancellation propagates through stack
+- [ ] Job timeouts working correctly
+- [ ] Graceful degradation on timeouts
+- [ ] Zero race conditions (race detector clean)
+- [ ] CI enforces race-free code
+- [ ] All tests passing with -race flag
+
+---
+
 ## Patterns to Master
 
 ### Fan-Out, Fan-In

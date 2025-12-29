@@ -40,6 +40,426 @@ This month focuses on two critical pillars of backend development: advanced data
 
 ---
 
+# WEEKLY TASK BREAKDOWNS
+
+## Week 9: Database Transactions + N+1 Query Problem
+
+### 📋 Implementation Tasks
+
+**Task 1: Create Database Migration for Tags** (20 min)
+- [ ] Create migration file `migrations/003_create_tags.up.sql`
+- [ ] Add tags table schema
+- [ ] Add activity_tags junction table
+- [ ] Create indexes for performance (user_date, activity_type, tag lookups)
+- [ ] Create corresponding down migration `003_create_tags.down.sql`
+- [ ] Run migration: `migrate -path migrations -database "postgres://..." up`
+
+**Task 2: Update Activity Model** (15 min)
+- [ ] Open `internal/models/activity.go`
+- [ ] Add `Tags []string` field to Activity struct
+- [ ] Add JSON tag: `json:"tags,omitempty"`
+- [ ] Update any existing test fixtures to include empty tags slice
+
+**Task 3: Create Tag Repository Methods** (45 min)
+- [ ] Create `internal/repository/tag_repository.go`
+- [ ] Implement `GetOrCreateTag(ctx context.Context, name string) (int, error)`
+- [ ] Implement `GetTagsForActivity(ctx context.Context, activityID int) ([]string, error)`
+- [ ] Implement `LinkActivityTag(ctx context.Context, activityID, tagID int) error`
+- [ ] Handle duplicate tag names (use INSERT ... ON CONFLICT)
+
+**Task 4: Implement CreateWithTags Using Transactions** (60 min)
+- [ ] Add method to ActivityRepository: `CreateWithTags(ctx, activity, tags) error`
+- [ ] Start transaction with `db.BeginTx(ctx, nil)`
+- [ ] Insert activity and get ID back (RETURNING clause)
+- [ ] Loop through tags: get/create tag, then link to activity
+- [ ] Implement proper error handling with tx.Rollback()
+- [ ] Commit transaction if all succeeds
+- [ ] Test rollback behavior (simulate failure after activity insert)
+
+**Task 5: Fix N+1 Query Problem** (90 min)
+- [ ] Create `GetActivitiesWithTags(ctx, userID) ([]*Activity, error)` method
+- [ ] Write JOIN query (activities LEFT JOIN activity_tags LEFT JOIN tags)
+- [ ] Handle NULL values for activities without tags (sql.NullInt64, sql.NullString)
+- [ ] Build activityMap to deduplicate rows
+- [ ] Append tags to each activity
+- [ ] Compare query count: old approach vs new (should be 1 query vs N+1)
+- [ ] Add database query logging to verify
+
+**Task 6: Write Transaction Tests** (45 min)
+- [ ] Test `CreateWithTags` with multiple tags
+- [ ] Test transaction rollback on tag insertion failure
+- [ ] Test duplicate tag handling (should reuse existing tags)
+- [ ] Verify all data committed or none (atomic behavior)
+
+**Task 7: Verify N+1 Fix** (20 min)
+- [ ] Enable PostgreSQL query logging (edit postgresql.conf if needed)
+- [ ] Create 10 activities with tags
+- [ ] Call old method and count queries (should see N+1)
+- [ ] Call new method and count queries (should see 1-2)
+- [ ] Document the performance improvement
+
+### 📦 Files You'll Create/Modify
+
+```
+migrations/
+├── 003_create_tags.up.sql         [CREATE]
+└── 003_create_tags.down.sql       [CREATE]
+
+internal/
+├── models/
+│   └── activity.go                [MODIFY - add Tags field]
+├── repository/
+│   ├── tag_repository.go          [CREATE]
+│   ├── activity_repository.go     [MODIFY - add CreateWithTags, GetActivitiesWithTags]
+│   └── activity_repository_test.go [MODIFY - add transaction tests]
+```
+
+### 🔄 Implementation Order
+
+1. **Database first**: Migration → Run migration
+2. **Models**: Update Activity model with Tags field
+3. **Repository layer**: Tag repository → ActivityRepository methods
+4. **Testing**: Transaction tests → N+1 verification
+5. **Optimization**: Measure before/after query counts
+
+### ⚠️ Blockers to Watch For
+
+- **Transaction scope**: Don't forget `defer tx.Rollback()` - won't auto-rollback on error
+- **NULL handling**: Use `sql.NullInt64` and `sql.NullString` for optional JOIN columns
+- **Map deduplication**: Activities appear multiple times in JOIN results (one row per tag)
+- **ON CONFLICT**: Requires unique constraint on tag name - check migration
+- **Context cancellation**: Transactions respect context timeout - test this
+
+### ✅ Definition of Done
+
+- [ ] Can create activity with tags in single transaction
+- [ ] Tags are reused if they already exist (no duplicates)
+- [ ] GetActivitiesWithTags uses 1 query instead of N+1
+- [ ] Transaction rolls back if any step fails
+- [ ] All tests passing with transaction scenarios
+- [ ] Query performance verified (logs or EXPLAIN ANALYZE)
+
+---
+
+## Week 10: Complex Queries + Joins + Graceful Shutdown
+
+### 📋 Implementation Tasks
+
+**Task 1: Implement Analytics Queries** (60 min)
+- [ ] Create `internal/repository/stats_repository.go`
+- [ ] Implement `GetWeeklyStats(ctx, userID) (*WeeklyStats, error)`
+  - Use SUM, COUNT, AVG aggregate functions
+  - Filter by date range (past 7 days)
+  - GROUP BY activity_type
+- [ ] Implement `GetMonthlyStats(ctx, userID) (*MonthlyStats, error)`
+- [ ] Implement `GetActivityCountByType(ctx, userID) (map[string]int, error)`
+- [ ] Test with real data to verify correctness
+
+**Task 2: Create Complex JOIN Queries** (45 min)
+- [ ] Implement `GetUserActivitySummary(ctx, userID)` - joins users, activities, tags
+- [ ] Implement `GetTopTagsByUser(ctx, userID, limit)` - aggregate with GROUP BY
+- [ ] Use LEFT JOIN vs INNER JOIN appropriately
+- [ ] Handle NULL values in results
+- [ ] Add LIMIT and ORDER BY for performance
+
+**Task 3: Implement Graceful Shutdown** (90 min)
+- [ ] Open `cmd/api/main.go`
+- [ ] Import `os`, `os/signal`, `syscall`, `context`
+- [ ] Create signal channel: `quit := make(chan os.Signal, 1)`
+- [ ] Register signals: `signal.Notify(quit, os.Interrupt, syscall.SIGTERM)`
+- [ ] Start server in goroutine
+- [ ] Wait for signal with `<-quit`
+- [ ] Create shutdown context with 30s timeout
+- [ ] Call `srv.Shutdown(ctx)` to drain connections
+- [ ] Close database connections after shutdown
+- [ ] Log shutdown steps for debugging
+
+**Task 4: Test Graceful Shutdown** (30 min)
+- [ ] Start server: `go run cmd/api/main.go`
+- [ ] Send test request that takes 10s to complete (add sleep in handler)
+- [ ] Send SIGTERM while request is processing: `kill -TERM <pid>`
+- [ ] Verify request completes before server exits
+- [ ] Verify new requests are rejected during shutdown
+- [ ] Check logs show "Server exited" message
+
+**Task 5: Add Query Timeouts** (20 min)
+- [ ] Wrap all repository queries with context timeout
+- [ ] Use `context.WithTimeout(ctx, 5*time.Second)`
+- [ ] Test timeout behavior with slow query: `SELECT pg_sleep(10)`
+- [ ] Verify context.DeadlineExceeded error returned
+
+**Task 6: Create Analytics Endpoint** (45 min)
+- [ ] Create `internal/handlers/stats_handler.go`
+- [ ] Implement `GetWeeklyStats(w, r)` handler
+- [ ] Implement `GetMonthlyStats(w, r)` handler
+- [ ] Add routes to router: `/api/v1/users/me/stats/weekly`, `/monthly`
+- [ ] Protect with auth middleware
+- [ ] Test with curl/Postman
+
+### 📦 Files You'll Create/Modify
+
+```
+internal/
+├── repository/
+│   ├── stats_repository.go        [CREATE]
+│   └── stats_repository_test.go   [CREATE]
+├── handlers/
+│   ├── stats_handler.go           [CREATE]
+│   └── stats_handler_test.go      [CREATE]
+└── models/
+    └── stats.go                   [CREATE - WeeklyStats, MonthlyStats structs]
+
+cmd/api/
+└── main.go                        [MODIFY - add graceful shutdown]
+```
+
+### 🔄 Implementation Order
+
+1. **Stats models**: Define struct types for statistics
+2. **Repository**: Implement aggregate queries
+3. **Testing**: Test queries with sample data
+4. **Handlers**: Wire up HTTP endpoints
+5. **Graceful shutdown**: Modify main.go last (affects server lifecycle)
+
+### ⚠️ Blockers to Watch For
+
+- **NULL in aggregates**: COUNT(*) includes NULLs, COUNT(column) doesn't
+- **GROUP BY**: All non-aggregated SELECT columns must be in GROUP BY
+- **Date ranges**: Use `>= AND <` for date ranges, not BETWEEN (timezone issues)
+- **Shutdown timeout**: 30s might be too short for long-running requests - adjust as needed
+- **Signal handling**: Only works on Unix systems - Windows uses different signals
+
+### ✅ Definition of Done
+
+- [ ] Can get weekly/monthly activity statistics
+- [ ] All aggregate queries return correct results
+- [ ] Server shuts down gracefully on SIGTERM/SIGINT
+- [ ] In-flight requests complete during shutdown (tested)
+- [ ] Database connections close cleanly
+- [ ] Analytics endpoints working and protected by auth
+
+---
+
+## Week 11: Table-Driven Tests + Mocking + Mock Generation
+
+### 📋 Implementation Tasks
+
+**Task 1: Install Testing Dependencies** (10 min)
+- [ ] Install testify: `go get github.com/stretchr/testify`
+- [ ] Install gomock: `go get github.com/golang/mock/mockgen`
+- [ ] Install mockgen tool: `go install github.com/golang/mock/mockgen@latest`
+- [ ] Verify installation: `mockgen -version`
+
+**Task 2: Define Repository Interfaces** (30 min)
+- [ ] Create `internal/repository/interfaces.go`
+- [ ] Define `ActivityRepository` interface with all methods
+- [ ] Define `UserRepository` interface
+- [ ] Define `StatsRepository` interface
+- [ ] Update existing repositories to implement interfaces explicitly
+- [ ] Add `//go:generate mockgen` directives above each interface
+
+**Task 3: Generate Mocks** (15 min)
+- [ ] Add to each interface:
+  ```go
+  //go:generate mockgen -destination=mocks/mock_activity_repository.go -package=mocks . ActivityRepository
+  ```
+- [ ] Run `go generate ./...` from project root
+- [ ] Verify mocks created in `internal/repository/mocks/`
+- [ ] Check mocks compile: `go build ./internal/repository/mocks`
+
+**Task 4: Convert Tests to Table-Driven Pattern** (90 min)
+- [ ] Refactor `activity_repository_test.go` to table-driven tests
+- [ ] Refactor `user_repository_test.go` to table-driven tests
+- [ ] Each test should have:
+  - `name` field for test case description
+  - Input fields
+  - Expected output fields
+  - `wantErr bool` field
+- [ ] Use `t.Run()` to execute subtests
+- [ ] Use `testify/assert` for cleaner assertions
+
+**Task 5: Write Mock-Based Handler Tests** (120 min)
+- [ ] Create `internal/handlers/activity_handler_test.go`
+- [ ] Test `CreateActivity` handler:
+  - Mock repository returning success
+  - Mock repository returning error
+  - Invalid JSON payload
+  - Missing required fields
+- [ ] Test `GetActivities` handler with mock
+- [ ] Test `UpdateActivity` handler with mock
+- [ ] Use `gomock.NewController(t)` and `EXPECT()` chains
+- [ ] Verify mock expectations with `ctrl.Finish()`
+
+**Task 6: Test Error Paths** (45 min)
+- [ ] Test database connection errors
+- [ ] Test context cancellation
+- [ ] Test invalid input validation
+- [ ] Test concurrent access (use goroutines)
+- [ ] Verify proper error messages returned
+
+**Task 7: Measure Code Coverage** (20 min)
+- [ ] Run `go test -cover ./...` to see overall coverage
+- [ ] Run `go test -coverprofile=coverage.out ./...`
+- [ ] View HTML report: `go tool cover -html=coverage.out`
+- [ ] Identify untested code paths
+- [ ] Add tests to reach 70%+ coverage
+
+### 📦 Files You'll Create/Modify
+
+```
+internal/
+├── repository/
+│   ├── interfaces.go              [CREATE]
+│   ├── mocks/                     [CREATE DIR]
+│   │   ├── mock_activity_repository.go  [GENERATED]
+│   │   ├── mock_user_repository.go      [GENERATED]
+│   │   └── mock_stats_repository.go     [GENERATED]
+│   ├── activity_repository_test.go [MODIFY - table-driven]
+│   └── user_repository_test.go    [MODIFY - table-driven]
+└── handlers/
+    ├── activity_handler_test.go   [CREATE - mock tests]
+    ├── user_handler_test.go       [MODIFY - add mock tests]
+    └── stats_handler_test.go      [CREATE - mock tests]
+
+coverage.out                       [GENERATED]
+```
+
+### 🔄 Implementation Order
+
+1. **Setup**: Install dependencies
+2. **Interfaces**: Define repository interfaces
+3. **Generation**: Generate mocks with go generate
+4. **Repository tests**: Convert to table-driven
+5. **Handler tests**: Write mock-based tests
+6. **Coverage**: Measure and improve
+
+### ⚠️ Blockers to Watch For
+
+- **Interface location**: Must be in same package as implementation for `go generate`
+- **Mock regeneration**: Re-run `go generate` after interface changes
+- **gomock.Any()**: Use for parameters you don't want to verify
+- **EXPECT() order**: Calls must happen in declared order unless using `.AnyTimes()`
+- **Controller.Finish()**: Must call or use `defer ctrl.Finish()` to verify mocks
+- **Table test isolation**: Each test case should be independent (clean state)
+
+### ✅ Definition of Done
+
+- [ ] All repository interfaces defined
+- [ ] Mocks auto-generated with `go generate`
+- [ ] All repository tests use table-driven pattern
+- [ ] All handler tests use mocks (no real database)
+- [ ] Code coverage >= 70% (run `go test -cover ./...`)
+- [ ] Error paths tested (not just happy path)
+- [ ] Tests run fast (mocks = no database overhead)
+
+---
+
+## Week 12: Benchmarking + Optimization + Testcontainers
+
+### 📋 Implementation Tasks
+
+**Task 1: Install Testcontainers** (15 min)
+- [ ] Install package: `go get github.com/testcontainers/testcontainers-go`
+- [ ] Install postgres module: `go get github.com/testcontainers/testcontainers-go/modules/postgres`
+- [ ] Ensure Docker is running: `docker ps`
+- [ ] Pull postgres image: `docker pull postgres:15`
+
+**Task 2: Create Testcontainer Setup Helper** (45 min)
+- [ ] Create `internal/repository/testhelpers/container.go`
+- [ ] Implement `SetupTestDB(t *testing.T) (*sql.DB, func())`
+- [ ] Start postgres container with testcontainers
+- [ ] Wait for database to be ready
+- [ ] Run migrations on test container
+- [ ] Return cleanup function to stop container
+- [ ] Test helper works
+
+**Task 3: Write Integration Tests with Testcontainers** (60 min)
+- [ ] Create `internal/repository/integration_test.go`
+- [ ] Test full transaction flow (create activity with tags)
+- [ ] Test concurrent insertions (multiple goroutines)
+- [ ] Test foreign key constraints
+- [ ] Test unique constraint violations
+- [ ] Verify actual database state after operations
+
+**Task 4: Write Benchmark Tests** (90 min)
+- [ ] Create `internal/repository/activity_repository_bench_test.go`
+- [ ] Benchmark `Create()`: `BenchmarkActivityRepository_Create`
+- [ ] Benchmark `GetByID()`: `BenchmarkActivityRepository_GetByID`
+- [ ] Benchmark `GetActivitiesWithTags()` (with N+1 comparison)
+- [ ] Benchmark `CreateWithTags()` with varying tag counts (1, 5, 10 tags)
+- [ ] Use `b.ResetTimer()` to exclude setup time
+- [ ] Use `b.ReportAllocs()` to track memory allocations
+
+**Task 5: Profile CPU and Memory** (45 min)
+- [ ] Run benchmarks with CPU profile: `go test -bench=. -cpuprofile=cpu.out`
+- [ ] Analyze CPU profile: `go tool pprof cpu.out`
+- [ ] Run with memory profile: `go test -bench=. -memprofile=mem.out`
+- [ ] Identify top memory allocators
+- [ ] Look for optimization opportunities
+
+**Task 6: Optimize Slow Queries** (60 min)
+- [ ] Use `EXPLAIN ANALYZE` on GetActivitiesWithTags query
+- [ ] Verify indexes are being used (check EXPLAIN output)
+- [ ] Add missing indexes if needed
+- [ ] Optimize query by reducing columns selected
+- [ ] Re-run benchmark to measure improvement
+- [ ] Document before/after performance
+
+**Task 7: Add Query Performance Logging** (30 min)
+- [ ] Create middleware to log slow queries (>100ms)
+- [ ] Wrap `db.QueryContext()` calls with timing
+- [ ] Log query, duration, and params for slow queries
+- [ ] Test with intentionally slow query
+- [ ] Integrate into repository layer
+
+### 📦 Files You'll Create/Modify
+
+```
+internal/
+├── repository/
+│   ├── testhelpers/
+│   │   └── container.go           [CREATE]
+│   ├── integration_test.go        [CREATE]
+│   ├── activity_repository_bench_test.go [CREATE]
+│   └── query_logger.go            [CREATE]
+
+*.out                              [GENERATED - profiles]
+coverage.html                      [GENERATED]
+```
+
+### 🔄 Implementation Order
+
+1. **Setup**: Install testcontainers and verify Docker
+2. **Test infrastructure**: Create container helper
+3. **Integration tests**: Write tests using real database
+4. **Benchmarks**: Write and run benchmark tests
+5. **Profiling**: Analyze CPU and memory
+6. **Optimization**: Fix slow queries, add indexes
+7. **Monitoring**: Add query performance logging
+
+### ⚠️ Blockers to Watch For
+
+- **Docker required**: Testcontainers needs Docker daemon running
+- **Port conflicts**: Container might conflict with local postgres on 5432
+- **Slow tests**: Integration tests are slower - don't run in CI on every commit
+- **Benchmark stability**: Run multiple times, results vary with system load
+- **b.N value**: Don't use b.N directly - let testing package control it
+- **Profile cleanup**: Delete .out files before re-running to avoid confusion
+- **Container cleanup**: Always call cleanup function to stop containers
+
+### ✅ Definition of Done
+
+- [ ] Testcontainers working (can start/stop postgres in tests)
+- [ ] Integration tests running against real database in container
+- [ ] Benchmarks for all critical repository methods
+- [ ] CPU and memory profiles analyzed
+- [ ] Slow queries identified and optimized
+- [ ] Query performance improved (benchmark comparison)
+- [ ] Slow query logging added (>100ms threshold)
+- [ ] All tests still passing (unit + integration)
+
+---
+
 ## Key Concepts
 
 - **ACID transactions**
