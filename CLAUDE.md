@@ -37,6 +37,7 @@ This is a **project-based learning journey**, not a tutorial series. Every conce
 **Goal:** Build a functional REST API with core CRUD operations
 
 **What You'll Learn:**
+- Development environment setup (VS Code + Delve debugger)
 - Go project structure and organization
 - Basic syntax, types, and control flow
 - HTTP servers and routing
@@ -193,6 +194,8 @@ Each week will have:
 
 ### Development Tools
 - **Version Control:** Git + GitHub
+- **Debugger:** Delve (dlv)
+- **IDE:** VS Code with Go extension
 - **Database Migrations:** golang-migrate
 - **Testing:** Go standard testing + testify
 - **API Documentation:** OpenAPI/Swagger
@@ -204,6 +207,81 @@ Each week will have:
 - **CI/CD:** GitHub Actions
 - **Monitoring:** Prometheus + Grafana
 - **Logging:** structured logging with zap/zerolog
+
+---
+
+## Development Environment Setup
+
+### Debugging Setup (Essential - Set Up Before Month 2)
+
+**Why This Matters:** Unlike JavaScript where debugging often "just works," Go requires explicit debugger setup. Proper debugging is essential for understanding code flow, inspecting variables, and troubleshooting issues efficiently.
+
+#### Quick Setup (5 minutes)
+
+1. **Install Delve Debugger:**
+   ```bash
+   go install github.com/go-delve/delve/cmd/dlv@latest
+   ```
+
+2. **Install VS Code Go Extension:**
+   - Open VS Code
+   - Press `Cmd+Shift+X` (Mac) or `Ctrl+Shift+X` (Windows/Linux)
+   - Search for "Go" (by Go Team at Google)
+   - Click Install
+
+3. **Install Go Tools:**
+   - Open any `.go` file in VS Code
+   - When prompted, click "Install All" to install Go tools
+   - Or manually: `Cmd+Shift+P` → "Go: Install/Update Tools" → Select All
+
+4. **Configuration Files (Already Included):**
+   - `.vscode/launch.json` - Debug configurations for different scenarios
+   - `.vscode/settings.json` - Go development settings
+
+#### Available Debug Configurations
+
+Your workspace includes 6 pre-configured debug scenarios:
+
+1. **Launch API Server** - Debug your main application (most common)
+2. **Debug Current File** - Quick debug any Go file
+3. **Debug Current Test** - Debug specific test function
+4. **Debug All Tests** - Debug entire test suite
+5. **Debug Package Tests** - Debug tests in current package
+6. **Attach to Process** - Attach to running Go process
+
+#### Quick Start
+
+**To debug your API:**
+1. Set breakpoint (click left of line number)
+2. Press `F5` → Select "Launch API Server"
+3. Send request to API (Postman/curl)
+4. Debugger pauses at breakpoint
+
+**To debug a test:**
+1. Open test file
+2. Click "debug test" link above test function, OR
+3. Press `F5` → Select "Debug Current Test"
+
+#### Full Documentation
+
+See `DEBUGGING.md` for:
+- Complete debugging guide
+- Common scenarios (handlers, database queries, goroutines)
+- Troubleshooting tips
+- Keyboard shortcuts
+- Best practices
+
+#### Key Differences from JavaScript Debugging
+
+| Aspect | JavaScript/Node.js | Go |
+|--------|-------------------|-----|
+| Debugger | Built into Node | Requires Delve installation |
+| VS Code Setup | Often auto-configured | Needs explicit launch.json |
+| Breakpoints | Usually "just work" | May need debug build flags |
+| Performance | Minimal impact | Can be slower (disable optimizations) |
+| Goroutines | N/A | Multiple execution contexts to track |
+
+**Pro Tip:** Set up debugging in Week 1 or 2. You'll use it constantly throughout your Go journey.
 
 ---
 
@@ -226,11 +304,15 @@ activelog/
 ├── docs/                 # Documentation
 ├── scripts/              # Utility scripts
 ├── .github/              # CI/CD workflows
+├── .vscode/              # VS Code configuration
+│   ├── launch.json       # Debug configurations
+│   └── settings.json     # Go development settings
 ├── Dockerfile
 ├── docker-compose.yml
 ├── go.mod
 ├── go.sum
 ├── Makefile
+├── DEBUGGING.md          # Debugging guide
 └── README.md
 ```
 
