@@ -30,8 +30,3 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		},
 	)
 }
-
-func (rw *responseWriter) WriterHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}

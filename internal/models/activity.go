@@ -8,15 +8,15 @@ import (
 
 type Activity struct {
 	BaseEntity
-	UserID          int       `json:"userId" db:"user_id"`
-	ActivityType    string    `json:"activityType" db:"activity_type"`
-	Title           string    `json:"title" db:"title"`
-	Description     string    `json:"description,omitempty" db:"description"`
-	DurationMinutes int       `json:"durationMinutes,omitempty" db:"duration_minutes"`
-	DistanceKm      float64   `json:"distanceKm,omitempty" db:"distance_km"`
-	CaloriesBurned  int       `json:"caloriesBurned,omitempty" db:"calories_burned"`
-	Notes           string    `json:"notes,omitempty" db:"notes"`
-	ActivityDate    time.Time `json:"activityDate" db:"activity_date"`
+	UserID          int       `json:"userId" `
+	ActivityType    string    `json:"activityType" `
+	Title           string    `json:"title" `
+	Description     string    `json:"description,omitempty" `
+	DurationMinutes int       `json:"durationMinutes,omitempty" `
+	DistanceKm      float64   `json:"distanceKm,omitempty" `
+	CaloriesBurned  int       `json:"caloriesBurned,omitempty" `
+	Notes           string    `json:"notes,omitempty" `
+	ActivityDate    time.Time `json:"activityDate" `
 }
 
 type CreateActivityRequest struct {

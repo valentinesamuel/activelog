@@ -104,7 +104,7 @@ func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 		Offset:       0,
 	}
 
-	parsedFilters := parseFilters(w, r, &filters)
+	parsedFilters := parseFilters(r, &filters)
 
 	fmt.Println(filters)
 
@@ -130,7 +130,7 @@ func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-func parseFilters(w http.ResponseWriter, r *http.Request, filters *models.ActivityFilters) models.ActivityFilters {
+func parseFilters(r *http.Request, filters *models.ActivityFilters) models.ActivityFilters {
 	// parse limit
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {

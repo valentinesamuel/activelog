@@ -3,7 +3,8 @@
     "allow": [
       "Bash(psql:*)",
       "Bash(go version:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(wc:*)"
     ]
   }
 }

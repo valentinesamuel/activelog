@@ -27,9 +27,11 @@ func main() {
 	defer db.Close()
 
 	activityRepo := repository.NewActivityRepository(db)
+	userRepo := repository.NewUserRepository(db)
 
 	healthHandler := handlers.NewHealthHandler()
 	activityHandler := handlers.NewActivityHandler(activityRepo)
+	userHandler := handlers.NewUserHandler(userRepo)
 
 	router := mux.NewRouter()
 
@@ -38,9 +40,17 @@ func main() {
 	router.Use(middleware.SecurityHeaders)
 
 	router.Handle("/health", healthHandler).Methods("GET")
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"message": "🪵 ActiveLog API v1", "version": "0.1.0"}`))
+	}).Methods("GET")
 
 	api := router.PathPrefix("/api/v1").Subrouter()
 
+	api.HandleFunc("/auth/register", userHandler.CreateUser).Methods("POST")
+	api.HandleFunc("/auth/login", userHandler.LoginUser).Methods("POST")
+
+	router.Use(middleware.AuthMiddleware)
 	api.HandleFunc("/activities", activityHandler.ListActivities).Methods("GET")
 	api.HandleFunc("/activities", activityHandler.CreateActivity).Methods("POST")
 	api.HandleFunc("/activities/stats", activityHandler.GetStats).Methods("GET")
@@ -48,16 +58,11 @@ func main() {
 	api.HandleFunc("/activities/{id}", activityHandler.UpdateActivity).Methods("PATCH")
 	api.HandleFunc("/activities/{id}", activityHandler.DeleteActivity).Methods("DELETE")
 
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"message": "🪵 ActiveLog API v1", "version": "0.1.0"}`))
-	}).Methods("GET")
-
 	server := &http.Server{
 		Addr:         ":" + cfg.ServerPort,
 		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  45 * time.Second,
+		WriteTimeout: 45 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
