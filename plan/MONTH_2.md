@@ -81,7 +81,7 @@ This month transforms your basic API into a secure, production-ready application
 ## What You'll Build
 
 ```
-POST /api/v1/auth/register      # Create account
+POST /api/v1/auth/register      # Create account - Done
 POST /api/v1/auth/login         # Get JWT token
 POST /api/v1/auth/refresh       # Refresh access token
 GET  /api/v1/users/me           # Current user profile

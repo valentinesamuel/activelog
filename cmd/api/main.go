@@ -50,6 +50,7 @@ func main() {
 	api.HandleFunc("/activities/{id}", activityHandler.UpdateActivity).Methods("PATCH")
 	api.HandleFunc("/activities/{id}", activityHandler.DeleteActivity).Methods("DELETE")
 	api.HandleFunc("/auth/register", userHandler.CreateUser).Methods("POST")
+	api.HandleFunc("/auth/login", userHandler.LoginUser).Methods("POST")
 
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
