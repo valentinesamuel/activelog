@@ -38,6 +38,7 @@ func main() {
 	router.Use(middleware.LoggingMiddleware)
 	router.Use(middleware.CORS)
 	router.Use(middleware.SecurityHeaders)
+	router.Use(middleware.AuthMiddleware)
 
 	router.Handle("/health", healthHandler).Methods("GET")
 

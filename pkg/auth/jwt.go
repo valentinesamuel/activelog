@@ -28,3 +28,7 @@ func GenerateJwtToken(userID int, email string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(cfg.JWTSecret))
 }
+
+func VerifyToken(token string){
+	
+}
