@@ -8,6 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/pkg/auth"
+	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
 func AuthMiddleware(next http.Handler) http.Handler {
@@ -17,7 +18,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		// Extract token from Authorization header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			http.Error(w, "Missing authorization header", http.StatusUnauthorized)
+			response.Error(w, http.StatusUnauthorized, "Unauthorized request")
 			return
 		}
 
@@ -31,7 +32,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		})
 
 		if err != nil || !token.Valid {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			response.Error(w, http.StatusUnauthorized, "Unauthorized request")
 			return
 		}
 
