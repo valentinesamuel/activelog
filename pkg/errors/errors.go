@@ -29,7 +29,7 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	if e.Err != nil {
-		return fmt.Sprintf("validation error on field '%s': %s (%v)", e.Field, e.Message, e.Err)
+		return fmt.Sprintf("❌ validation error on field '%s': %s (%v)", e.Field, e.Message, e.Err)
 	}
 	return fmt.Sprintf("validation error on field '%s': %s", e.Field, e.Message)
 }
@@ -46,7 +46,7 @@ type DatabaseError struct {
 }
 
 func (e *DatabaseError) Error() string {
-	return fmt.Sprintf("database error during %s on %s: %v", e.Op, e.Table, e.Err)
+	return fmt.Sprintf("❌ database error during %s on %s: %v", e.Op, e.Table, e.Err)
 }
 
 func (e *DatabaseError) Unwrap() error {

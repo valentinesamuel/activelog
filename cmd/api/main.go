@@ -27,9 +27,11 @@ func main() {
 	defer db.Close()
 
 	activityRepo := repository.NewActivityRepository(db)
+	userRepo := repository.NewUserRepository(db)
 
 	healthHandler := handlers.NewHealthHandler()
 	activityHandler := handlers.NewActivityHandler(activityRepo)
+	userHandler := handlers.NewUserHandler(userRepo)
 
 	router := mux.NewRouter()
 
@@ -47,6 +49,7 @@ func main() {
 	api.HandleFunc("/activities/{id}", activityHandler.GetActivity).Methods("GET")
 	api.HandleFunc("/activities/{id}", activityHandler.UpdateActivity).Methods("PATCH")
 	api.HandleFunc("/activities/{id}", activityHandler.DeleteActivity).Methods("DELETE")
+	api.HandleFunc("/auth/register", userHandler.CreateUser).Methods("POST")
 
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -56,8 +59,8 @@ func main() {
 	server := &http.Server{
 		Addr:         ":" + cfg.ServerPort,
 		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  45 * time.Second,
+		WriteTimeout: 45 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
