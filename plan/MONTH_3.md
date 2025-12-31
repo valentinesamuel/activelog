@@ -47,28 +47,40 @@ This month focuses on two critical pillars of backend development: advanced data
 ### 📋 Implementation Tasks
 
 **Task 1: Create Database Migration for Tags** (20 min)
-- [ ] Create migration file `migrations/003_create_tags.up.sql`
-- [ ] Add tags table schema
-- [ ] Add activity_tags junction table
-- [ ] Create indexes for performance (user_date, activity_type, tag lookups)
-- [ ] Create corresponding down migration `003_create_tags.down.sql`
-- [ ] Run migration: `migrate -path migrations -database "postgres://..." up`
+- [X] Create migration file `migrations/003_create_tags.up.sql`
+- [X] Add tags table schema
+- [X] Add activity_tags junction table
+- [X] Create indexes for performance (user_date, activity_type, tag lookups)
+- [X] Create corresponding down migration `003_create_tags.down.sql`
+- [X] Run migration: `migrate -path migrations -database "postgres://..." up`
 
 **Task 2: Update Activity Model** (15 min)
-- [ ] Open `internal/models/activity.go`
-- [ ] Add `Tags []string` field to Activity struct
-- [ ] Add JSON tag: `json:"tags,omitempty"`
-- [ ] Update any existing test fixtures to include empty tags slice
+- [X] Open `internal/models/activity.go`
+- [X] Add `Tags []string` field to Activity struct
+- [X] Add JSON tag: `json:"tags,omitempty"`
+- [X] Update any existing test fixtures to include empty tags slice
 
 **Task 3: Create Tag Repository Methods** (45 min)
-- [ ] Create `internal/repository/tag_repository.go`
-- [ ] Implement `GetOrCreateTag(ctx context.Context, name string) (int, error)`
-- [ ] Implement `GetTagsForActivity(ctx context.Context, activityID int) ([]string, error)`
-- [ ] Implement `LinkActivityTag(ctx context.Context, activityID, tagID int) error`
-- [ ] Handle duplicate tag names (use INSERT ... ON CONFLICT)
+- [X] Create `internal/repository/tag_repository.go`
+- [X] Implement `GetOrCreateTag(ctx context.Context, name string) (int, error)`
+  - **Logic:** Query tags table for existing tag with given name. If found, return its ID. If not found, INSERT new tag and return the generated ID. Use a single query with INSERT ... ON CONFLICT to make it atomic.
+- [X] Implement `GetTagsForActivity(ctx context.Context, activityID int) ([]string, error)`
+  - **Logic:** JOIN activity_tags with tags table WHERE activity_id matches. Return slice of tag names (not IDs). Return empty slice if activity has no tags (not an error).
+- [X] Implement `LinkActivityTag(ctx context.Context, activityID, tagID int) error`
+  - **Logic:** INSERT into activity_tags table with the given activityID and tagID. The primary key constraint prevents duplicate links. Return error if foreign key constraint fails (invalid activity or tag ID).
+- [X] Handle duplicate tag names (use INSERT ... ON CONFLICT)
 
 **Task 4: Implement CreateWithTags Using Transactions** (60 min)
 - [ ] Add method to ActivityRepository: `CreateWithTags(ctx, activity, tags) error`
+  - **Logic:**
+    1. Start transaction with `db.BeginTx(ctx, nil)` and defer `tx.Rollback()` (safe to call after commit)
+    2. INSERT activity into activities table using the transaction, get generated ID with RETURNING clause
+    3. For each tag in tags slice:
+       - Use INSERT ... ON CONFLICT to get or create tag (returns tag ID)
+       - INSERT into activity_tags junction table to link activity and tag
+    4. If any step fails, return error (deferred Rollback will execute)
+    5. If all succeed, call `tx.Commit()` to save changes
+    6. Return nil on success
 - [ ] Start transaction with `db.BeginTx(ctx, nil)`
 - [ ] Insert activity and get ID back (RETURNING clause)
 - [ ] Loop through tags: get/create tag, then link to activity
@@ -78,6 +90,13 @@ This month focuses on two critical pillars of backend development: advanced data
 
 **Task 5: Fix N+1 Query Problem** (90 min)
 - [ ] Create `GetActivitiesWithTags(ctx, userID) ([]*Activity, error)` method
+  - **Logic:**
+    1. Execute single query: SELECT activities.*, tags.id, tags.name FROM activities LEFT JOIN activity_tags LEFT JOIN tags WHERE user_id = $1
+    2. Loop through rows (one row per activity-tag combination, or one row for activities with no tags)
+    3. Use map[int]*Activity to deduplicate - if activity ID already in map, append tag to existing activity; if not, add new activity to map
+    4. Handle NULL tag values using sql.NullInt64 and sql.NullString (when activity has no tags)
+    5. Convert map values to slice and return
+    - **Why:** Instead of 1 query for activities + N queries for tags (N+1 problem), this uses 1 query total
 - [ ] Write JOIN query (activities LEFT JOIN activity_tags LEFT JOIN tags)
 - [ ] Handle NULL values for activities without tags (sql.NullInt64, sql.NullString)
 - [ ] Build activityMap to deduplicate rows
@@ -148,22 +167,40 @@ internal/
 **Task 1: Implement Analytics Queries** (60 min)
 - [ ] Create `internal/repository/stats_repository.go`
 - [ ] Implement `GetWeeklyStats(ctx, userID) (*WeeklyStats, error)`
+  - **Logic:**
+    1. Query activities WHERE user_id = $1 AND activity_date >= NOW() - INTERVAL '7 days'
+    2. Use aggregate functions: COUNT(*) as total_activities, SUM(duration_minutes) as total_duration, SUM(distance_km) as total_distance, AVG(duration_minutes) as avg_duration
+    3. Optionally GROUP BY activity_type if you want per-type breakdown
+    4. Scan results into WeeklyStats struct with fields like TotalActivities, TotalDuration, TotalDistance, AvgDuration
   - Use SUM, COUNT, AVG aggregate functions
   - Filter by date range (past 7 days)
   - GROUP BY activity_type
 - [ ] Implement `GetMonthlyStats(ctx, userID) (*MonthlyStats, error)`
+  - **Logic:** Same as GetWeeklyStats but use '30 days' or '1 month' interval. Return MonthlyStats struct with same aggregate fields.
 - [ ] Implement `GetActivityCountByType(ctx, userID) (map[string]int, error)`
+  - **Logic:** SELECT activity_type, COUNT(*) FROM activities WHERE user_id = $1 GROUP BY activity_type. Loop through rows and build map[string]int where key is activity type and value is count.
 - [ ] Test with real data to verify correctness
 
 **Task 2: Create Complex JOIN Queries** (45 min)
 - [ ] Implement `GetUserActivitySummary(ctx, userID)` - joins users, activities, tags
+  - **Logic:** SELECT users.username, COUNT(DISTINCT activities.id) as activity_count, COUNT(DISTINCT tags.id) as unique_tags FROM users LEFT JOIN activities LEFT JOIN activity_tags LEFT JOIN tags WHERE users.id = $1 GROUP BY users.id. Returns summary with user info + aggregate stats.
 - [ ] Implement `GetTopTagsByUser(ctx, userID, limit)` - aggregate with GROUP BY
+  - **Logic:** SELECT tags.name, COUNT(*) as usage_count FROM tags JOIN activity_tags JOIN activities WHERE activities.user_id = $1 GROUP BY tags.id, tags.name ORDER BY usage_count DESC LIMIT $2. Returns slice of tag names sorted by most used.
 - [ ] Use LEFT JOIN vs INNER JOIN appropriately
 - [ ] Handle NULL values in results
 - [ ] Add LIMIT and ORDER BY for performance
 
 **Task 3: Implement Graceful Shutdown** (90 min)
 - [ ] Open `cmd/api/main.go`
+  - **Logic:**
+    1. Create buffered signal channel and register for SIGINT/SIGTERM
+    2. Start HTTP server in a goroutine (non-blocking)
+    3. Main goroutine blocks on signal channel with `<-quit`
+    4. When signal received, create context with 30s timeout
+    5. Call `srv.Shutdown(ctx)` - this stops accepting new connections and waits for active requests to finish (up to 30s)
+    6. Close database and other resources after shutdown completes
+    7. Log each step for observability
+    - **Why:** Prevents abrupt termination that could corrupt in-flight requests or leave database connections open
 - [ ] Import `os`, `os/signal`, `syscall`, `context`
 - [ ] Create signal channel: `quit := make(chan os.Signal, 1)`
 - [ ] Register signals: `signal.Notify(quit, os.Interrupt, syscall.SIGTERM)`
@@ -367,6 +404,15 @@ coverage.out                       [GENERATED]
 **Task 2: Create Testcontainer Setup Helper** (45 min)
 - [ ] Create `internal/repository/testhelpers/container.go`
 - [ ] Implement `SetupTestDB(t *testing.T) (*sql.DB, func())`
+  - **Logic:**
+    1. Create testcontainers.ContainerRequest with postgres:15 image and test credentials
+    2. Start container with testcontainers.GenericContainer
+    3. Wait for "database system is ready" log message using wait.ForLog
+    4. Get mapped host and port from container
+    5. Build connection string and open sql.DB connection
+    6. Run all migrations from migrations/ folder on the test database
+    7. Return (*sql.DB, cleanup func) where cleanup stops container and closes DB
+    - **Why:** Each test gets a fresh, isolated database in a Docker container - no shared state between tests
 - [ ] Start postgres container with testcontainers
 - [ ] Wait for database to be ready
 - [ ] Run migrations on test container

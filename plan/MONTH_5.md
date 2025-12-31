@@ -56,14 +56,25 @@ This month focuses on performance optimization through caching, rate limiting, a
 **Task 2: Create Redis Client Wrapper** (45 min)
 - [ ] Create `pkg/cache/redis_client.go`
 - [ ] Implement `NewRedisClient(addr, password string) (*RedisClient, error)`
+  - **Logic:** Create `redis.Options` with addr and password. Call `redis.NewClient(opts)` to get client. Ping server with `client.Ping(ctx)` to verify connection. If ping fails, return error. If success, return RedisClient struct wrapping the client.
 - [ ] Add connection pooling configuration
 - [ ] Implement `Ping()` to test connection
+  - **Logic:** Call `client.Ping(ctx).Result()`. Returns "PONG" if Redis is up, error otherwise. Used for health checks.
 - [ ] Add graceful disconnect on shutdown
 - [ ] Test connection and basic operations
 
 **Task 3: Implement Cache-Aside Pattern** (90 min)
 - [ ] Create `internal/services/activity_service.go`
 - [ ] Implement `GetActivity(ctx, id)` with cache-aside pattern:
+  - **Logic:**
+    1. Build cache key: `activity:{id}`
+    2. Try `redis.Get(ctx, key)` to check cache
+    3. If cache HIT: unmarshal JSON string to Activity struct, return
+    4. If cache MISS (redis.Nil error): fetch from database using repository
+    5. If DB returns activity: marshal to JSON, store in Redis with `redis.Set(ctx, key, json, 5*time.Minute)`
+    6. Return activity from DB
+    7. If Redis errors (connection failed): log error, skip cache, fetch from DB (fail open - don't break app)
+    - **Why:** Cache-aside = application manages cache. Check cache first (fast), fall back to DB (slow), then populate cache for next request.
   - Check cache first
   - On cache miss, fetch from database
   - Store in cache with TTL
@@ -73,6 +84,7 @@ This month focuses on performance optimization through caching, rate limiting, a
 
 **Task 4: Cache Activity Listings** (60 min)
 - [ ] Implement `GetActivitiesByUser(ctx, userID)` with caching
+  - **Logic:** Same cache-aside pattern but key includes pagination: `activities:user:{userID}:page:{page}:limit:{limit}`. Marshal entire activity slice to JSON. Shorter TTL (2 min) since lists change often when user adds activities. Invalidate on create/update/delete.
 - [ ] Generate cache key: `activities:user:{userID}`
 - [ ] Cache paginated results separately
 - [ ] Set TTL to 2 minutes (changes frequently)

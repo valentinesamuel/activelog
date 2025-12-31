@@ -293,6 +293,15 @@ func (c *SafeCounter) Increment() {
 **Task 2: Implement Parallel Statistics Calculation** (90 min)
 - [ ] Update `internal/services/stats_service.go`
 - [ ] Implement `CalculateUserStats(ctx, userID)` with parallel queries
+  - **Logic:**
+    1. Create result channel: `results := make(chan StatResult, 4)`
+    2. Launch 4 goroutines, each querying different stat:
+       - `go func() { total := repo.GetTotalActivities(ctx, userID); results <- StatResult{Type: "total", Value: total} }()`
+       - Same for distance, duration, streak
+    3. Collect 4 results from channel: `for i := 0; i < 4; i++ { r := <-results; ... }`
+    4. Combine results into UserStats struct
+    5. Return combined stats
+    - **Why:** 4 DB queries run in parallel instead of sequential, ~4x faster
 - [ ] Launch 4 goroutines for different stats (total activities, distance, duration, streak)
 - [ ] Use channel to collect results
 - [ ] Handle errors from any goroutine
@@ -386,6 +395,14 @@ internal/
 **Task 2: Implement Worker Pool Pattern** (120 min)
 - [ ] Create `pkg/workers/pool.go`
 - [ ] Implement `WorkerPool` struct with job/result channels
+  - **Logic:**
+    1. Define: `type WorkerPool struct { jobs chan Job; results chan Result; numWorkers int }`
+    2. Create N worker goroutines in `Start()` method
+    3. Each worker: `for job := range p.jobs { result := job.Process(); p.results <- result }`
+    4. Workers block waiting for jobs on channel
+    5. Main code sends jobs to `jobs` channel, reads results from `results` channel
+    6. Call `close(jobs)` when done sending - workers exit when channel closes
+    - **Why:** Limits concurrency to N workers, prevents creating millions of goroutines
 - [ ] Create worker goroutines that process from job channel
 - [ ] Send jobs to channel, collect results from result channel
 - [ ] Close channels properly when done

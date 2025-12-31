@@ -62,6 +62,13 @@ This month introduces file handling capabilities to your application. You'll lea
 **Task 3: Implement Multipart Form Handler** (60 min)
 - [ ] Create `internal/handlers/photo_handler.go`
 - [ ] Implement `Upload(w, r)` method
+  - **Logic:**
+    1. Extract activity ID from URL path parameters
+    2. Parse multipart form with `r.ParseMultipartForm(50 << 20)` - loads up to 50MB into memory
+    3. Get files from `r.MultipartForm.File["photos"]` - returns slice of file headers
+    4. Validate file count (reject if > 5 photos)
+    5. For each file: open file, validate type/size, process (save temp or upload to S3)
+    6. Return JSON response with uploaded file metadata (IDs, URLs, sizes)
 - [ ] Parse multipart form: `r.ParseMultipartForm(50 << 20)` (50MB limit)
 - [ ] Extract files from `r.MultipartForm.File["photos"]`
 - [ ] Validate file count (max 5 photos per activity)
@@ -70,8 +77,10 @@ This month introduces file handling capabilities to your application. You'll lea
 **Task 4: File Validation** (45 min)
 - [ ] Create `pkg/upload/validator.go`
 - [ ] Implement `ValidateFileType(contentType string) error`
+  - **Logic:** Check if contentType is in allowed list (image/jpeg, image/png, image/webp). Return error if not. Also read first 512 bytes of file and use `http.DetectContentType()` to verify magic bytes match (prevents MIME type spoofing).
 - [ ] Check MIME type: accept image/jpeg, image/png, image/webp
 - [ ] Implement `ValidateFileSize(size int64) error` (max 10MB)
+  - **Logic:** Check if size > 10*1024*1024 bytes. If yes, return error with message "file too large, maximum size is 10MB". If no, return nil.
 - [ ] Check magic bytes (not just extension) for security
 - [ ] Add tests for validation logic
 
@@ -85,9 +94,13 @@ This month introduces file handling capabilities to your application. You'll lea
 **Task 6: Create Photo Repository** (45 min)
 - [ ] Create `internal/repository/photo_repository.go`
 - [ ] Implement `Create(ctx, photo) error`
+  - **Logic:** INSERT photo into activity_photos table with activity_id, s3_key, thumbnail_key, content_type, file_size. Use RETURNING clause to get generated ID and timestamps. Update photo struct with returned values.
 - [ ] Implement `GetByActivityID(ctx, activityID) ([]*Photo, error)`
+  - **Logic:** SELECT * FROM activity_photos WHERE activity_id = $1 ORDER BY uploaded_at DESC. Scan all rows into Photo slice. Return empty slice if no photos (not an error).
 - [ ] Implement `GetByID(ctx, id) (*Photo, error)`
+  - **Logic:** SELECT * FROM activity_photos WHERE id = $1. Scan into Photo struct. Return sql.ErrNoRows if photo doesn't exist.
 - [ ] Implement `Delete(ctx, id) error`
+  - **Logic:** DELETE FROM activity_photos WHERE id = $1. Check rows affected - if 0, return error "photo not found". This only deletes DB record, caller must delete S3 files separately.
 - [ ] Write tests for repository methods
 
 **Task 7: Wire Up Routes and Test** (30 min)
@@ -181,13 +194,23 @@ pkg/
 **Task 4: Implement S3 Client** (60 min)
 - [ ] Create `pkg/storage/s3_client.go`
 - [ ] Implement `NewS3Client(bucket, region) (*S3Client, error)`
+  - **Logic:** Load AWS config using `config.LoadDefaultConfig(ctx)` which reads credentials from env vars or ~/.aws/credentials. Create S3 client from config with specified region. Return S3Client struct containing bucket name and S3 service client.
 - [ ] Load AWS credentials from environment
 - [ ] Implement `Upload(ctx, key, file, contentType) error`
+  - **Logic:** Use `s3.PutObjectInput` with Bucket, Key, Body (file reader), ContentType. Call `s3Client.PutObject(ctx, input)`. Check for errors. Key is full path like "activities/123/uuid.jpg". File must be io.Reader. Return wrapped error on failure.
 - [ ] Implement `Delete(ctx, key) error`
+  - **Logic:** Use `s3.DeleteObjectInput` with Bucket and Key. Call `s3Client.DeleteObject(ctx, input)`. Note: DeleteObject succeeds even if key doesn't exist (idempotent). Return wrapped error on failure.
 - [ ] Handle AWS errors and wrap with context
 
 **Task 5: Implement Presigned URLs** (45 min)
 - [ ] Add `GetPresignedURL(ctx, key, duration) (string, error)` to S3Client
+  - **Logic:**
+    1. Create presign client with `s3.NewPresignClient(s3Client)`
+    2. Build GetObjectInput with Bucket and Key
+    3. Call `presignClient.PresignGetObject(ctx, input, func(opts *PresignOptions) { opts.Expires = duration })`
+    4. Returns signed URL string that allows temporary public access to private S3 object
+    5. URL expires after specified duration (typically 1 hour)
+    - **Why:** S3 bucket is private, so direct links don't work. Presigned URLs grant temporary access without making bucket public.
 - [ ] Use `s3.NewPresignClient()` for presigning
 - [ ] Set expiration to 1 hour for view URLs
 - [ ] Test presigned URL generation

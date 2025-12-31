@@ -17,6 +17,7 @@ type Activity struct {
 	CaloriesBurned  int       `json:"caloriesBurned,omitempty" `
 	Notes           string    `json:"notes,omitempty" `
 	ActivityDate    time.Time `json:"activityDate" `
+	Tags            []string  `json:"tags,omitempty" `
 }
 
 type CreateActivityRequest struct {

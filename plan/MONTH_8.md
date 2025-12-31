@@ -90,24 +90,44 @@ WS     /ws                            # WebSocket connection
 **Task 3: Create Friend Repository** (90 min)
 - [ ] Create `internal/repository/friend_repository.go`
 - [ ] Implement `Create(ctx, friendship) error` (send request)
+  - **Logic:** INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'pending'). UNIQUE constraint prevents duplicate requests. Returns error if friendship already exists.
 - [ ] Implement `UpdateStatus(ctx, userID, friendID, status) error`
+  - **Logic:** UPDATE friendships SET status = $3 WHERE user_id = $1 AND friend_id = $2. Used to accept/reject requests. Check rows affected to ensure friendship exists.
 - [ ] Implement `FriendshipExists(ctx, userID, friendID) (bool, error)`
+  - **Logic:** SELECT EXISTS(SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = $2). Returns true/false. Used to prevent duplicate requests.
 - [ ] Implement `GetFriends(ctx, userID) ([]*User, error)`
+  - **Logic:** SELECT users.* FROM users JOIN friendships ON users.id = friendships.friend_id WHERE friendships.user_id = $1 AND friendships.status = 'accepted'. Returns list of accepted friends with user details.
 - [ ] Implement `GetPendingRequests(ctx, userID) ([]*User, error)`
+  - **Logic:** SELECT users.* FROM users JOIN friendships ON users.id = friendships.user_id WHERE friendships.friend_id = $1 AND friendships.status = 'pending'. Returns users who sent requests to this user.
 - [ ] Implement `Delete(ctx, userID, friendID) error`
+  - **Logic:** DELETE FROM friendships WHERE user_id = $1 AND friend_id = $2. For accepted friendships, must delete BOTH rows (A→B and B→A) to fully remove friendship.
 
 **Task 4: Create Friend Service** (120 min)
 - [ ] Create `internal/services/friend_service.go`
 - [ ] Implement `SendRequest(ctx, userID, friendID) error`
+  - **Logic:**
+    1. Validate userID != friendID (can't friend yourself)
+    2. Check if friendship already exists with FriendshipExists()
+    3. If exists, return error "friendship already exists or pending"
+    4. Create friendship with status='pending'
+    5. Create notification for friendID: "{userName} sent you a friend request"
+    6. Optionally enqueue job to send email notification
   - Check friendship doesn't exist
   - Create pending friendship
   - Create notification
 - [ ] Implement `AcceptRequest(ctx, userID, requesterID) error`
+  - **Logic:**
+    1. Update existing friendship (requesterID → userID) to status='accepted'
+    2. Create reciprocal friendship (userID → requesterID) with status='accepted' (so both users see each other as friends)
+    3. Create notification for requesterID: "{userName} accepted your friend request"
+    4. Return error if no pending request exists
   - Update status to accepted
   - Create reciprocal friendship
   - Create notification
 - [ ] Implement `RejectRequest(ctx, userID, requesterID) error`
+  - **Logic:** Update status to 'rejected' OR delete the friendship row entirely. No reciprocal action needed. Optionally create notification.
 - [ ] Implement `RemoveFriend(ctx, userID, friendID) error`
+  - **Logic:** Delete BOTH friendship rows: (userID → friendID) and (friendID → userID). This fully removes the bidirectional friendship. No notification needed (or optional).
 
 **Task 5: Create Friend Handlers** (90 min)
 - [ ] Create `internal/handlers/friend_handler.go`
@@ -185,10 +205,21 @@ internal/
 **Task 1: Create Feed Repository** (90 min)
 - [ ] Create `internal/repository/feed_repository.go`
 - [ ] Implement `GetFeed(ctx, userID, limit, offset) ([]*Activity, error)`
-- [ ] Join activities, friendships, users tables
-- [ ] Include like_count and comment_count (LEFT JOIN + COUNT)
-- [ ] Order by created_at DESC
-- [ ] Support pagination
+  - **Logic:**
+    1. SELECT activities.*, users.name, users.avatar, COUNT(DISTINCT likes.id) as like_count, COUNT(DISTINCT comments.id) as comment_count
+    2. FROM activities JOIN friendships ON activities.user_id = friendships.friend_id
+    3. JOIN users ON activities.user_id = users.id
+    4. LEFT JOIN likes ON activities.id = likes.activity_id
+    5. LEFT JOIN comments ON activities.id = comments.activity_id
+    6. WHERE friendships.user_id = $1 AND friendships.status = 'accepted'
+    7. GROUP BY activities.id, users.name, users.avatar (for COUNT aggregates)
+    8. ORDER BY activities.created_at DESC
+    9. LIMIT $2 OFFSET $3 (pagination)
+    - **Why:** Shows activities from all accepted friends, with engagement metrics
+  - Join activities, friendships, users tables
+  - Include like_count and comment_count (LEFT JOIN + COUNT)
+  - Order by created_at DESC
+  - Support pagination
 
 **Task 2: Create Feed Service** (60 min)
 - [ ] Create `internal/services/feed_service.go`

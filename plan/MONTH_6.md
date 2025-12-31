@@ -62,16 +62,22 @@ This month introduces asynchronous processing to your application. You'll learn 
 **Task 3: Create Job Client** (60 min)
 - [ ] Create `internal/jobs/client.go`
 - [ ] Implement `NewJobClient(redisAddr) (*JobClient, error)`
+  - **Logic:** Create `asynq.RedisClientOpt` with Redis address. Create `asynq.Client` with options. Return JobClient struct wrapping the asynq client. Used by API server to enqueue jobs.
 - [ ] Add method `EnqueueWelcomeEmail(ctx, userID, email, name) error`
+  - **Logic:** Create payload struct with userID, email, name. Marshal to JSON. Create `asynq.NewTask(TypeWelcomeEmail, payload)`. Call `client.Enqueue(task, asynq.MaxRetry(3), asynq.Queue("critical"))`. Returns task ID on success.
 - [ ] Add method `EnqueueWeeklySummary(ctx, userID) error`
+  - **Logic:** Similar to welcome email but payload only has userID. Use different queue priority (default queue). Set `asynq.ProcessIn(5*time.Minute)` to delay processing.
 - [ ] Set appropriate retry policies (max 3 retries)
 - [ ] Set timeouts for different job types
 
 **Task 4: Implement Job Handlers** (90 min)
 - [ ] Create `internal/jobs/handlers.go`
 - [ ] Implement `HandleWelcomeEmail(ctx, task) error`
+  - **Logic:** Unmarshal task.Payload() into WelcomeEmailPayload struct. Call emailService.SendWelcomeEmail(payload.Email, payload.Name). If error, return it (asynq will retry). If success, return nil. Log start and completion.
 - [ ] Implement `HandleWeeklySummary(ctx, task) error`
+  - **Logic:** Unmarshal payload to get userID. Fetch user's weekly stats from repository. Fetch user email. Render email template with stats data. Send email. Return error for retry if any step fails.
 - [ ] Implement `HandleGenerateReport(ctx, task) error`
+  - **Logic:** Unmarshal payload. Generate PDF report using activity data. Upload PDF to S3. Store S3 key in database. Send notification email with download link. Can take 30+ seconds for large reports.
 - [ ] Unmarshal task payload in each handler
 - [ ] Add error handling and logging
 - [ ] Return errors for retry on failure
@@ -168,7 +174,9 @@ Makefile                           [MODIFY - add worker target]
 **Task 3: Create Email Service** (60 min)
 - [ ] Create `internal/email/service.go`
 - [ ] Implement `NewEmailService(config) *EmailService`
+  - **Logic:** Parse config for SMTP host, port, username, password. Create `gomail.Dialer` with TLS config. Parse all HTML templates from templates/ directory. Return EmailService with dialer and parsed templates.
 - [ ] Add `SendEmail(to, subject, body) error` method
+  - **Logic:** Create `gomail.NewMessage()`. Set From, To, Subject, HTML body. Call `dialer.DialAndSend(msg)`. Returns error if SMTP fails. Retry logic handled by asynq, not here.
 - [ ] Configure SMTP dialer or API client
 - [ ] Add connection pooling for SMTP
 - [ ] Handle send errors gracefully
@@ -191,11 +199,19 @@ Makefile                           [MODIFY - add worker target]
 
 **Task 6: Implement Specific Email Types** (90 min)
 - [ ] Implement `SendWelcomeEmail(to, name) error`
+  - **Logic:** Build template data with name. Execute welcome.html template with data. Get HTML string. Call SendEmail(to, "Welcome to ActiveLog!", html). Return error if template execution or send fails.
 - [ ] Implement `SendWeeklySummary(userID) error`
+  - **Logic:**
+    1. Fetch user from repository to get email
+    2. Fetch weekly stats from stats repository
+    3. Build template data with user name, stats (total activities, distance, time, top activity type)
+    4. Execute weekly_summary.html template
+    5. Send email with rendered HTML
   - Fetch user's weekly stats from repository
   - Render with template
   - Send email
 - [ ] Implement `SendFriendRequest(to, fromName) error`
+  - **Logic:** Execute friend_request.html template with fromName data. Send email with "Friend Request from {fromName}" subject.
 - [ ] Test each email type
 
 **Task 7: Integrate with Job Queue** (45 min)
