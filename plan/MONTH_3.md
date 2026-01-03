@@ -63,15 +63,25 @@ This month focuses on two critical pillars of backend development: advanced data
 **Task 3: Create Tag Repository Methods** (45 min)
 - [X] Create `internal/repository/tag_repository.go`
 - [X] Implement `GetOrCreateTag(ctx context.Context, name string) (int, error)`
+  - **Purpose:** Ensure a tag exists in the database and get its ID. If the tag doesn't exist, create it. This prevents duplicate tags with the same name.
+  - **Returns:** `(int, error)` - The tag's database ID (for linking to activities), or an error if database operation fails.
   - **Logic:** Query tags table for existing tag with given name. If found, return its ID. If not found, INSERT new tag and return the generated ID. Use a single query with INSERT ... ON CONFLICT to make it atomic.
 - [X] Implement `GetTagsForActivity(ctx context.Context, activityID int) ([]string, error)`
+  - **Purpose:** Retrieve all tag names associated with a specific activity. Used when displaying a single activity's details.
+  - **Returns:** `([]string, error)` - Slice of tag names like `["outdoor", "cardio", "morning"]`. Empty slice `[]` if activity has no tags (not an error).
   - **Logic:** JOIN activity_tags with tags table WHERE activity_id matches. Return slice of tag names (not IDs). Return empty slice if activity has no tags (not an error).
 - [X] Implement `LinkActivityTag(ctx context.Context, activityID, tagID int) error`
+  - **Purpose:** Create the many-to-many relationship between an activity and a tag. This links one activity to one tag.
+  - **Returns:** `error` - nil on success, error if the link already exists or if activityID/tagID is invalid.
   - **Logic:** INSERT into activity_tags table with the given activityID and tagID. The primary key constraint prevents duplicate links. Return error if foreign key constraint fails (invalid activity or tag ID).
 - [X] Handle duplicate tag names (use INSERT ... ON CONFLICT)
 
 **Task 4: Implement CreateWithTags Using Transactions** (60 min)
-- [ ] Add method to ActivityRepository: `CreateWithTags(ctx, activity, tags) error`
+- [X] Add method to ActivityRepository: `CreateWithTags(ctx, activity, tags) error`
+  - **Purpose:** Create a new activity and associate it with multiple tags in a single atomic operation. If any step fails, nothing is saved (all-or-nothing).
+  - **Input:** `activity *models.Activity` (the activity to create), `tags []string` (tag names like `["running", "morning"]`)
+  - **Returns:** `error` - nil on success, error if any database operation fails. On success, the `activity` struct is updated with the generated ID and timestamps.
+  - **Outcome:** Activity exists in database with ID populated, and all tags are linked in the activity_tags junction table.
   - **Logic:**
     1. Start transaction with `db.BeginTx(ctx, nil)` and defer `tx.Rollback()` (safe to call after commit)
     2. INSERT activity into activities table using the transaction, get generated ID with RETURNING clause
@@ -81,15 +91,25 @@ This month focuses on two critical pillars of backend development: advanced data
     4. If any step fails, return error (deferred Rollback will execute)
     5. If all succeed, call `tx.Commit()` to save changes
     6. Return nil on success
-- [ ] Start transaction with `db.BeginTx(ctx, nil)`
-- [ ] Insert activity and get ID back (RETURNING clause)
-- [ ] Loop through tags: get/create tag, then link to activity
-- [ ] Implement proper error handling with tx.Rollback()
-- [ ] Commit transaction if all succeeds
-- [ ] Test rollback behavior (simulate failure after activity insert)
+- [X] Start transaction with `db.BeginTx(ctx, nil)`
+- [X] Insert activity and get ID back (RETURNING clause)
+- [X] Loop through tags: get/create tag, then link to activity
+- [X] Implement proper error handling with tx.Rollback()
+- [X] Commit transaction if all succeeds
+- [X] Test rollback behavior (simulate failure after activity insert)
 
 **Task 5: Fix N+1 Query Problem** (90 min)
 - [ ] Create `GetActivitiesWithTags(ctx, userID) ([]*Activity, error)` method
+  - **Purpose:** Efficiently fetch all activities for a user WITH their associated tags in a single database query. Solves the N+1 query problem.
+  - **Returns:** `([]*Activity, error)` - Slice of Activity structs where each Activity has its `Tags []string` field populated. Example:
+    ```go
+    []*Activity{
+        {ID: 1, Type: "running", Tags: ["morning", "outdoor"]},
+        {ID: 2, Type: "yoga", Tags: ["evening"]},
+        {ID: 3, Type: "swimming", Tags: []},  // no tags
+    }
+    ```
+  - **Why this matters:** Without this, you'd do 1 query for activities + N queries (one per activity) to get tags = N+1 queries. This does it in 1.
   - **Logic:**
     1. Execute single query: SELECT activities.*, tags.id, tags.name FROM activities LEFT JOIN activity_tags LEFT JOIN tags WHERE user_id = $1
     2. Loop through rows (one row per activity-tag combination, or one row for activities with no tags)
@@ -167,6 +187,17 @@ internal/
 **Task 1: Implement Analytics Queries** (60 min)
 - [ ] Create `internal/repository/stats_repository.go`
 - [ ] Implement `GetWeeklyStats(ctx, userID) (*WeeklyStats, error)`
+  - **Purpose:** Calculate aggregate statistics for a user's activities over the past 7 days. Used for weekly summary emails and dashboard.
+  - **Returns:** `(*WeeklyStats, error)` - Pointer to struct with aggregated data:
+    ```go
+    type WeeklyStats struct {
+        TotalActivities int     `json:"total_activities"`
+        TotalDuration   int     `json:"total_duration_minutes"`
+        TotalDistance   float64 `json:"total_distance_km"`
+        AvgDuration     float64 `json:"avg_duration_minutes"`
+    }
+    // Example: &WeeklyStats{TotalActivities: 12, TotalDuration: 360, TotalDistance: 45.5, AvgDuration: 30.0}
+    ```
   - **Logic:**
     1. Query activities WHERE user_id = $1 AND activity_date >= NOW() - INTERVAL '7 days'
     2. Use aggregate functions: COUNT(*) as total_activities, SUM(duration_minutes) as total_duration, SUM(distance_km) as total_distance, AVG(duration_minutes) as avg_duration
@@ -176,15 +207,46 @@ internal/
   - Filter by date range (past 7 days)
   - GROUP BY activity_type
 - [ ] Implement `GetMonthlyStats(ctx, userID) (*MonthlyStats, error)`
+  - **Purpose:** Calculate aggregate statistics for a user's activities over the past 30 days. Used for monthly reports.
+  - **Returns:** `(*MonthlyStats, error)` - Same structure as WeeklyStats but covers 30-day period.
   - **Logic:** Same as GetWeeklyStats but use '30 days' or '1 month' interval. Return MonthlyStats struct with same aggregate fields.
 - [ ] Implement `GetActivityCountByType(ctx, userID) (map[string]int, error)`
+  - **Purpose:** Get a breakdown of how many activities of each type a user has logged. Shows distribution across activity types.
+  - **Returns:** `(map[string]int, error)` - Map where key is activity type, value is count. Example:
+    ```go
+    map[string]int{
+        "running":    25,
+        "cycling":    15,
+        "swimming":   8,
+        "basketball": 12,
+    }
+    ```
   - **Logic:** SELECT activity_type, COUNT(*) FROM activities WHERE user_id = $1 GROUP BY activity_type. Loop through rows and build map[string]int where key is activity type and value is count.
 - [ ] Test with real data to verify correctness
 
 **Task 2: Create Complex JOIN Queries** (45 min)
-- [ ] Implement `GetUserActivitySummary(ctx, userID)` - joins users, activities, tags
+- [ ] Implement `GetUserActivitySummary(ctx, userID) (*UserActivitySummary, error)`
+  - **Purpose:** Get a complete overview of a user's activity profile - total activities and unique tags they've used.
+  - **Returns:** `(*UserActivitySummary, error)` - Struct with user summary:
+    ```go
+    type UserActivitySummary struct {
+        Username     string `json:"username"`
+        ActivityCount int   `json:"activity_count"`
+        UniqueTagCount int  `json:"unique_tag_count"`
+    }
+    // Example: &UserActivitySummary{Username: "john_doe", ActivityCount: 150, UniqueTagCount: 12}
+    ```
   - **Logic:** SELECT users.username, COUNT(DISTINCT activities.id) as activity_count, COUNT(DISTINCT tags.id) as unique_tags FROM users LEFT JOIN activities LEFT JOIN activity_tags LEFT JOIN tags WHERE users.id = $1 GROUP BY users.id. Returns summary with user info + aggregate stats.
-- [ ] Implement `GetTopTagsByUser(ctx, userID, limit)` - aggregate with GROUP BY
+- [ ] Implement `GetTopTagsByUser(ctx, userID, limit int) ([]TagUsage, error)`
+  - **Purpose:** Find which tags a user uses most frequently. Useful for showing "top categories" in analytics.
+  - **Returns:** `([]TagUsage, error)` - Slice of structs ordered by usage count:
+    ```go
+    type TagUsage struct {
+        TagName string `json:"tag_name"`
+        Count   int    `json:"count"`
+    }
+    // Example: []TagUsage{{"outdoor", 45}, {"morning", 32}, {"cardio", 28}}
+    ```
   - **Logic:** SELECT tags.name, COUNT(*) as usage_count FROM tags JOIN activity_tags JOIN activities WHERE activities.user_id = $1 GROUP BY tags.id, tags.name ORDER BY usage_count DESC LIMIT $2. Returns slice of tag names sorted by most used.
 - [ ] Use LEFT JOIN vs INNER JOIN appropriately
 - [ ] Handle NULL values in results
@@ -404,6 +466,20 @@ coverage.out                       [GENERATED]
 **Task 2: Create Testcontainer Setup Helper** (45 min)
 - [ ] Create `internal/repository/testhelpers/container.go`
 - [ ] Implement `SetupTestDB(t *testing.T) (*sql.DB, func())`
+  - **Purpose:** Create a real PostgreSQL database running in a Docker container for integration tests. Each test gets a fresh, isolated database.
+  - **Returns:** `(*sql.DB, func())` - Two values:
+    1. `*sql.DB` - Connection to the test database (fully migrated and ready to use)
+    2. `func()` - Cleanup function that must be called with `defer cleanup()` to stop the container and close the connection
+  - **Usage Example:**
+    ```go
+    func TestActivityRepository(t *testing.T) {
+        db, cleanup := SetupTestDB(t)
+        defer cleanup()  // Always call cleanup!
+
+        repo := NewActivityRepository(db)
+        // ... test repository methods ...
+    }
+    ```
   - **Logic:**
     1. Create testcontainers.ContainerRequest with postgres:15 image and test credentials
     2. Start container with testcontainers.GenericContainer

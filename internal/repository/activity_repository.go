@@ -11,7 +11,8 @@ import (
 )
 
 type ActivityRepository struct {
-	db *sql.DB
+	db      *sql.DB
+	tagRepo *TagRepository
 }
 
 type ActivityStats struct {
@@ -22,9 +23,10 @@ type ActivityStats struct {
 	ActivityTypes   map[string]int
 }
 
-func NewActivityRepository(db *sql.DB) *ActivityRepository {
+func NewActivityRepository(db *sql.DB, tagRepo *TagRepository) *ActivityRepository {
 	return &ActivityRepository{
-		db: db,
+		db:      db,
+		tagRepo: tagRepo,
 	}
 }
 
@@ -358,4 +360,123 @@ func (r *ActivityRepository) GetStats(userID int, startDate, endDate *time.Time)
 	}
 
 	return stats, nil
+}
+
+func (ar *ActivityRepository) CreateWithTags(ctx context.Context, activity *models.Activity, tags []*models.Tag) error {
+	tx, err := ar.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	query1 := `
+		INSERT INTO activities 
+		(user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id
+	`
+	result, err := tx.ExecContext(ctx, query1, activity.UserID, activity.ActivityType, activity.Title, activity.Description, activity.DurationMinutes, activity.DistanceKm, activity.CaloriesBurned, activity.Notes, activity.ActivityDate)
+	activitiyId, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	for _, tag := range tags {
+		tagId, err := ar.tagRepo.GetOrCreateTag(ctx, tag.Name)
+
+		if err != nil {
+			return err
+		}
+
+		ar.tagRepo.LinkActivityTag(ctx, int(activitiyId), tagId)
+	}
+
+	tx.Commit()
+	return nil
+}
+
+func (ar *ActivityRepository) GetActivitiesWithTags(ctx context.Context, userID int) ([]*models.Activity, error) {
+	query := `
+		  SELECT 
+            activities.id, activities.user_id, activities.activity_type, activities.title, 
+            activities.description, activities.duration_minutes, activities.distance_km, 
+            activities.calories_burned, activities.notes, activities.activity_date, 
+            activities.created_at, activities.updated_at,
+            COALESCE(tags.id, 0) as tag_id, COALESCE(tags.name, '') as tag_name
+        FROM activities 
+        LEFT JOIN activity_tags ON activities.id = activity_tags.activity_id
+        LEFT JOIN tags ON activity_tags.tag_id = tags.id
+        WHERE activities.user_id = $1
+        ORDER BY activities.id
+	`
+
+	rows, err := ar.db.QueryContext(ctx, query, userID)
+
+	if err != nil {
+		return nil, fmt.Errorf("❌ Error querying activities: %w", err)
+	}
+	defer rows.Close()
+
+	var activitiesMap = make(map[int]*models.Activity)
+	var activities []*models.Activity
+
+	for rows.Next() {
+		activity := &models.Activity{}
+		var tagID int
+		var tagName string
+
+		err := rows.Scan(
+			&activity.ID,
+			&activity.UserID,
+			&activity.ActivityType,
+			&activity.Title,
+			&activity.Description,
+			&activity.DurationMinutes,
+			&activity.DistanceKm,
+			&activity.CaloriesBurned,
+			&activity.Notes,
+			&activity.ActivityDate,
+			&activity.CreatedAt,
+			&activity.UpdatedAt,
+			&tagID,
+			&tagName,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("❌ Error scanning activities: %w", err)
+		}
+
+		actID := int(activity.ID)
+		act, found := activitiesMap[actID]
+
+		if !found {
+			activity.Tags = []*models.Tag{}
+			activities = append(activities, activity)
+			act = activity
+			activitiesMap[actID] = act
+		}
+
+		if tagID > 0 {
+			act.Tags = append(act.Tags, &models.Tag{
+				BaseEntity: models.BaseEntity{
+					ID: int64(tagID),
+				},
+				Name: tagName,
+			})
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		fmt.Println("❌ Error listing activities")
+		return nil, err
+	}
+
+	fmt.Println("✅ Activities fetched successfully!")
+
+	return activities, nil
 }

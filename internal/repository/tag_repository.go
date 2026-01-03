@@ -85,6 +85,7 @@ func (tr *TagRepository) LinkActivityTag(ctx context.Context, activityID, tagID 
 		INSERT INTO activity_tags
 		(tag_id, activity_id)
 		VALUES ($1, $2)
+		ON CONFLICT (tag_id, activity_id) DO NOTHING;
 	`
 
 	err := tr.db.QueryRowContext(ctx, query, tagID, activityID).Scan()

@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -97,18 +96,16 @@ func (a *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request) {
 
 	UserID := 1
-
+	ctx := r.Context()
 	filters := models.ActivityFilters{
 		ActivityType: r.URL.Query().Get("type"),
 		Limit:        10,
 		Offset:       0,
 	}
 
-	parsedFilters := parseFilters(r, &filters)
+	// parsedFilters := parseFilters(r, &filters)
 
-	fmt.Println(filters)
-
-	activities, err := a.repo.ListByUserWithFilters(UserID, parsedFilters)
+	activities, err := a.repo.GetActivitiesWithTags(ctx, UserID)
 	if err != nil {
 		log.Error().Err(err).Msg("❌ Failed to list activities")
 		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
