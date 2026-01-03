@@ -12,6 +12,155 @@ This month focuses on two critical pillars of backend development: advanced data
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+This section contains all API request/response examples you'll need for testing in Postman during Month 3.
+
+### Authentication Endpoints (From Earlier Months)
+
+**User Registration:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/auth/register`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  ```
+- **Request Body:**
+  ```json
+  {
+    "username": "john_doe",
+    "email": "john@example.com",
+    "password": "SecurePassword123!"
+  }
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "id": 1,
+    "username": "john_doe",
+    "email": "john@example.com",
+    "created_at": "2024-01-15T10:00:00Z"
+  }
+  ```
+
+**User Login:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/auth/login`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  ```
+- **Request Body:**
+  ```json
+  {
+    "email": "john@example.com",
+    "password": "SecurePassword123!"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": 1,
+      "username": "john_doe",
+      "email": "john@example.com"
+    }
+  }
+  ```
+
+### Activity CRUD Endpoints
+
+**Get Single Activity:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/activities/{id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "id": 123,
+    "user_id": 1,
+    "activity_type": "running",
+    "duration_minutes": 45,
+    "distance_km": 7.5,
+    "notes": "Morning run in the park",
+    "activity_date": "2024-01-15T06:30:00Z",
+    "tags": ["morning", "outdoor", "cardio"],
+    "created_at": "2024-01-15T06:35:22Z",
+    "updated_at": "2024-01-15T06:35:22Z"
+  }
+  ```
+- **Error Response (404 Not Found):**
+  ```json
+  {
+    "error": "not found",
+    "message": "activity not found"
+  }
+  ```
+
+**Update Activity:**
+- **HTTP Method:** `PATCH`
+- **URL:** `/api/v1/activities/{id}`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body (partial update):**
+  ```json
+  {
+    "duration_minutes": 50,
+    "notes": "Updated: Morning run in the park with sprints",
+    "tags": ["morning", "outdoor", "cardio", "sprints"]
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "id": 123,
+    "user_id": 1,
+    "activity_type": "running",
+    "duration_minutes": 50,
+    "distance_km": 7.5,
+    "notes": "Updated: Morning run in the park with sprints",
+    "activity_date": "2024-01-15T06:30:00Z",
+    "tags": ["morning", "outdoor", "cardio", "sprints"],
+    "created_at": "2024-01-15T06:35:22Z",
+    "updated_at": "2024-01-15T10:20:15Z"
+  }
+  ```
+
+**Delete Activity:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/activities/{id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (204 No Content):**
+  ```
+  (empty body)
+  ```
+- **Error Response (404 Not Found):**
+  ```json
+  {
+    "error": "not found",
+    "message": "activity not found"
+  }
+  ```
+- **Error Response (403 Forbidden):**
+  ```json
+  {
+    "error": "forbidden",
+    "message": "you can only delete your own activities"
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 9: Database Transactions + N+1 Query Problem (30 min)
@@ -91,6 +240,56 @@ This month focuses on two critical pillars of backend development: advanced data
     4. If any step fails, return error (deferred Rollback will execute)
     5. If all succeed, call `tx.Commit()` to save changes
     6. Return nil on success
+
+  - **API Endpoint (Create Activity with Tags):**
+    - **HTTP Method:** `POST`
+    - **URL:** `/api/v1/activities`
+    - **Headers:**
+      ```
+      Content-Type: application/json
+      Authorization: Bearer <your-jwt-token>
+      ```
+    - **Request Body:**
+      ```json
+      {
+        "activity_type": "running",
+        "duration_minutes": 45,
+        "distance_km": 7.5,
+        "notes": "Morning run in the park",
+        "activity_date": "2024-01-15T06:30:00Z",
+        "tags": ["morning", "outdoor", "cardio"]
+      }
+      ```
+    - **Success Response (201 Created):**
+      ```json
+      {
+        "id": 123,
+        "user_id": 1,
+        "activity_type": "running",
+        "duration_minutes": 45,
+        "distance_km": 7.5,
+        "notes": "Morning run in the park",
+        "activity_date": "2024-01-15T06:30:00Z",
+        "tags": ["morning", "outdoor", "cardio"],
+        "created_at": "2024-01-15T06:35:22Z",
+        "updated_at": "2024-01-15T06:35:22Z"
+      }
+      ```
+    - **Error Response (400 Bad Request):**
+      ```json
+      {
+        "error": "invalid input",
+        "message": "duration_minutes must be positive"
+      }
+      ```
+    - **Error Response (401 Unauthorized):**
+      ```json
+      {
+        "error": "unauthorized",
+        "message": "missing or invalid token"
+      }
+      ```
+
 - [X] Start transaction with `db.BeginTx(ctx, nil)`
 - [X] Insert activity and get ID back (RETURNING clause)
 - [X] Loop through tags: get/create tag, then link to activity
@@ -99,11 +298,11 @@ This month focuses on two critical pillars of backend development: advanced data
 - [X] Test rollback behavior (simulate failure after activity insert)
 
 **Task 5: Fix N+1 Query Problem** (90 min)
-- [ ] Create `GetActivitiesWithTags(ctx, userID) ([]*Activity, error)` method
+- [X] Create `GetActivitiesWithTags(ctx, userID) ([]*Activity, error)` method
   - **Purpose:** Efficiently fetch all activities for a user WITH their associated tags in a single database query. Solves the N+1 query problem.
   - **Returns:** `([]*Activity, error)` - Slice of Activity structs where each Activity has its `Tags []string` field populated. Example:
     ```go
-    []*Activity{
+    []*Activity {
         {ID: 1, Type: "running", Tags: ["morning", "outdoor"]},
         {ID: 2, Type: "yoga", Tags: ["evening"]},
         {ID: 3, Type: "swimming", Tags: []},  // no tags
@@ -117,6 +316,79 @@ This month focuses on two critical pillars of backend development: advanced data
     4. Handle NULL tag values using sql.NullInt64 and sql.NullString (when activity has no tags)
     5. Convert map values to slice and return
     - **Why:** Instead of 1 query for activities + N queries for tags (N+1 problem), this uses 1 query total
+
+  - **API Endpoint (Get Activities with Tags):**
+    - **HTTP Method:** `GET`
+    - **URL:** `/api/v1/activities`
+    - **Headers:**
+      ```
+      Authorization: Bearer <your-jwt-token>
+      ```
+    - **Query Parameters (optional):**
+      ```
+      ?limit=10&offset=0&sort=date_desc
+      ```
+    - **Success Response (200 OK):**
+      ```json
+      {
+        "activities": [
+          {
+            "id": 123,
+            "user_id": 1,
+            "activity_type": "running",
+            "duration_minutes": 45,
+            "distance_km": 7.5,
+            "notes": "Morning run in the park",
+            "activity_date": "2024-01-15T06:30:00Z",
+            "tags": ["morning", "outdoor", "cardio"],
+            "created_at": "2024-01-15T06:35:22Z",
+            "updated_at": "2024-01-15T06:35:22Z"
+          },
+          {
+            "id": 122,
+            "user_id": 1,
+            "activity_type": "yoga",
+            "duration_minutes": 30,
+            "distance_km": 0,
+            "notes": "Evening yoga session",
+            "activity_date": "2024-01-14T18:00:00Z",
+            "tags": ["evening", "flexibility"],
+            "created_at": "2024-01-14T18:05:10Z",
+            "updated_at": "2024-01-14T18:05:10Z"
+          },
+          {
+            "id": 121,
+            "user_id": 1,
+            "activity_type": "swimming",
+            "duration_minutes": 60,
+            "distance_km": 2.0,
+            "notes": "Pool laps",
+            "activity_date": "2024-01-13T07:00:00Z",
+            "tags": [],
+            "created_at": "2024-01-13T07:15:33Z",
+            "updated_at": "2024-01-13T07:15:33Z"
+          }
+        ],
+        "total": 3,
+        "limit": 10,
+        "offset": 0
+      }
+      ```
+    - **Error Response (401 Unauthorized):**
+      ```json
+      {
+        "error": "unauthorized",
+        "message": "missing or invalid token"
+      }
+      ```
+    - **Error Response (500 Internal Server Error):**
+      ```json
+      {
+        "error": "database error",
+        "message": "failed to fetch activities"
+      }
+      ```
+
 - [X] Write JOIN query (activities LEFT JOIN activity_tags LEFT JOIN tags)
 - [X] Handle NULL values for activities without tags (sql.NullInt64, sql.NullString)
 - [X] Build activityMap to deduplicate rows
@@ -237,6 +509,32 @@ internal/
     // Example: &UserActivitySummary{Username: "john_doe", ActivityCount: 150, UniqueTagCount: 12}
     ```
   - **Logic:** SELECT users.username, COUNT(DISTINCT activities.id) as activity_count, COUNT(DISTINCT tags.id) as unique_tags FROM users LEFT JOIN activities LEFT JOIN activity_tags LEFT JOIN tags WHERE users.id = $1 GROUP BY users.id. Returns summary with user info + aggregate stats.
+
+  - **API Endpoint (Get User Activity Summary):**
+    - **HTTP Method:** `GET`
+    - **URL:** `/api/v1/users/me/summary`
+    - **Headers:**
+      ```
+      Authorization: Bearer <your-jwt-token>
+      ```
+    - **Success Response (200 OK):**
+      ```json
+      {
+        "username": "john_doe",
+        "activity_count": 150,
+        "unique_tag_count": 12,
+        "member_since": "2023-06-15T10:00:00Z",
+        "last_activity": "2024-01-15T06:30:00Z"
+      }
+      ```
+    - **Error Response (401 Unauthorized):**
+      ```json
+      {
+        "error": "unauthorized",
+        "message": "missing or invalid token"
+      }
+      ```
+
 - [ ] Implement `GetTopTagsByUser(ctx, userID, limit int) ([]TagUsage, error)`
   - **Purpose:** Find which tags a user uses most frequently. Useful for showing "top categories" in analytics.
   - **Returns:** `([]TagUsage, error)` - Slice of structs ordered by usage count:
@@ -248,6 +546,54 @@ internal/
     // Example: []TagUsage{{"outdoor", 45}, {"morning", 32}, {"cardio", 28}}
     ```
   - **Logic:** SELECT tags.name, COUNT(*) as usage_count FROM tags JOIN activity_tags JOIN activities WHERE activities.user_id = $1 GROUP BY tags.id, tags.name ORDER BY usage_count DESC LIMIT $2. Returns slice of tag names sorted by most used.
+
+  - **API Endpoint (Get Top Tags):**
+    - **HTTP Method:** `GET`
+    - **URL:** `/api/v1/users/me/tags/top`
+    - **Headers:**
+      ```
+      Authorization: Bearer <your-jwt-token>
+      ```
+    - **Query Parameters (optional):**
+      ```
+      ?limit=10
+      ```
+    - **Success Response (200 OK):**
+      ```json
+      {
+        "tags": [
+          {
+            "tag_name": "outdoor",
+            "count": 45
+          },
+          {
+            "tag_name": "morning",
+            "count": 32
+          },
+          {
+            "tag_name": "cardio",
+            "count": 28
+          },
+          {
+            "tag_name": "evening",
+            "count": 20
+          },
+          {
+            "tag_name": "strength",
+            "count": 18
+          }
+        ],
+        "total_unique_tags": 12
+      }
+      ```
+    - **Error Response (401 Unauthorized):**
+      ```json
+      {
+        "error": "unauthorized",
+        "message": "missing or invalid token"
+      }
+      ```
+
 - [ ] Use LEFT JOIN vs INNER JOIN appropriately
 - [ ] Handle NULL values in results
 - [ ] Add LIMIT and ORDER BY for performance
@@ -294,6 +640,89 @@ internal/
 - [ ] Add routes to router: `/api/v1/users/me/stats/weekly`, `/monthly`
 - [ ] Protect with auth middleware
 - [ ] Test with curl/Postman
+
+  - **API Endpoint (Get Weekly Stats):**
+    - **HTTP Method:** `GET`
+    - **URL:** `/api/v1/users/me/stats/weekly`
+    - **Headers:**
+      ```
+      Authorization: Bearer <your-jwt-token>
+      ```
+    - **Success Response (200 OK):**
+      ```json
+      {
+        "total_activities": 12,
+        "total_duration_minutes": 360,
+        "total_distance_km": 45.5,
+        "avg_duration_minutes": 30.0,
+        "period": "last_7_days",
+        "start_date": "2024-01-08T00:00:00Z",
+        "end_date": "2024-01-15T23:59:59Z"
+      }
+      ```
+    - **Error Response (401 Unauthorized):**
+      ```json
+      {
+        "error": "unauthorized",
+        "message": "missing or invalid token"
+      }
+      ```
+
+  - **API Endpoint (Get Monthly Stats):**
+    - **HTTP Method:** `GET`
+    - **URL:** `/api/v1/users/me/stats/monthly`
+    - **Headers:**
+      ```
+      Authorization: Bearer <your-jwt-token>
+      ```
+    - **Success Response (200 OK):**
+      ```json
+      {
+        "total_activities": 52,
+        "total_duration_minutes": 1560,
+        "total_distance_km": 195.8,
+        "avg_duration_minutes": 30.0,
+        "period": "last_30_days",
+        "start_date": "2023-12-16T00:00:00Z",
+        "end_date": "2024-01-15T23:59:59Z"
+      }
+      ```
+    - **Error Response (401 Unauthorized):**
+      ```json
+      {
+        "error": "unauthorized",
+        "message": "missing or invalid token"
+      }
+      ```
+
+  - **API Endpoint (Get Activity Count by Type):**
+    - **HTTP Method:** `GET`
+    - **URL:** `/api/v1/users/me/stats/by-type`
+    - **Headers:**
+      ```
+      Authorization: Bearer <your-jwt-token>
+      ```
+    - **Success Response (200 OK):**
+      ```json
+      {
+        "activity_breakdown": {
+          "running": 25,
+          "cycling": 15,
+          "swimming": 8,
+          "basketball": 12,
+          "yoga": 10,
+          "gym": 20
+        },
+        "total_activities": 90
+      }
+      ```
+    - **Error Response (401 Unauthorized):**
+      ```json
+      {
+        "error": "unauthorized",
+        "message": "missing or invalid token"
+      }
+      ```
 
 ### 📦 Files You'll Create/Modify
 

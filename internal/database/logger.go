@@ -181,10 +181,7 @@ func (tx *LoggingTx) logQuery(queryType, query string, args []interface{}, durat
 	}
 }
 
-// Helper functions
-
 func formatQuery(query string) string {
-	// Trim whitespace and collapse multiple spaces
 	query = fmt.Sprintf("%s", query)
 	// if len(query) > 100 {
 	// 	return query[:100] + "..."

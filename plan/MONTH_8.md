@@ -12,6 +12,525 @@ This month adds social features to your application. You'll implement a friend s
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+### Friend System Endpoints (Week 29)
+
+**Send Friend Request:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/friends/request/{user_id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "message": "friend request sent",
+    "friendship": {
+      "user_id": 1,
+      "friend_id": 5,
+      "status": "pending",
+      "created_at": "2024-01-15T14:30:22Z"
+    }
+  }
+  ```
+- **Error Response (400 Bad Request - Can't Friend Yourself):**
+  ```json
+  {
+    "error": "invalid request",
+    "message": "you cannot send a friend request to yourself"
+  }
+  ```
+- **Error Response (409 Conflict - Already Friends):**
+  ```json
+  {
+    "error": "friendship exists",
+    "message": "friendship already exists or request is pending"
+  }
+  ```
+
+**Accept Friend Request:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/friends/accept/{user_id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "friend request accepted",
+    "friendship": {
+      "user_id": 1,
+      "friend_id": 5,
+      "status": "accepted",
+      "accepted_at": "2024-01-15T14:35:10Z"
+    }
+  }
+  ```
+- **Error Response (404 Not Found):**
+  ```json
+  {
+    "error": "not found",
+    "message": "no pending friend request from this user"
+  }
+  ```
+
+**Reject Friend Request:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/friends/reject/{user_id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "friend request rejected"
+  }
+  ```
+
+**Remove Friend:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/friends/{user_id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (204 No Content):**
+  ```
+  (empty body)
+  ```
+
+**List Friends:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/friends`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters (optional):**
+  ```
+  ?limit=20&offset=0
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "friends": [
+      {
+        "id": 5,
+        "username": "jane_doe",
+        "email": "jane@example.com",
+        "profile_photo": "https://bucket.s3.amazonaws.com/users/5/profile.jpg",
+        "friendship_since": "2024-01-10T08:00:00Z",
+        "latest_activity": {
+          "id": 456,
+          "activity_type": "running",
+          "activity_date": "2024-01-15T06:00:00Z"
+        }
+      },
+      {
+        "id": 8,
+        "username": "john_smith",
+        "email": "john@example.com",
+        "profile_photo": null,
+        "friendship_since": "2024-01-05T12:30:00Z",
+        "latest_activity": null
+      }
+    ],
+    "total": 2,
+    "limit": 20,
+    "offset": 0
+  }
+  ```
+
+**List Pending Friend Requests:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/friends/requests`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "incoming_requests": [
+      {
+        "id": 12,
+        "username": "alice_wonder",
+        "email": "alice@example.com",
+        "requested_at": "2024-01-14T10:00:00Z"
+      }
+    ],
+    "outgoing_requests": [
+      {
+        "id": 25,
+        "username": "bob_builder",
+        "email": "bob@example.com",
+        "requested_at": "2024-01-15T09:00:00Z"
+      }
+    ],
+    "total_incoming": 1,
+    "total_outgoing": 1
+  }
+  ```
+
+### Activity Feed Endpoints (Week 30)
+
+**Get Activity Feed:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/feed`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters:**
+  ```
+  ?limit=20&offset=0&since=2024-01-15T00:00:00Z
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "feed_items": [
+      {
+        "activity": {
+          "id": 789,
+          "activity_type": "running",
+          "duration_minutes": 45,
+          "distance_km": 8.5,
+          "activity_date": "2024-01-15T06:30:00Z",
+          "tags": ["morning", "outdoor"],
+          "photos": [
+            {
+              "thumbnail_url": "https://bucket.s3.amazonaws.com/..."
+            }
+          ]
+        },
+        "user": {
+          "id": 5,
+          "username": "jane_doe",
+          "profile_photo": "https://bucket.s3.amazonaws.com/users/5/profile.jpg"
+        },
+        "engagement": {
+          "likes_count": 15,
+          "comments_count": 3,
+          "liked_by_me": false
+        },
+        "created_at": "2024-01-15T06:35:22Z"
+      },
+      {
+        "activity": {
+          "id": 788,
+          "activity_type": "yoga",
+          "duration_minutes": 30,
+          "distance_km": 0,
+          "activity_date": "2024-01-14T18:00:00Z",
+          "tags": ["evening"]
+        },
+        "user": {
+          "id": 8,
+          "username": "john_smith",
+          "profile_photo": null
+        },
+        "engagement": {
+          "likes_count": 8,
+          "comments_count": 1,
+          "liked_by_me": true
+        },
+        "created_at": "2024-01-14T18:05:10Z"
+      }
+    ],
+    "total": 2,
+    "has_more": true,
+    "next_offset": 20
+  }
+  ```
+
+### Comments & Likes Endpoints (Week 32)
+
+**Add Comment to Activity:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/comments`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "text": "Great run! What was your pace?"
+  }
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "comment": {
+      "id": 45,
+      "activity_id": 789,
+      "user": {
+        "id": 1,
+        "username": "john_doe",
+        "profile_photo": "https://bucket.s3.amazonaws.com/..."
+      },
+      "text": "Great run! What was your pace?",
+      "created_at": "2024-01-15T14:30:22Z"
+    }
+  }
+  ```
+
+**Get Activity Comments:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/activities/{id}/comments`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters:**
+  ```
+  ?limit=20&offset=0
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "comments": [
+      {
+        "id": 45,
+        "user": {
+          "id": 1,
+          "username": "john_doe",
+          "profile_photo": "https://bucket.s3.amazonaws.com/..."
+        },
+        "text": "Great run! What was your pace?",
+        "created_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "id": 46,
+        "user": {
+          "id": 5,
+          "username": "jane_doe",
+          "profile_photo": "https://bucket.s3.amazonaws.com/..."
+        },
+        "text": "Thanks! Around 5:30 per km",
+        "created_at": "2024-01-15T14:32:10Z"
+      }
+    ],
+    "total": 2
+  }
+  ```
+
+**Delete Comment:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/activities/{activity_id}/comments/{comment_id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (204 No Content):**
+  ```
+  (empty body)
+  ```
+- **Error Response (403 Forbidden):**
+  ```json
+  {
+    "error": "forbidden",
+    "message": "you can only delete your own comments"
+  }
+  ```
+
+**Like Activity:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/like`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "message": "activity liked",
+    "likes_count": 16
+  }
+  ```
+- **Error Response (409 Conflict - Already Liked):**
+  ```json
+  {
+    "error": "already liked",
+    "message": "you have already liked this activity"
+  }
+  ```
+
+**Unlike Activity:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/activities/{id}/like`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "activity unliked",
+    "likes_count": 15
+  }
+  ```
+
+**Get Activity Likes:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/activities/{id}/likes`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "likes": [
+      {
+        "user": {
+          "id": 1,
+          "username": "john_doe",
+          "profile_photo": "https://bucket.s3.amazonaws.com/..."
+        },
+        "liked_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "user": {
+          "id": 8,
+          "username": "john_smith",
+          "profile_photo": null
+        },
+        "liked_at": "2024-01-15T13:15:10Z"
+      }
+    ],
+    "total": 15,
+    "liked_by_me": true
+  }
+  ```
+
+### WebSocket Endpoints (Week 31)
+
+**Connect to WebSocket:**
+- **Protocol:** `WebSocket`
+- **URL:** `ws://localhost:8080/ws` or `wss://api.activelog.com/ws`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  Sec-WebSocket-Version: 13
+  Upgrade: websocket
+  Connection: Upgrade
+  ```
+- **Connection Success:**
+  ```json
+  {
+    "type": "connection_established",
+    "user_id": 1,
+    "connection_id": "abc-123-def-456",
+    "timestamp": "2024-01-15T14:30:22Z"
+  }
+  ```
+
+**Received Messages (from server):**
+
+New friend request notification:
+```json
+{
+  "type": "friend_request",
+  "from_user": {
+    "id": 12,
+    "username": "alice_wonder",
+    "profile_photo": "https://bucket.s3.amazonaws.com/..."
+  },
+  "timestamp": "2024-01-15T14:31:00Z"
+}
+```
+
+Friend accepted notification:
+```json
+{
+  "type": "friend_accepted",
+  "user": {
+    "id": 25,
+    "username": "bob_builder"
+  },
+  "timestamp": "2024-01-15T14:32:15Z"
+}
+```
+
+New comment notification:
+```json
+{
+  "type": "activity_comment",
+  "activity_id": 789,
+  "comment": {
+    "id": 45,
+    "user": {
+      "id": 5,
+      "username": "jane_doe"
+    },
+    "text": "Great run!",
+    "created_at": "2024-01-15T14:33:00Z"
+  }
+}
+```
+
+Activity liked notification:
+```json
+{
+  "type": "activity_liked",
+  "activity_id": 789,
+  "user": {
+    "id": 8,
+    "username": "john_smith"
+  },
+  "total_likes": 16,
+  "timestamp": "2024-01-15T14:34:00Z"
+}
+```
+
+**Sent Messages (to server - optional ping):**
+```json
+{
+  "type": "ping"
+}
+```
+
+**Server Response:**
+```json
+{
+  "type": "pong",
+  "timestamp": "2024-01-15T14:35:00Z"
+}
+```
+
+### Feature Flags Endpoints (Week 30)
+
+**Get Active Feature Flags:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/features`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "features": {
+      "social_features_enabled": true,
+      "websocket_notifications": true,
+      "activity_feed_enabled": true,
+      "comments_enabled": true,
+      "likes_enabled": true,
+      "friend_suggestions": false,
+      "premium_features": false
+    },
+    "user_tier": "free"
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 29: Friend System

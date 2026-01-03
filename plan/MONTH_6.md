@@ -12,6 +12,192 @@ This month introduces asynchronous processing to your application. You'll learn 
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+### Background Job Endpoints (Week 21)
+
+**Trigger Weekly Summary Email:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/users/me/reports/weekly-summary`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "message": "weekly summary email queued",
+    "job_id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+    "estimated_delivery": "2024-01-15T14:35:22Z"
+  }
+  ```
+
+### Export Endpoints (Week 24)
+
+**Request CSV Export:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/export/csv`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "start_date": "2024-01-01T00:00:00Z",
+    "end_date": "2024-01-31T23:59:59Z",
+    "include_tags": true
+  }
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "message": "export job started",
+    "job_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "status_url": "/api/v1/jobs/a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "estimated_completion": "2024-01-15T14:32:00Z"
+  }
+  ```
+
+**Request PDF Report:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/export/pdf`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "report_type": "monthly",
+    "month": "2024-01",
+    "include_charts": true,
+    "include_photos": false
+  }
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "message": "pdf generation started",
+    "job_id": "f1e2d3c4-b5a6-7890-1234-567890abcdef",
+    "status_url": "/api/v1/jobs/f1e2d3c4-b5a6-7890-1234-567890abcdef",
+    "estimated_completion": "2024-01-15T14:33:30Z"
+  }
+  ```
+
+**Check Job Status:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/jobs/{job_id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK) - In Progress:**
+  ```json
+  {
+    "job_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "status": "processing",
+    "progress": 45,
+    "message": "Processing activities...",
+    "created_at": "2024-01-15T14:30:00Z"
+  }
+  ```
+- **Success Response (200 OK) - Completed:**
+  ```json
+  {
+    "job_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "status": "completed",
+    "progress": 100,
+    "result": {
+      "download_url": "https://bucket.s3.amazonaws.com/exports/user-1-2024-01-activities.csv",
+      "expires_at": "2024-01-22T14:30:00Z",
+      "file_size": 245760,
+      "record_count": 150
+    },
+    "created_at": "2024-01-15T14:30:00Z",
+    "completed_at": "2024-01-15T14:31:45Z"
+  }
+  ```
+- **Success Response (200 OK) - Failed:**
+  ```json
+  {
+    "job_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "status": "failed",
+    "progress": 0,
+    "error": "failed to generate export: database connection lost",
+    "retry_count": 3,
+    "created_at": "2024-01-15T14:30:00Z",
+    "failed_at": "2024-01-15T14:32:15Z"
+  }
+  ```
+
+**Download Export (Direct CSV Stream):**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/activities/export/csv/download`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters:**
+  ```
+  ?start_date=2024-01-01&end_date=2024-01-31
+  ```
+- **Success Response (200 OK):**
+  ```
+  Headers:
+    Content-Type: text/csv
+    Content-Disposition: attachment; filename="activities-2024-01.csv"
+
+  Body (CSV):
+  id,activity_type,duration_minutes,distance_km,activity_date,tags,notes
+  123,running,45,7.5,2024-01-15T06:30:00Z,"morning,outdoor,cardio","Morning run"
+  122,yoga,30,0,2024-01-14T18:00:00Z,"evening,flexibility","Evening yoga"
+  ...
+  ```
+
+### Email Verification Endpoints (Week 22)
+
+**Resend Verification Email:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/auth/resend-verification`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "message": "verification email queued",
+    "email": "john@example.com"
+  }
+  ```
+
+**Verify Email:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/auth/verify-email?token=abc123def456`
+- **Query Parameters:**
+  ```
+  token=abc123def456
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "email verified successfully",
+    "verified_at": "2024-01-15T14:30:22Z"
+  }
+  ```
+- **Error Response (400 Bad Request):**
+  ```json
+  {
+    "error": "invalid token",
+    "message": "verification token is invalid or expired"
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 21: Job Queue System

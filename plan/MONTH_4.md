@@ -12,6 +12,173 @@ This month introduces file handling capabilities to your application. You'll lea
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+### Photo Upload Endpoints
+
+**Upload Photos to Activity:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/photos`
+- **Headers:**
+  ```
+  Content-Type: multipart/form-data
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body (multipart/form-data):**
+  ```
+  Form field: "photos" (file, multiple allowed - max 5)
+  - photo1.jpg
+  - photo2.png
+  - photo3.webp
+  ```
+- **Postman Setup:**
+  - Select "Body" tab
+  - Choose "form-data"
+  - Add key: `photos`, Type: `File`
+  - Click "Select Files" and choose up to 5 images
+  - Can add multiple `photos` fields or use multi-select
+- **Success Response (201 Created):**
+  ```json
+  {
+    "photos": [
+      {
+        "id": 45,
+        "activity_id": 123,
+        "s3_key": "activities/123/uuid-photo1.jpg",
+        "thumbnail_key": "activities/123/thumb-uuid-photo1.jpg",
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo1.jpg",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo1.jpg",
+        "content_type": "image/jpeg",
+        "file_size": 2457600,
+        "uploaded_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "id": 46,
+        "activity_id": 123,
+        "s3_key": "activities/123/uuid-photo2.png",
+        "thumbnail_key": "activities/123/thumb-uuid-photo2.png",
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo2.png",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo2.png",
+        "content_type": "image/png",
+        "file_size": 1856432,
+        "uploaded_at": "2024-01-15T14:30:23Z"
+      }
+    ],
+    "uploaded_count": 2
+  }
+  ```
+- **Error Response (400 Bad Request - Too Many Files):**
+  ```json
+  {
+    "error": "validation error",
+    "message": "maximum 5 photos allowed per activity"
+  }
+  ```
+- **Error Response (400 Bad Request - Invalid File Type):**
+  ```json
+  {
+    "error": "validation error",
+    "message": "invalid file type, only JPEG, PNG, and WebP images are allowed"
+  }
+  ```
+- **Error Response (413 Payload Too Large):**
+  ```json
+  {
+    "error": "file too large",
+    "message": "file size exceeds maximum of 10MB"
+  }
+  ```
+
+**Get Photos for Activity:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/activities/{id}/photos`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "photos": [
+      {
+        "id": 45,
+        "activity_id": 123,
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo1.jpg",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo1.jpg",
+        "content_type": "image/jpeg",
+        "file_size": 2457600,
+        "uploaded_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "id": 46,
+        "activity_id": 123,
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo2.png",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo2.png",
+        "content_type": "image/png",
+        "file_size": 1856432,
+        "uploaded_at": "2024-01-15T14:30:23Z"
+      }
+    ],
+    "total": 2
+  }
+  ```
+
+**Delete Photo:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/photos/{id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (204 No Content):**
+  ```
+  (empty body)
+  ```
+- **Error Response (404 Not Found):**
+  ```json
+  {
+    "error": "not found",
+    "message": "photo not found"
+  }
+  ```
+- **Error Response (403 Forbidden):**
+  ```json
+  {
+    "error": "forbidden",
+    "message": "you can only delete photos from your own activities"
+  }
+  ```
+
+### S3 Signed URL Endpoint (Week 14)
+
+**Get Presigned Upload URL:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/photos/upload-url`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "filename": "my-photo.jpg",
+    "content_type": "image/jpeg",
+    "file_size": 2457600
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "upload_url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...",
+    "s3_key": "activities/123/uuid-photo.jpg",
+    "expires_at": "2024-01-15T15:30:22Z"
+  }
+  ```
+  **Note:** Client uploads directly to this URL using PUT request, then confirms upload to your API
+
+---
+
 ## Learning Path
 
 ### Week 13: Local File Upload Basics

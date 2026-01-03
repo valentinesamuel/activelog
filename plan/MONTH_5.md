@@ -12,6 +12,163 @@ This month focuses on performance optimization through caching, rate limiting, a
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+**Note:** In Month 5, you're adding caching and rate limiting to existing endpoints. The request/response payloads remain the same, but behavior changes:
+- **Caching:** Responses will be served from Redis cache when available (faster response times)
+- **Rate Limiting:** Requests will be rejected if limits are exceeded
+
+### Existing Endpoints with Caching (Week 17-18)
+
+All existing endpoints from Months 1-4 now include caching where appropriate:
+- `GET /api/v1/activities` - Cached for 2 minutes per user
+- `GET /api/v1/activities/{id}` - Cached for 5 minutes
+- `GET /api/v1/users/me/stats/weekly` - Cached for 15 minutes
+- `GET /api/v1/users/me/stats/monthly` - Cached for 30 minutes
+
+**Response Headers (new):**
+```
+X-Cache-Status: HIT    (served from cache)
+X-Cache-Status: MISS   (fetched from database)
+X-Cache-TTL: 120       (seconds until cache expires)
+```
+
+### Cache Management Endpoints (Week 18)
+
+**Clear User Cache:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/cache/me`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "cache cleared successfully",
+    "keys_cleared": 15
+  }
+  ```
+
+**Clear Specific Activity Cache:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/cache/activities/{id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "activity cache cleared",
+    "cache_key": "activity:123"
+  }
+  ```
+
+### Rate Limiting Behavior (Week 19)
+
+**Rate Limit Headers (added to all responses):**
+```
+X-RateLimit-Limit: 100          (max requests per window)
+X-RateLimit-Remaining: 85       (requests left)
+X-RateLimit-Reset: 1705329600   (unix timestamp when limit resets)
+```
+
+**Rate Limit Exceeded Response (429 Too Many Requests):**
+- **HTTP Method:** `ANY`
+- **URL:** `(any endpoint)`
+- **Response:**
+  ```json
+  {
+    "error": "rate limit exceeded",
+    "message": "too many requests, please try again later",
+    "retry_after": 60,
+    "limit": 100,
+    "window": "1 minute"
+  }
+  ```
+  **Headers:**
+  ```
+  X-RateLimit-Limit: 100
+  X-RateLimit-Remaining: 0
+  X-RateLimit-Reset: 1705329600
+  Retry-After: 60
+  ```
+
+**Rate Limit Tiers:**
+- **Anonymous (no auth):** 20 requests/minute
+- **Authenticated user:** 100 requests/minute
+- **Premium user (future):** 500 requests/minute
+
+### Metrics Endpoint (Week 20)
+
+**Get Application Metrics:**
+- **HTTP Method:** `GET`
+- **URL:** `/metrics`
+- **Headers:** (none required - public endpoint)
+- **Success Response (200 OK):**
+  ```
+  # HELP http_requests_total Total number of HTTP requests
+  # TYPE http_requests_total counter
+  http_requests_total{method="GET",endpoint="/api/v1/activities",status="200"} 1543
+
+  # HELP http_request_duration_seconds HTTP request duration
+  # TYPE http_request_duration_seconds histogram
+  http_request_duration_seconds_bucket{endpoint="/api/v1/activities",le="0.1"} 1200
+  http_request_duration_seconds_bucket{endpoint="/api/v1/activities",le="0.5"} 1520
+
+  # HELP cache_hits_total Total number of cache hits
+  # TYPE cache_hits_total counter
+  cache_hits_total 8945
+
+  # HELP cache_misses_total Total number of cache misses
+  # TYPE cache_misses_total counter
+  cache_misses_total 2156
+  ```
+  **Format:** Prometheus exposition format
+
+**Health Check (enhanced):**
+- **HTTP Method:** `GET`
+- **URL:** `/health`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "status": "healthy",
+    "timestamp": "2024-01-15T14:30:22Z",
+    "services": {
+      "database": {
+        "status": "up",
+        "latency_ms": 2.5
+      },
+      "redis": {
+        "status": "up",
+        "latency_ms": 0.8
+      }
+    },
+    "uptime_seconds": 86400
+  }
+  ```
+- **Degraded Response (200 OK):**
+  ```json
+  {
+    "status": "degraded",
+    "timestamp": "2024-01-15T14:30:22Z",
+    "services": {
+      "database": {
+        "status": "up",
+        "latency_ms": 2.5
+      },
+      "redis": {
+        "status": "down",
+        "error": "connection refused"
+      }
+    },
+    "uptime_seconds": 86400
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 17: Redis Setup + Basic Caching

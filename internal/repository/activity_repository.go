@@ -409,7 +409,7 @@ func (ar *ActivityRepository) CreateWithTags(ctx context.Context, activity *mode
 	return nil
 }
 
-func (ar *ActivityRepository) GetActivitiesWithTags(ctx context.Context, userID int) ([]*models.Activity, error) {
+func (ar *ActivityRepository) GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error) {
 	query := `
 		  SELECT 
             activities.id, activities.user_id, activities.activity_type, activities.title, 
@@ -421,10 +421,47 @@ func (ar *ActivityRepository) GetActivitiesWithTags(ctx context.Context, userID 
         LEFT JOIN activity_tags ON activities.id = activity_tags.activity_id
         LEFT JOIN tags ON activity_tags.tag_id = tags.id
         WHERE activities.user_id = $1
-        ORDER BY activities.id
+       --  ORDER BY activities.id
 	`
 
-	rows, err := ar.db.QueryContext(ctx, query, userID)
+	args := []interface{}{userID}
+	argsCount := 1
+
+	// add activity filter type
+	if filters.ActivityType != "" {
+		argsCount++
+		query += fmt.Sprintf(" AND activity_type = $%d", argsCount)
+		args = append(args, filters.ActivityType)
+	}
+
+	if filters.StartDate != nil {
+		argsCount++
+		query += fmt.Sprintf(" AND activity_date >= $%d", argsCount)
+		args = append(args, filters.StartDate)
+	}
+
+	if filters.EndDate != nil {
+		argsCount++
+		query += fmt.Sprintf(" AND activity_date <= $%d", argsCount)
+		args = append(args, filters.EndDate)
+	}
+
+	query += " ORDER BY activities.id DESC"
+
+	// add pagination
+	if filters.Limit > 0 {
+		argsCount++
+		query += fmt.Sprintf(" LIMIT $%d", argsCount)
+		args = append(args, filters.Limit)
+	}
+
+	if filters.Offset > 0 {
+		argsCount++
+		query += fmt.Sprintf(" OFFSET $%d", argsCount)
+		args = append(args, filters.Limit)
+	}
+
+	rows, err := ar.db.QueryContext(ctx, query, args...)
 
 	if err != nil {
 		return nil, fmt.Errorf("❌ Error querying activities: %w", err)

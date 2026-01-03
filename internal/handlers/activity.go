@@ -103,9 +103,9 @@ func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 		Offset:       0,
 	}
 
-	// parsedFilters := parseFilters(r, &filters)
+	parsedFilters := parseFilters(r, &filters)
 
-	activities, err := a.repo.GetActivitiesWithTags(ctx, UserID)
+	activities, err := a.repo.GetActivitiesWithTags(ctx, UserID, parsedFilters)
 	if err != nil {
 		log.Error().Err(err).Msg("❌ Failed to list activities")
 		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")

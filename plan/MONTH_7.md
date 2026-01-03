@@ -12,6 +12,202 @@ This month focuses on Go's most powerful feature: concurrency. You'll learn goro
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+**Note:** Month 7 focuses on internal performance improvements using concurrency. The API request/response contracts remain the same, but endpoints will be significantly faster due to parallel processing.
+
+### Performance-Enhanced Endpoints
+
+**Enhanced User Stats (Now with Parallel Queries):**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/users/me/stats/complete`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "total_activities": 150,
+    "total_distance_km": 856.5,
+    "total_duration_minutes": 4500,
+    "current_streak_days": 12,
+    "longest_streak_days": 45,
+    "computation_time_ms": 45,
+    "computed_concurrently": true
+  }
+  ```
+  **Performance:** ~4x faster than sequential (4 DB queries run in parallel)
+
+**Batch Photo Upload (Concurrent Processing):**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/photos/batch`
+- **Headers:**
+  ```
+  Content-Type: multipart/form-data
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body (form-data):**
+  ```
+  photos: [file1.jpg, file2.jpg, file3.jpg, file4.jpg, file5.jpg]
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "photos": [
+      {
+        "id": 45,
+        "url": "https://bucket.s3.amazonaws.com/...",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/...",
+        "processing_time_ms": 120
+      },
+      {
+        "id": 46,
+        "url": "https://bucket.s3.amazonaws.com/...",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/...",
+        "processing_time_ms": 115
+      }
+    ],
+    "total_processing_time_ms": 125,
+    "processed_concurrently": true,
+    "note": "5 photos processed in parallel instead of sequentially"
+  }
+  ```
+  **Performance:** Processes all photos concurrently (resize + thumbnail + S3 upload in parallel)
+
+### Batch Operations Endpoints (Week 26 - Worker Pool)
+
+**Batch Create Activities:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/batch`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "activities": [
+      {
+        "activity_type": "running",
+        "duration_minutes": 30,
+        "distance_km": 5.0,
+        "activity_date": "2024-01-15T06:00:00Z",
+        "tags": ["morning"]
+      },
+      {
+        "activity_type": "yoga",
+        "duration_minutes": 45,
+        "distance_km": 0,
+        "activity_date": "2024-01-15T18:00:00Z",
+        "tags": ["evening"]
+      }
+    ]
+  }
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "created": [
+      {
+        "id": 123,
+        "activity_type": "running",
+        "created_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "id": 124,
+        "activity_type": "yoga",
+        "created_at": "2024-01-15T14:30:23Z"
+      }
+    ],
+    "success_count": 2,
+    "failed_count": 0,
+    "processing_time_ms": 85,
+    "processed_by_worker_pool": true
+  }
+  ```
+- **Partial Success Response (207 Multi-Status):**
+  ```json
+  {
+    "created": [
+      {
+        "id": 123,
+        "activity_type": "running"
+      }
+    ],
+    "failed": [
+      {
+        "index": 1,
+        "activity_type": "yoga",
+        "error": "invalid duration"
+      }
+    ],
+    "success_count": 1,
+    "failed_count": 1
+  }
+  ```
+
+**Batch Delete Activities:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/activities/batch`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "activity_ids": [123, 124, 125, 126, 127]
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "deleted_count": 5,
+    "failed_count": 0,
+    "processing_time_ms": 45
+  }
+  ```
+
+### Context & Timeout Endpoints (Week 28)
+
+**Long-Running Report (with Context Cancellation):**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/reports/annual`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "year": 2024,
+    "include_charts": true,
+    "timeout_seconds": 30
+  }
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "job_id": "abc-123",
+    "message": "report generation started",
+    "timeout_at": "2024-01-15T14:31:00Z"
+  }
+  ```
+- **Timeout Response (408 Request Timeout):**
+  ```json
+  {
+    "error": "request timeout",
+    "message": "report generation exceeded 30 second timeout",
+    "partial_progress": 65
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 25: Goroutines Fundamentals
