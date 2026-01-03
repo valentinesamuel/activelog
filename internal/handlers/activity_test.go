@@ -23,8 +23,8 @@ type MockActivityRepository struct {
 	mock.Mock
 }
 
-func (m *MockActivityRepository) Create(ctx context.Context, activity *models.Activity) error {
-	args := m.Called(ctx, activity)
+func (m *MockActivityRepository) Create(ctx context.Context, tx repository.TxConn, activity *models.Activity) error {
+	args := m.Called(ctx, tx, activity)
 	return args.Error(0)
 }
 
@@ -49,13 +49,13 @@ func (m *MockActivityRepository) Count(userID int) (int, error) {
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockActivityRepository) Update(id int, activity *models.Activity) error {
-	args := m.Called(id, activity)
+func (m *MockActivityRepository) Update(ctx context.Context, tx repository.TxConn, id int, activity *models.Activity) error {
+	args := m.Called(ctx, tx, id, activity)
 	return args.Error(0)
 }
 
-func (m *MockActivityRepository) Delete(id int, userID int) error {
-	args := m.Called(id, userID)
+func (m *MockActivityRepository) Delete(ctx context.Context, tx repository.TxConn, id int, userID int) error {
+	args := m.Called(ctx, tx, id, userID)
 	return args.Error(0)
 }
 
@@ -122,9 +122,9 @@ func TestActivityHandler_CreateActivity(t *testing.T) {
 				ActivityDate:    time.Now(),
 			},
 			setupMock: func(m *MockActivityRepository) {
-				m.On("Create", mock.Anything, mock.AnythingOfType("*models.Activity")).
+				m.On("Create", mock.Anything, mock.Anything, mock.AnythingOfType("*models.Activity")).
 					Run(func(args mock.Arguments) {
-						activity := args.Get(1).(*models.Activity)
+						activity := args.Get(2).(*models.Activity)
 						activity.ID = 1
 						activity.CreatedAt = time.Now()
 						activity.UpdatedAt = time.Now()
@@ -168,7 +168,7 @@ func TestActivityHandler_CreateActivity(t *testing.T) {
 				ActivityDate:    time.Now(),
 			},
 			setupMock: func(m *MockActivityRepository) {
-				m.On("Create", mock.Anything, mock.AnythingOfType("*models.Activity")).
+				m.On("Create", mock.Anything, mock.Anything, mock.AnythingOfType("*models.Activity")).
 					Return(fmt.Errorf("database connection failed"))
 			},
 			expectedCode: http.StatusInternalServerError,
@@ -353,7 +353,7 @@ func TestActivityHandler_DeleteActivity(t *testing.T) {
 			name:       "delete success",
 			activityID: "1",
 			setupMock: func(m *MockActivityRepository) {
-				m.On("Delete", 1, 1).Return(nil)
+				m.On("Delete", mock.Anything, mock.Anything, 1, 1).Return(nil)
 			},
 			expectedCode: http.StatusNoContent,
 		},
@@ -361,7 +361,7 @@ func TestActivityHandler_DeleteActivity(t *testing.T) {
 			name:       "activity not found",
 			activityID: "999",
 			setupMock: func(m *MockActivityRepository) {
-				m.On("Delete", 999, 1).Return(fmt.Errorf("activity not found"))
+				m.On("Delete", mock.Anything, mock.Anything, 999, 1).Return(fmt.Errorf("activity not found"))
 			},
 			expectedCode: http.StatusNotFound,
 		},

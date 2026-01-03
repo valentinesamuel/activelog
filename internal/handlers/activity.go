@@ -19,12 +19,12 @@ import (
 
 // ActivityRepositoryInterface defines the interface for activity repository operations
 type ActivityRepositoryInterface interface {
-	Create(ctx context.Context, activity *models.Activity) error
+	Create(ctx context.Context, tx repository.TxConn, activity *models.Activity) error
 	GetByID(ctx context.Context, id int64) (*models.Activity, error)
 	GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error)
 	Count(userID int) (int, error)
-	Update(id int, activity *models.Activity) error
-	Delete(id int, userID int) error
+	Update(ctx context.Context, tx repository.TxConn, id int, activity *models.Activity) error
+	Delete(ctx context.Context, tx repository.TxConn, id int, userID int) error
 	GetStats(userID int, startDate, endDate *time.Time) (*repository.ActivityStats, error)
 }
 
@@ -71,7 +71,7 @@ func (a *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 		ActivityDate:    req.ActivityDate,
 	}
 
-	if err := a.repo.Create(ctx, activity); err != nil {
+	if err := a.repo.Create(ctx, nil, activity); err != nil {
 		log.Error().Err(err).Msg("❌ Failed to create activity")
 		response.Error(w, http.StatusInternalServerError, "❌ Failed to create activity")
 		return
@@ -231,7 +231,7 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Save
-	if err := h.repo.Update(id, activity); err != nil {
+	if err := h.repo.Update(ctx, nil, id, activity); err != nil {
 		log.Error().Err(err).Msg("Failed to update activity")
 		response.Error(w, http.StatusInternalServerError, "Failed to update activity")
 		return
@@ -241,6 +241,7 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -250,7 +251,7 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 
 	userID := 1
 
-	if err := h.repo.Delete(id, userID); err != nil {
+	if err := h.repo.Delete(ctx, nil, id, userID); err != nil {
 		log.Error().Err(err).Int("id", id).Msg("Failed to delete activity")
 		response.Error(w, http.StatusNotFound, "Activity not found")
 		return

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/models"
 )
@@ -97,7 +99,8 @@ func TestCreateActivity(t *testing.T) {
 		ActivityDate:    time.Now(),
 	}
 
-	err := repo.Create(t.Context(), activity)
+	// Pass nil for tx since this is a simple create (no transaction needed)
+	err := repo.Create(t.Context(), nil, activity)
 
 	if err != nil {
 		t.Fatalf("❌ Failed to create activity %v", err)
@@ -126,7 +129,7 @@ func TestGetActivityById(t *testing.T) {
 		ActivityDate: time.Now(),
 	}
 
-	err := repo.Create(t.Context(), activity)
+	err := repo.Create(t.Context(), nil, activity)
 	if err != nil {
 		t.Fatalf("❌ Failed to create activity: %v", err)
 	}
@@ -159,7 +162,7 @@ func TestListActivityByUser(t *testing.T) {
 			Title:        fmt.Sprintf("Run %d", i),
 			ActivityDate: time.Now(),
 		}
-		err := repo.Create(t.Context(), activity)
+		err := repo.Create(t.Context(), nil, activity)
 		if err != nil {
 			t.Fatalf("❌ Failed to create activity %v", err)
 		}
@@ -198,7 +201,14 @@ func TestCreateActivityWithTag(t *testing.T) {
 		{Name: "poc"},
 	}
 
-	err := activityRepo.CreateWithTags(t.Context(), activity, tags)
+	err := activityRepo.CreateWithTags(context.Background(), activity, tags)
+
+	assert.NoError(t, err)
+	assert.NotZero(t, activity.ID)
+
+	// Verify tags were created
+	activityTags, _ := tagRepo.GetTagsForActivity(context.Background(), int(activity.ID))
+	assert.Len(t, activityTags, 3)
 
 	if err != nil {
 		t.Fatalf("❌ Failed to create activity %v", err)
