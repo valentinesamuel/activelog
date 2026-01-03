@@ -199,6 +199,7 @@ func TestCreateActivityWithTag(t *testing.T) {
 		{Name: "open"},
 		{Name: "urgent"},
 		{Name: "poc"},
+		{Name: "poc"},
 	}
 
 	err := activityRepo.CreateWithTags(context.Background(), activity, tags)
