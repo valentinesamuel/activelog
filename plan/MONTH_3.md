@@ -403,11 +403,11 @@ This section contains all API request/response examples you'll need for testing 
 - [ ] Verify all data committed or none (atomic behavior)
 
 **Task 7: Verify N+1 Fix** (20 min)
-- [ ] Enable PostgreSQL query logging (edit postgresql.conf if needed)
-- [ ] Create 10 activities with tags
-- [ ] Call old method and count queries (should see N+1)
-- [ ] Call new method and count queries (should see 1-2)
-- [ ] Document the performance improvement
+- [X] Enable PostgreSQL query logging (edit postgresql.conf if needed)
+- [X] Create 10 activities with tags
+- [X] Call old method and count queries (should see N+1)
+- [X] Call new method and count queries (should see 1-2)
+- [X] Document the performance improvement
 
 ### 📦 Files You'll Create/Modify
 
