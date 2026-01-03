@@ -85,7 +85,7 @@ func createTestUser(t *testing.T, dbConn DBConn) int {
 	return userID
 }
 
-func TestActivityRepository_Create(t *testing.T) {
+func CreateTestActivity(t *testing.T) {
 	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
@@ -116,7 +116,7 @@ func TestActivityRepository_Create(t *testing.T) {
 	}
 }
 
-func TestActivityRepository_GetById(t *testing.T) {
+func GetTestActivityById(t *testing.T) {
 	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
@@ -149,7 +149,7 @@ func TestActivityRepository_GetById(t *testing.T) {
 	}
 }
 
-func TestActivityRepository_ListByUser(t *testing.T) {
+func ListTestActivityByUser(t *testing.T) {
 	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
