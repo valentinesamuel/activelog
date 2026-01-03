@@ -3,13 +3,19 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/lib/pq"
-	"github.com/valentinesamuel/activelog/internal/models"
+	"log"
+	"os"
 	"testing"
 	"time"
+
+	_ "github.com/lib/pq"
+	"github.com/valentinesamuel/activelog/internal/config"
+	"github.com/valentinesamuel/activelog/internal/database"
+	"github.com/valentinesamuel/activelog/internal/models"
 )
 
-func setupTestDB(t *testing.T) *sql.DB {
+func setupTestDB(t *testing.T) (*sql.DB, DBConn) {
+	cfg := config.Load()
 	db, err := sql.Open("postgres", "postgres://activelog_user:activelog@localhost:5444/activelog_test?sslmode=disable")
 
 	if err != nil {
@@ -20,25 +26,58 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("❌ Failed to ping test database %v", err)
 	}
 
-	return db
+	var dbConn DBConn = db
+	if cfg.EnableQueryLogging {
+		queryLogger := log.New(os.Stdout, "[SQL] ", log.LstdFlags)
+		dbConn = database.NewLoggingDB(db, queryLogger)
+		log.Println("🔍 Query logging enabled")
+	}
+
+	return db, dbConn
 }
 
 func cleanupTestDB(t *testing.T, db *sql.DB) {
-	_, err := db.Exec("DELETE FROM activities")
-	db.Exec("DELETE FROM users")
+	// Get all table names from the database
+	rows, err := db.Query(`
+		SELECT tablename
+		FROM pg_tables
+		WHERE schemaname = 'public'
+	`)
 	if err != nil {
-		t.Logf("⚠️ Warning: Failed to clean activities :%v", err)
+		t.Logf("⚠️ Warning: Failed to get table names: %v", err)
+		db.Close()
+		return
 	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			t.Logf("⚠️ Warning: Failed to scan table name: %v", err)
+			continue
+		}
+		tables = append(tables, tableName)
+	}
+
+	// Truncate all tables with CASCADE to handle foreign key constraints
+	for _, table := range tables {
+		_, err := db.Exec(fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", table))
+		if err != nil {
+			t.Logf("⚠️ Warning: Failed to truncate table %s: %v", table, err)
+		}
+	}
+
 	db.Close()
 }
 
-func createTestUser(t *testing.T, db *sql.DB) int {
+func createTestUser(t *testing.T, dbConn DBConn) int {
 	var userID int
-	err := db.QueryRow(`
-	INSERT INTO users (email, username)
-	VALUES ($1, $2)
+	err := dbConn.QueryRow(`
+	INSERT INTO users (email, username, password_hash)
+	VALUES ($1, $2, $3)
 	RETURNING id
-	`, "test@test.com", "testuser").Scan(&userID)
+	`, "test@test.com", "testuser", "password").Scan(&userID)
 
 	if err != nil {
 		t.Fatalf("❌ Failed to create test user %v", err)
@@ -47,11 +86,11 @@ func createTestUser(t *testing.T, db *sql.DB) int {
 }
 
 func TestActivityRepository_Create(t *testing.T) {
-	db := setupTestDB(t)
+	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	userID := createTestUser(t, db)
-	repo := NewActivityRepository(db)
+	userID := createTestUser(t, dbConn)
+	repo := NewActivityRepository(dbConn, nil)
 
 	activity := &models.Activity{
 		UserID:          userID,
@@ -62,8 +101,7 @@ func TestActivityRepository_Create(t *testing.T) {
 		ActivityDate:    time.Now(),
 	}
 
-	err := repo.Create(t.Context(),
-		activity)
+	err := repo.Create(t.Context(), activity)
 
 	if err != nil {
 		t.Fatalf("❌ Failed to create activity %v", err)
@@ -79,11 +117,11 @@ func TestActivityRepository_Create(t *testing.T) {
 }
 
 func TestActivityRepository_GetById(t *testing.T) {
-	db := setupTestDB(t)
+	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	userID := createTestUser(t, db)
-	repo := NewActivityRepository(db)
+	userID := createTestUser(t, dbConn)
+	repo := NewActivityRepository(dbConn, nil)
 
 	activity := &models.Activity{
 		UserID:       userID,
@@ -112,11 +150,11 @@ func TestActivityRepository_GetById(t *testing.T) {
 }
 
 func TestActivityRepository_ListByUser(t *testing.T) {
-	db := setupTestDB(t)
+	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	userID := createTestUser(t, db)
-	repo := NewActivityRepository(db)
+	userID := createTestUser(t, dbConn)
+	repo := NewActivityRepository(dbConn, nil)
 
 	for i := range 3 {
 		activity := &models.Activity{

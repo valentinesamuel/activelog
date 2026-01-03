@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -16,11 +17,22 @@ import (
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
-type ActivityHandler struct {
-	repo *repository.ActivityRepository
+// ActivityRepositoryInterface defines the interface for activity repository operations
+type ActivityRepositoryInterface interface {
+	Create(ctx context.Context, activity *models.Activity) error
+	GetByID(ctx context.Context, id int64) (*models.Activity, error)
+	GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error)
+	Count(userID int) (int, error)
+	Update(id int, activity *models.Activity) error
+	Delete(id int, userID int) error
+	GetStats(userID int, startDate, endDate *time.Time) (*repository.ActivityStats, error)
 }
 
-func NewActivityHandler(repo *repository.ActivityRepository) *ActivityHandler {
+type ActivityHandler struct {
+	repo ActivityRepositoryInterface
+}
+
+func NewActivityHandler(repo ActivityRepositoryInterface) *ActivityHandler {
 	return &ActivityHandler{repo: repo}
 }
 

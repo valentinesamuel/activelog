@@ -68,13 +68,15 @@ func TestRegistration(t *testing.T) {
 	tests := []struct {
 		name       string
 		email      string
+		username   string
 		password   string
 		wantStatus int
 	}{
-		{"valid registration", "test@example.com", "SecurePass123!", 201},
-		{"duplicate email", "test@example.com", "SecurePass123!", 409},
-		{"weak password", "test2@example.com", "123", 400},
-		{"invalid email", "notanemail", "SecurePass123!", 400},
+		{"valid registration", "test@test.com", "tesuers", "SecurePass123!", 201},
+		{"duplicate email", "test@test.com", "tesuers", "SecurePass123!", 400},
+		{"weak password", "bright@test.com", "madisson", "123", 400},
+		{"short username", "test@test.com", "1", "SecurePass123!", 400},
+		{"not an email", "hehe", "1", "SecurePass123!", 400},
 	}
 
 	for _, tt := range tests {
@@ -86,7 +88,8 @@ func TestRegistration(t *testing.T) {
 
 			// --- A. Prepare the Request Body ---
 			payload := map[string]string{
-				"email":    tt.email,
+				"email": tt.email,
+				"username": tt.username,
 				"password": tt.password,
 			}
 
