@@ -17,16 +17,11 @@ type DBConn interface {
 }
 
 // TxConn is an interface for database transactions
+// Both *sql.Tx and *database.LoggingTx implement this interface
 type TxConn interface {
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	Commit() error
 	Rollback() error
-}
-
-// DBConnWithTx extends DBConn with transaction support
-type DBConnWithTx interface {
-	DBConn
-	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }

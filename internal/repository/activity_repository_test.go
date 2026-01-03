@@ -9,13 +9,11 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/models"
 )
 
-func setupTestDB(t *testing.T) (*sql.DB, DBConn) {
-	cfg := config.Load()
+func setupTestDB(t *testing.T) (*sql.DB, *database.LoggingDB) {
 	db, err := sql.Open("postgres", "postgres://activelog_user:activelog@localhost:5444/activelog_test?sslmode=disable")
 
 	if err != nil {
@@ -26,14 +24,12 @@ func setupTestDB(t *testing.T) (*sql.DB, DBConn) {
 		t.Fatalf("❌ Failed to ping test database %v", err)
 	}
 
-	var dbConn DBConn = db
-	if cfg.EnableQueryLogging {
-		queryLogger := log.New(os.Stdout, "[SQL] ", log.LstdFlags)
-		dbConn = database.NewLoggingDB(db, queryLogger)
-		log.Println("🔍 Query logging enabled")
-	}
+	// Always use LoggingDB for consistency
+	queryLogger := log.New(os.Stdout, "[SQL] ", log.LstdFlags)
+	loggingDB := database.NewLoggingDB(db, queryLogger)
+	log.Println("🔍 Query logging enabled")
 
-	return db, dbConn
+	return db, loggingDB
 }
 
 func cleanupTestDB(t *testing.T, db *sql.DB) {
@@ -71,7 +67,7 @@ func cleanupTestDB(t *testing.T, db *sql.DB) {
 	db.Close()
 }
 
-func createTestUser(t *testing.T, dbConn DBConn) int {
+func createTestUser(t *testing.T, dbConn *database.LoggingDB) int {
 	var userID int
 	err := dbConn.QueryRow(`
 	INSERT INTO users (email, username, password_hash)
@@ -85,7 +81,7 @@ func createTestUser(t *testing.T, dbConn DBConn) int {
 	return userID
 }
 
-func CreateTestActivity(t *testing.T) {
+func TestCreateActivity(t *testing.T) {
 	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
@@ -116,7 +112,7 @@ func CreateTestActivity(t *testing.T) {
 	}
 }
 
-func GetTestActivityById(t *testing.T) {
+func TestGetActivityById(t *testing.T) {
 	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
@@ -149,7 +145,7 @@ func GetTestActivityById(t *testing.T) {
 	}
 }
 
-func ListTestActivityByUser(t *testing.T) {
+func TestListActivityByUser(t *testing.T) {
 	db, dbConn := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
@@ -176,5 +172,43 @@ func ListTestActivityByUser(t *testing.T) {
 
 	if len(activities) != 3 {
 		t.Errorf("❌ Expected 3 activities, got %d", len(activities))
+	}
+}
+
+func TestCreateActivityWithTag(t *testing.T) {
+	db, dbConn := setupTestDB(t)
+	defer cleanupTestDB(t, db)
+
+	userID := createTestUser(t, dbConn)
+	tagRepo := NewTagRepository(dbConn)
+	activityRepo := NewActivityRepository(dbConn, tagRepo)
+
+	activity := &models.Activity{
+		ActivityType:    "running",
+		Title:           "Test Run",
+		DurationMinutes: 30,
+		DistanceKm:      5.0,
+		ActivityDate:    time.Now(),
+		UserID:          userID,
+	}
+
+	tags := []*models.Tag{
+		{Name: "open"},
+		{Name: "urgent"},
+		{Name: "poc"},
+	}
+
+	err := activityRepo.CreateWithTags(t.Context(), activity, tags)
+
+	if err != nil {
+		t.Fatalf("❌ Failed to create activity %v", err)
+	}
+
+	if activity.ID == 0 {
+		t.Errorf("❌ Activity ID should be set after creation")
+	}
+
+	if activity.CreatedAt.IsZero() {
+		t.Errorf("❌ CreatedAt should be set after creation")
 	}
 }

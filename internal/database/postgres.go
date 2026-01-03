@@ -4,15 +4,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	_ "github.com/lib/pq"
 )
 
-func Connect(databaseUrl string) (*sql.DB, error) {
+// Connect establishes a database connection and wraps it with logging
+func Connect(databaseUrl string) (*LoggingDB, error) {
 	db, err := sql.Open("postgres", databaseUrl)
 	if err != nil {
-		return nil, fmt.Errorf("❌ Error opening a coonnection to the db: \n🛑 %w", err)
+		return nil, fmt.Errorf("❌ Error opening a connection to the db: \n🛑 %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
@@ -23,6 +25,12 @@ func Connect(databaseUrl string) (*sql.DB, error) {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
+	// Always wrap with logging for consistency
+	logger := log.New(os.Stdout, "[SQL] ", log.LstdFlags)
+	loggingDB := NewLoggingDB(db, logger)
+
 	log.Println("✅ Successfully connected to database")
-	return db, nil
+	log.Println("🔍 Query logging enabled")
+
+	return loggingDB, nil
 }

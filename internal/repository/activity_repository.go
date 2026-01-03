@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/pkg/errors"
 )
@@ -363,19 +364,19 @@ func (r *ActivityRepository) GetStats(userID int, startDate, endDate *time.Time)
 }
 
 func (ar *ActivityRepository) CreateWithTags(ctx context.Context, activity *models.Activity, tags []*models.Tag) error {
-	// Type assert to get the underlying *sql.DB for transactions
-	// The logging will still work because we use the transaction's methods
-	dbWithTx, ok := ar.db.(interface {
-		BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
-	})
+	// Get a transaction using LoggingDB
+	loggingDB, ok := ar.db.(*database.LoggingDB)
 	if !ok {
-		return fmt.Errorf("database does not support transactions")
+		return fmt.Errorf("database connection must be *database.LoggingDB")
 	}
 
-	tx, err := dbWithTx.BeginTx(ctx, nil)
+	loggingTx, err := loggingDB.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
+
+	// Use TxConn interface for the rest of the function
+	var tx TxConn = loggingTx
 
 	defer func() {
 		if err != nil {
@@ -383,29 +384,53 @@ func (ar *ActivityRepository) CreateWithTags(ctx context.Context, activity *mode
 		}
 	}()
 
-	query1 := `
-		INSERT INTO activities 
-		(user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date) 
+	// Insert activity
+	activityQuery := `
+		INSERT INTO activities
+		(user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id
+		RETURNING id, created_at, updated_at
 	`
-	result, err := tx.ExecContext(ctx, query1, activity.UserID, activity.ActivityType, activity.Title, activity.Description, activity.DurationMinutes, activity.DistanceKm, activity.CaloriesBurned, activity.Notes, activity.ActivityDate)
-	activitiyId, err := result.LastInsertId()
+	err = tx.QueryRowContext(ctx, activityQuery,
+		activity.UserID, activity.ActivityType, activity.Title, activity.Description,
+		activity.DurationMinutes, activity.DistanceKm, activity.CaloriesBurned,
+		activity.Notes, activity.ActivityDate).Scan(&activity.ID, &activity.CreatedAt, &activity.UpdatedAt)
 	if err != nil {
+		return fmt.Errorf("failed to insert activity: %w", err)
+	}
+
+	// Create tags and link them (within the same transaction)
+	for _, tag := range tags {
+		// Get or create tag using the transaction
+		tagQuery := `
+			INSERT INTO tags (name)
+			VALUES ($1)
+			ON CONFLICT (name) DO UPDATE
+			SET name = EXCLUDED.name
+			RETURNING id
+		`
+		var tagID int
+		err = tx.QueryRowContext(ctx, tagQuery, tag.Name).Scan(&tagID)
+		if err != nil {
+			return fmt.Errorf("failed to create tag: %w", err)
+		}
+
+		// Link activity to tag using the transaction
+		linkQuery := `
+			INSERT INTO activity_tags (tag_id, activity_id)
+			VALUES ($1, $2)
+			ON CONFLICT (tag_id, activity_id) DO NOTHING
+		`
+		_, err = tx.ExecContext(ctx, linkQuery, tagID, activity.ID)
+		if err != nil {
+			return fmt.Errorf("failed to link activity to tag: %w", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
 		return err
 	}
 
-	for _, tag := range tags {
-		tagId, err := ar.tagRepo.GetOrCreateTag(ctx, tag.Name)
-
-		if err != nil {
-			return err
-		}
-
-		ar.tagRepo.LinkActivityTag(ctx, int(activitiyId), tagId)
-	}
-
-	tx.Commit()
 	return nil
 }
 
