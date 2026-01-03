@@ -443,12 +443,12 @@ internal/
 
 ### ✅ Definition of Done
 
-- [ ] Can create activity with tags in single transaction
-- [ ] Tags are reused if they already exist (no duplicates)
-- [ ] GetActivitiesWithTags uses 1 query instead of N+1
-- [ ] Transaction rolls back if any step fails
-- [ ] All tests passing with transaction scenarios
-- [ ] Query performance verified (logs or EXPLAIN ANALYZE)
+- [X] Can create activity with tags in single transaction
+- [X] Tags are reused if they already exist (no duplicates)
+- [X] GetActivitiesWithTags uses 1 query instead of N+1
+- [X] Transaction rolls back if any step fails
+- [X] All tests passing with transaction scenarios
+- [X] Query performance verified (logs or EXPLAIN ANALYZE)
 
 ---
 
