@@ -478,11 +478,11 @@ internal/
   - Use SUM, COUNT, AVG aggregate functions
   - Filter by date range (past 7 days)
   - GROUP BY activity_type
-- [ ] Implement `GetMonthlyStats(ctx, userID) (*MonthlyStats, error)`
+- [X] Implement `GetMonthlyStats(ctx, userID) (*MonthlyStats, error)`
   - **Purpose:** Calculate aggregate statistics for a user's activities over the past 30 days. Used for monthly reports.
   - **Returns:** `(*MonthlyStats, error)` - Same structure as WeeklyStats but covers 30-day period.
   - **Logic:** Same as GetWeeklyStats but use '30 days' or '1 month' interval. Return MonthlyStats struct with same aggregate fields.
-- [ ] Implement `GetActivityCountByType(ctx, userID) (map[string]int, error)`
+- [X] Implement `GetActivityCountByType(ctx, userID) (map[string]int, error)`
   - **Purpose:** Get a breakdown of how many activities of each type a user has logged. Shows distribution across activity types.
   - **Returns:** `(map[string]int, error)` - Map where key is activity type, value is count. Example:
     ```go
