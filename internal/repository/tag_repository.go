@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	_ "github.com/lib/pq"
@@ -10,10 +9,10 @@ import (
 )
 
 type TagRepository struct {
-	db *sql.DB
+	db DBConn
 }
 
-func NewTagRepository(db *sql.DB) *TagRepository {
+func NewTagRepository(db DBConn) *TagRepository {
 	return &TagRepository{
 		db: db,
 	}

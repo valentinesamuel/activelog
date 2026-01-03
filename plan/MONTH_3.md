@@ -117,12 +117,12 @@ This month focuses on two critical pillars of backend development: advanced data
     4. Handle NULL tag values using sql.NullInt64 and sql.NullString (when activity has no tags)
     5. Convert map values to slice and return
     - **Why:** Instead of 1 query for activities + N queries for tags (N+1 problem), this uses 1 query total
-- [ ] Write JOIN query (activities LEFT JOIN activity_tags LEFT JOIN tags)
-- [ ] Handle NULL values for activities without tags (sql.NullInt64, sql.NullString)
-- [ ] Build activityMap to deduplicate rows
-- [ ] Append tags to each activity
-- [ ] Compare query count: old approach vs new (should be 1 query vs N+1)
-- [ ] Add database query logging to verify
+- [X] Write JOIN query (activities LEFT JOIN activity_tags LEFT JOIN tags)
+- [X] Handle NULL values for activities without tags (sql.NullInt64, sql.NullString)
+- [X] Build activityMap to deduplicate rows
+- [X] Append tags to each activity
+- [X] Compare query count: old approach vs new (should be 1 query vs N+1)
+- [X] Add database query logging to verify
 
 **Task 6: Write Transaction Tests** (45 min)
 - [ ] Test `CreateWithTags` with multiple tags

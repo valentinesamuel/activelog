@@ -5,7 +5,9 @@
       "Bash(go version:*)",
       "Bash(go test:*)",
       "Bash(wc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(go build:*)",
+      "Bash(go run:*)"
     ]
   }
 }

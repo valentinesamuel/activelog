@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
+
+	    _ "github.com/lib/pq"
 
 	"github.com/gorilla/mux"
 	"github.com/valentinesamuel/activelog/internal/config"
@@ -12,7 +15,6 @@ import (
 	"github.com/valentinesamuel/activelog/internal/handlers"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
-	"github.com/valentinesamuel/activelog/pkg/logger"
 )
 
 func main() {
@@ -26,9 +28,17 @@ func main() {
 	}
 	defer db.Close()
 
-	tagRepo := repository.NewTagRepository(db)
-	activityRepo := repository.NewActivityRepository(db, tagRepo)
-	userRepo := repository.NewUserRepository(db)
+	// Enable query logging based on config
+	var dbConn repository.DBConn = db
+	if cfg.EnableQueryLogging {
+		queryLogger := log.New(os.Stdout, "[SQL] ", log.LstdFlags)
+		dbConn = database.NewLoggingDB(db, queryLogger)
+		log.Println("🔍 Query logging enabled")
+	}
+
+	tagRepo := repository.NewTagRepository(dbConn)
+	activityRepo := repository.NewActivityRepository(dbConn, tagRepo)
+	userRepo := repository.NewUserRepository(dbConn)
 
 	healthHandler := handlers.NewHealthHandler()
 	activityHandler := handlers.NewActivityHandler(activityRepo)
@@ -67,7 +77,7 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	logger.Info().Str("port", cfg.ServerPort).Msg("🚒 Server starting ...")
+	log.Printf("🚒 Server starting on port %s...\n", cfg.ServerPort)
 	log.Fatal(server.ListenAndServe())
 
 }

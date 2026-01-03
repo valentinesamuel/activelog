@@ -11,7 +11,7 @@ import (
 )
 
 type ActivityRepository struct {
-	db      *sql.DB
+	db      DBConn
 	tagRepo *TagRepository
 }
 
@@ -23,7 +23,7 @@ type ActivityStats struct {
 	ActivityTypes   map[string]int
 }
 
-func NewActivityRepository(db *sql.DB, tagRepo *TagRepository) *ActivityRepository {
+func NewActivityRepository(db DBConn, tagRepo *TagRepository) *ActivityRepository {
 	return &ActivityRepository{
 		db:      db,
 		tagRepo: tagRepo,
@@ -363,7 +363,16 @@ func (r *ActivityRepository) GetStats(userID int, startDate, endDate *time.Time)
 }
 
 func (ar *ActivityRepository) CreateWithTags(ctx context.Context, activity *models.Activity, tags []*models.Tag) error {
-	tx, err := ar.db.BeginTx(ctx, nil)
+	// Type assert to get the underlying *sql.DB for transactions
+	// The logging will still work because we use the transaction's methods
+	dbWithTx, ok := ar.db.(interface {
+		BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+	})
+	if !ok {
+		return fmt.Errorf("database does not support transactions")
+	}
+
+	tx, err := dbWithTx.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
