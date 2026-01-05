@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -16,67 +21,198 @@ import (
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
 
+// Application holds all dependencies
+type Application struct {
+	Config          *config.Config
+	DB              repository.DBConn
+	DBCloser        interface{ Close() error } // For cleanup during shutdown
+	HealthHandler   *handlers.HealthHandler
+	ActivityHandler *handlers.ActivityHandler
+	UserHandler     *handlers.UserHandler
+	StatsHandler    *handlers.StatsHandler
+}
+
 func main() {
 	fmt.Println("🚒 Starting ActiveLog API...")
 
+	if err := run(); err != nil {
+		log.Fatalf("❌ Application error: %v", err)
+	}
+}
+
+// run orchestrates the application startup and shutdown
+func run() error {
+	// Load configuration
 	cfg := config.Load()
 
+	// Connect to database
 	db, err := database.Connect(cfg.DatabaseUrl)
 	if err != nil {
-		log.Fatal("❌ 🛢️ Failed to connect to database \n", err)
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer db.Close()
 
-	// db is already a LoggingDB from database.Connect()
-	tagRepo := repository.NewTagRepository(db)
-	activityRepo := repository.NewActivityRepository(db, tagRepo)
-	userRepo := repository.NewUserRepository(db)
-	statsRepo := repository.NewStatsRepository(db)
+	// Initialize application with dependencies
+	app := &Application{
+		Config:   cfg,
+		DB:       db,
+		DBCloser: db,
+	}
 
-	healthHandler := handlers.NewHealthHandler()
-	activityHandler := handlers.NewActivityHandler(activityRepo)
-	userHandler := handlers.NewUserHandler(userRepo)
-	statsHandler := handlers.NewStatsHandler(statsRepo)
-	
+	// Setup repositories and handlers
+	app.setupDependencies()
+
+	// Setup HTTP server
+	server := app.newServer()
+
+	// Run server with graceful shutdown
+	return app.serve(server)
+}
+
+// setupDependencies initializes all repositories and handlers
+func (app *Application) setupDependencies() {
+	// Initialize repositories
+	tagRepo := repository.NewTagRepository(app.DB)
+	activityRepo := repository.NewActivityRepository(app.DB, tagRepo)
+	userRepo := repository.NewUserRepository(app.DB)
+	statsRepo := repository.NewStatsRepository(app.DB)
+
+	// Initialize handlers
+	app.HealthHandler = handlers.NewHealthHandler()
+	app.ActivityHandler = handlers.NewActivityHandler(activityRepo)
+	app.UserHandler = handlers.NewUserHandler(userRepo)
+	app.StatsHandler = handlers.NewStatsHandler(statsRepo)
+}
+
+// setupRoutes configures all application routes and middleware
+func (app *Application) setupRoutes() http.Handler {
 	router := mux.NewRouter()
 
+	// Global middleware
 	router.Use(middleware.LoggingMiddleware)
 	router.Use(middleware.CORS)
 	router.Use(middleware.SecurityHeaders)
 
-	router.Handle("/health", healthHandler).Methods("GET")
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"message": "🪵 ActiveLog API v1", "version": "0.1.0"}`))
-	}).Methods("GET")
+	// Health and root endpoints
+	router.Handle("/health", app.HealthHandler).Methods("GET")
+	router.HandleFunc("/", app.handleRoot).Methods("GET")
 
+	// API v1 routes
 	api := router.PathPrefix("/api/v1").Subrouter()
 
-	api.HandleFunc("/auth/register", userHandler.CreateUser).Methods("POST")
-	api.HandleFunc("/auth/login", userHandler.LoginUser).Methods("POST")
+	// Auth routes
+	app.registerAuthRoutes(api)
 
-	// router.Use(middleware.AuthMiddleware)
-	api.HandleFunc("/activities", activityHandler.ListActivities).Methods("GET")
-	api.HandleFunc("/activities", activityHandler.CreateActivity).Methods("POST")
-	api.HandleFunc("/activities/stats", activityHandler.GetStats).Methods("GET")
-	api.HandleFunc("/activities/{id}", activityHandler.GetActivity).Methods("GET")
-	api.HandleFunc("/activities/{id}", activityHandler.UpdateActivity).Methods("PATCH")
-	api.HandleFunc("/activities/{id}", activityHandler.DeleteActivity).Methods("DELETE")
+	// Activity routes
+	app.registerActivityRoutes(api)
 
-	api.HandleFunc("/stats/weekly", statsHandler.GetWeeklyStats).Methods("GET")
-	api.HandleFunc("/stats/monthly", statsHandler.GetMonthlyStats).Methods("GET")
+	// Stats routes
+	app.registerStatsRoutes(api)
 
-	api.HandleFunc("/users/me/summary", statsHandler.GetUserActivitySummary).Methods("GET")
+	// User routes
+	app.registerUserRoutes(api)
 
-	server := &http.Server{
-		Addr:         ":" + cfg.ServerPort,
-		Handler:      router,
+	return router
+}
+
+// handleRoot handles the root endpoint
+func (app *Application) handleRoot(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"message": "🪵 ActiveLog API v1", "version": "0.1.0"}`))
+}
+
+// registerAuthRoutes registers authentication routes
+func (app *Application) registerAuthRoutes(router *mux.Router) {
+	router.HandleFunc("/auth/register", app.UserHandler.CreateUser).Methods("POST")
+	router.HandleFunc("/auth/login", app.UserHandler.LoginUser).Methods("POST")
+}
+
+// registerActivityRoutes registers activity CRUD routes
+func (app *Application) registerActivityRoutes(router *mux.Router) {
+	// router.Use(middleware.AuthMiddleware) // TODO: Enable when auth is ready
+	router.HandleFunc("/activities", app.ActivityHandler.ListActivities).Methods("GET")
+	router.HandleFunc("/activities", app.ActivityHandler.CreateActivity).Methods("POST")
+	router.HandleFunc("/activities/stats", app.ActivityHandler.GetStats).Methods("GET")
+	router.HandleFunc("/activities/{id}", app.ActivityHandler.GetActivity).Methods("GET")
+	router.HandleFunc("/activities/{id}", app.ActivityHandler.UpdateActivity).Methods("PATCH")
+	router.HandleFunc("/activities/{id}", app.ActivityHandler.DeleteActivity).Methods("DELETE")
+}
+
+// registerStatsRoutes registers statistics and analytics routes
+func (app *Application) registerStatsRoutes(router *mux.Router) {
+	router.HandleFunc("/stats/weekly", app.StatsHandler.GetWeeklyStats).Methods("GET")
+	router.HandleFunc("/stats/monthly", app.StatsHandler.GetMonthlyStats).Methods("GET")
+}
+
+// registerUserRoutes registers user-specific routes
+func (app *Application) registerUserRoutes(router *mux.Router) {
+	router.HandleFunc("/users/me/summary", app.StatsHandler.GetUserActivitySummary).Methods("GET")
+	router.HandleFunc("/users/me/tags/top", app.StatsHandler.GetTopTags).Methods("GET")
+}
+
+// newServer creates and configures the HTTP server
+func (app *Application) newServer() *http.Server {
+	return &http.Server{
+		Addr:         ":" + app.Config.ServerPort,
+		Handler:      app.setupRoutes(),
 		ReadTimeout:  45 * time.Second,
 		WriteTimeout: 45 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+}
 
-	log.Printf("🚒 Server starting on port %s...\n", cfg.ServerPort)
-	log.Fatal(server.ListenAndServe())
+// serve starts the server and handles graceful shutdown
+func (app *Application) serve(server *http.Server) error {
+	// Create signal channel for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
+	// Start server in goroutine
+	serverErrors := make(chan error, 1)
+	go func() {
+		log.Printf("🚒 Server starting on port %s...\n", app.Config.ServerPort)
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	// Block until we receive a signal or server error
+	select {
+	case err := <-serverErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("server failed to start: %w", err)
+		}
+	case sig := <-quit:
+		log.Printf("🛑 Received signal: %v. Starting graceful shutdown...\n", sig)
+		return app.gracefulShutdown(server)
+	}
+
+	return nil
+}
+
+// gracefulShutdown handles the graceful shutdown process
+func (app *Application) gracefulShutdown(server *http.Server) error {
+	// Create shutdown context with 30 second timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Attempt graceful shutdown of HTTP server
+	log.Println("⏳ Waiting for active connections to close...")
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("❌ Server forced to shutdown: %v", err)
+		// Force close if graceful shutdown fails
+		if closeErr := server.Close(); closeErr != nil {
+			log.Printf("❌ Error forcing server close: %v", closeErr)
+		}
+	} else {
+		log.Println("✅ All connections closed gracefully")
+	}
+
+	// Close database connections
+	log.Println("🔌 Closing database connections...")
+	if err := app.DBCloser.Close(); err != nil {
+		log.Printf("❌ Error closing database: %v", err)
+		return err
+	}
+	log.Println("✅ Database connections closed")
+
+	log.Println("👋 Server shutdown complete")
+	return nil
 }

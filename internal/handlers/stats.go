@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
@@ -9,18 +8,11 @@ import (
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
-type StatsRepositoryInterface interface {
-	GetWeeklyStats(ctx context.Context, userID int) (*repository.WeeklyStats, error)
-	GetMonthlyStats(ctx context.Context, userID int) (*repository.MonthlyStats, error)
-	GetActivityCountByType(ctx context.Context, userID int) (map[string]int, error)
-	GetUserActivitySummary(ctx context.Context, userID int) (*repository.UserActivitySummary, error)
-}
-
 type StatsHandler struct {
-	repo StatsRepositoryInterface
+	repo repository.StatsRepositoryInterface
 }
 
-func NewStatsHandler(repo StatsRepositoryInterface) *StatsHandler {
+func NewStatsHandler(repo repository.StatsRepositoryInterface) *StatsHandler {
 	return &StatsHandler{repo: repo}
 }
 
@@ -65,4 +57,34 @@ func (sh *StatsHandler) GetUserActivitySummary(w http.ResponseWriter, r *http.Re
 	}
 
 	response.SendJSON(w, http.StatusOK, activitySummary)
+}
+
+func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID := 1
+	limit := 10 // Default limit
+
+	// Parse limit from query params if provided
+	if limitParam := r.URL.Query().Get("limit"); limitParam != "" {
+		var parsedLimit int
+		if _, err := fmt.Sscanf(limitParam, "%d", &parsedLimit); err == nil && parsedLimit > 0 && parsedLimit <= 50 {
+			limit = parsedLimit
+		}
+	}
+
+	topTags, err := sh.repo.GetTopTagsByUser(ctx, userID, limit)
+	if err != nil {
+		fmt.Println(err)
+		response.Error(w, http.StatusInternalServerError, "Error fetching top tags")
+		return
+	}
+
+	// Create response with tags and total count
+	responseData := map[string]interface{}{
+		"tags":              topTags,
+		"total_unique_tags": len(topTags),
+	}
+
+	response.SendJSON(w, http.StatusOK, responseData)
 }

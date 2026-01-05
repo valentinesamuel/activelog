@@ -17,13 +17,17 @@ type WeeklyStats struct {
 	TotalDuration   int     `json:"totalDurationMinutes"`
 	TotalDistance   float64 `json:"totalDistanceKm"`
 	AvgDuration     float64 `json:"avgDurationMinutes"`
-	ActivityCount   int     `json:"activityCount"`
 }
 
 type UserActivitySummary struct {
 	Username       string `json:"username"`
 	ActivityCount  int    `json:"activityCount"`
 	UniqueTagCount int    `json:"uniqueTagCount"`
+}
+
+type TagUsage struct {
+	TagName string `json:"tagName"`
+	Count   int    `json:"count"`
 }
 
 func NewStatsRepository(db DBConn) *StatsRepository {
@@ -118,17 +122,14 @@ func (sr *StatsRepository) GetActivityCountByType(ctx context.Context, userID in
 
 func (sr *StatsRepository) GetWeeklyStats(ctx context.Context, userID int) (*WeeklyStats, error) {
 	query := `
-			SELECT
-				COUNT(*)::int as "totalActivities",
-				SUM(duration_minutes) as "totalDuration",
-				SUM(distance_km) as "totalDistance",
-				AVG(duration_minutes) as "avgDuration",
-				COUNT(*)::int as "activityCount"
-			FROM activities
-			WHERE user_id = $1
-				AND activity_date >= NOW() - INTERVAL '7 days'
-			GROUP BY activity_type
-		 
+		SELECT
+			COUNT(*)::int AS total_activities,
+			COALESCE(SUM(duration_minutes), 0)::int AS total_duration,
+			COALESCE(SUM(distance_km), 0)::float AS total_distance,
+			COALESCE(AVG(duration_minutes), 0)::float AS avg_duration
+		FROM activities
+		WHERE user_id = $1
+			AND activity_date >= NOW() - INTERVAL '7 days'
 	`
 
 	weeklyStats := &WeeklyStats{}
@@ -140,7 +141,6 @@ func (sr *StatsRepository) GetWeeklyStats(ctx context.Context, userID int) (*Wee
 		&weeklyStats.TotalDuration,
 		&weeklyStats.TotalDistance,
 		&weeklyStats.AvgDuration,
-		&weeklyStats.ActivityCount,
 	)
 
 	if err != nil {
@@ -179,7 +179,7 @@ func (sr *StatsRepository) GetUserActivitySummary(ctx context.Context, userID in
 		&userActivitySummary.ActivityCount,
 		&userActivitySummary.UniqueTagCount,
 	)
-	
+
 	if err != nil {
 		return nil, &errors.DatabaseError{
 			Op:    "AGGREGATE",
@@ -189,4 +189,59 @@ func (sr *StatsRepository) GetUserActivitySummary(ctx context.Context, userID in
 	}
 
 	return userActivitySummary, nil
+}
+
+func (sr *StatsRepository) GetTopTagsByUser(ctx context.Context, userID int, limit int) ([]TagUsage, error) {
+	query := `
+		SELECT
+			t.name AS tag_name,
+			COUNT(*)::int AS usage_count
+		FROM tags t
+		INNER JOIN activity_tags at
+			ON at.tag_id = t.id
+		INNER JOIN activities a
+			ON a.id = at.activity_id
+		WHERE a.user_id = $1
+		GROUP BY t.id, t.name
+		ORDER BY usage_count DESC
+		LIMIT $2
+	`
+
+	rows, err := sr.db.QueryContext(ctx, query, userID, limit)
+	if err != nil {
+		return nil, &errors.DatabaseError{
+			Op:    "AGGREGATE",
+			Table: "tags",
+			Err:   err,
+		}
+	}
+	defer rows.Close()
+
+	var tagUsages []TagUsage
+	for rows.Next() {
+		var tagUsage TagUsage
+		if err := rows.Scan(&tagUsage.TagName, &tagUsage.Count); err != nil {
+			return nil, &errors.DatabaseError{
+				Op:    "SCAN",
+				Table: "tags",
+				Err:   err,
+			}
+		}
+		tagUsages = append(tagUsages, tagUsage)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, &errors.DatabaseError{
+			Op:    "ITERATE",
+			Table: "tags",
+			Err:   err,
+		}
+	}
+
+	// Return empty slice instead of nil if no tags found
+	if tagUsages == nil {
+		tagUsages = []TagUsage{}
+	}
+
+	return tagUsages, nil
 }
