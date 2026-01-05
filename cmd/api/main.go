@@ -31,11 +31,13 @@ func main() {
 	tagRepo := repository.NewTagRepository(db)
 	activityRepo := repository.NewActivityRepository(db, tagRepo)
 	userRepo := repository.NewUserRepository(db)
+	statsRepo := repository.NewStatsRepository(db)
 
 	healthHandler := handlers.NewHealthHandler()
 	activityHandler := handlers.NewActivityHandler(activityRepo)
 	userHandler := handlers.NewUserHandler(userRepo)
-
+	statsHandler := handlers.NewStatsHandler(statsRepo)
+	
 	router := mux.NewRouter()
 
 	router.Use(middleware.LoggingMiddleware)
@@ -60,6 +62,9 @@ func main() {
 	api.HandleFunc("/activities/{id}", activityHandler.GetActivity).Methods("GET")
 	api.HandleFunc("/activities/{id}", activityHandler.UpdateActivity).Methods("PATCH")
 	api.HandleFunc("/activities/{id}", activityHandler.DeleteActivity).Methods("DELETE")
+
+	api.HandleFunc("/stats/weekly", statsHandler.GetWeeklyStats).Methods("GET")
+	api.HandleFunc("/stats/monthly", statsHandler.GetMonthlyStats).Methods("GET")
 
 	server := &http.Server{
 		Addr:         ":" + cfg.ServerPort,

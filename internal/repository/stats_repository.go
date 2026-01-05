@@ -17,6 +17,7 @@ type WeeklyStats struct {
 	TotalDuration   int     `json:"totalDurationMinutes"`
 	TotalDistance   float64 `json:"totalDistanceKm"`
 	AvgDuration     float64 `json:"avgDurationMinutes"`
+	ActivityCount   int     `json:"activityCount"`
 }
 
 func NewStatsRepository(db DBConn) *StatsRepository {
@@ -107,4 +108,42 @@ func (sr *StatsRepository) GetActivityCountByType(ctx context.Context, userID in
 	}
 
 	return stats, nil
+}
+
+func (sr *StatsRepository) GetWeeklyStats(ctx context.Context, userID int) (*WeeklyStats, error) {
+	query := `
+			SELECT
+				COUNT(*)::int as "totalActivities",
+				SUM(duration_minutes) as "totalDuration",
+				SUM(distance_km) as "totalDistance",
+				AVG(duration_minutes) as "avgDuration",
+				COUNT(*)::int as "activityCount"
+			FROM activities
+			WHERE user_id = $1
+				AND activity_date >= NOW() - INTERVAL '7 days'
+			GROUP BY activity_type
+		 
+	`
+
+	weeklyStats := &WeeklyStats{}
+
+	row := sr.db.QueryRowContext(ctx, query, userID)
+
+	err := row.Scan(
+		&weeklyStats.TotalActivities,
+		&weeklyStats.TotalDuration,
+		&weeklyStats.TotalDistance,
+		&weeklyStats.AvgDuration,
+		&weeklyStats.ActivityCount,
+	)
+
+	if err != nil {
+		return nil, &errors.DatabaseError{
+			Op:    "AGGREGATE",
+			Table: "activities",
+			Err:   err,
+		}
+	}
+
+	return weeklyStats, nil
 }

@@ -397,10 +397,10 @@ This section contains all API request/response examples you'll need for testing 
 - [X] Add database query logging to verify
 
 **Task 6: Write Transaction Tests** (45 min)
-- [ ] Test `CreateWithTags` with multiple tags
-- [ ] Test transaction rollback on tag insertion failure
-- [ ] Test duplicate tag handling (should reuse existing tags)
-- [ ] Verify all data committed or none (atomic behavior)
+- [X] Test `CreateWithTags` with multiple tags
+- [X] Test transaction rollback on tag insertion failure
+- [X] Test duplicate tag handling (should reuse existing tags)
+- [X] Verify all data committed or none (atomic behavior)
 
 **Task 7: Verify N+1 Fix** (20 min)
 - [X] Enable PostgreSQL query logging (edit postgresql.conf if needed)
