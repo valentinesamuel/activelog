@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/valentinesamuel/activelog/internal/repository"
@@ -12,6 +13,7 @@ type StatsRepositoryInterface interface {
 	GetWeeklyStats(ctx context.Context, userID int) (*repository.WeeklyStats, error)
 	GetMonthlyStats(ctx context.Context, userID int) (*repository.MonthlyStats, error)
 	GetActivityCountByType(ctx context.Context, userID int) (map[string]int, error)
+	GetUserActivitySummary(ctx context.Context, userID int) (*repository.UserActivitySummary, error)
 }
 
 type StatsHandler struct {
@@ -48,4 +50,19 @@ func (sh *StatsHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) 
 	}
 
 	response.SendJSON(w, http.StatusOK, weeklyStats)
+}
+
+func (sh *StatsHandler) GetUserActivitySummary(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID := 1
+
+	activitySummary, err := sh.repo.GetUserActivitySummary(ctx, userID)
+	if err != nil {
+		fmt.Println(err)
+		response.Error(w, http.StatusInternalServerError, "Error fetching user activity stats")
+		return
+	}
+
+	response.SendJSON(w, http.StatusOK, activitySummary)
 }

@@ -494,10 +494,10 @@ internal/
     }
     ```
   - **Logic:** SELECT activity_type, COUNT(*) FROM activities WHERE user_id = $1 GROUP BY activity_type. Loop through rows and build map[string]int where key is activity type and value is count.
-- [ ] Test with real data to verify correctness
+- [X] Test with real data to verify correctness
 
 **Task 2: Create Complex JOIN Queries** (45 min)
-- [ ] Implement `GetUserActivitySummary(ctx, userID) (*UserActivitySummary, error)`
+- [X] Implement `GetUserActivitySummary(ctx, userID) (*UserActivitySummary, error)`
   - **Purpose:** Get a complete overview of a user's activity profile - total activities and unique tags they've used.
   - **Returns:** `(*UserActivitySummary, error)` - Struct with user summary:
     ```go

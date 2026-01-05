@@ -66,6 +66,8 @@ func main() {
 	api.HandleFunc("/stats/weekly", statsHandler.GetWeeklyStats).Methods("GET")
 	api.HandleFunc("/stats/monthly", statsHandler.GetMonthlyStats).Methods("GET")
 
+	api.HandleFunc("/users/me/summary", statsHandler.GetUserActivitySummary).Methods("GET")
+
 	server := &http.Server{
 		Addr:         ":" + cfg.ServerPort,
 		Handler:      router,

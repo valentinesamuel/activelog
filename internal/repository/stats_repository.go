@@ -20,6 +20,12 @@ type WeeklyStats struct {
 	ActivityCount   int     `json:"activityCount"`
 }
 
+type UserActivitySummary struct {
+	Username       string `json:"username"`
+	ActivityCount  int    `json:"activityCount"`
+	UniqueTagCount int    `json:"uniqueTagCount"`
+}
+
 func NewStatsRepository(db DBConn) *StatsRepository {
 	return &StatsRepository{
 		db: db,
@@ -146,4 +152,41 @@ func (sr *StatsRepository) GetWeeklyStats(ctx context.Context, userID int) (*Wee
 	}
 
 	return weeklyStats, nil
+}
+
+func (sr *StatsRepository) GetUserActivitySummary(ctx context.Context, userID int) (*UserActivitySummary, error) {
+	query := `
+		SELECT
+			u.username,
+			COUNT(DISTINCT a.id)::int        AS "activityCount",
+			COUNT(DISTINCT t.id)::int        AS "uniqueTagCount"
+		FROM users u
+		LEFT JOIN activities a
+			ON a.user_id = u.id
+		LEFT JOIN activity_tags at
+			ON at.activity_id = a.id
+		LEFT JOIN tags t
+			ON t.id = at.tag_id
+		WHERE u.id = $1
+		GROUP BY u.id, u.username;
+	`
+
+	row := sr.db.QueryRowContext(ctx, query, userID)
+
+	userActivitySummary := &UserActivitySummary{}
+	err := row.Scan(
+		&userActivitySummary.Username,
+		&userActivitySummary.ActivityCount,
+		&userActivitySummary.UniqueTagCount,
+	)
+	
+	if err != nil {
+		return nil, &errors.DatabaseError{
+			Op:    "AGGREGATE",
+			Table: "activities",
+			Err:   err,
+		}
+	}
+
+	return userActivitySummary, nil
 }
