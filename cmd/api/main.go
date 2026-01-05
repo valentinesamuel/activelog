@@ -139,14 +139,30 @@ func (app *Application) registerActivityRoutes(router *mux.Router) {
 
 // registerStatsRoutes registers statistics and analytics routes
 func (app *Application) registerStatsRoutes(router *mux.Router) {
-	router.HandleFunc("/stats/weekly", app.StatsHandler.GetWeeklyStats).Methods("GET")
-	router.HandleFunc("/stats/monthly", app.StatsHandler.GetMonthlyStats).Methods("GET")
+	// Create protected subrouter for stats endpoints
+	statsRouter := router.PathPrefix("/stats").Subrouter()
+	statsRouter.Use(middleware.AuthMiddleware)
+
+	// Protected stats endpoints
+	statsRouter.HandleFunc("/weekly", app.StatsHandler.GetWeeklyStats).Methods("GET")
+	statsRouter.HandleFunc("/monthly", app.StatsHandler.GetMonthlyStats).Methods("GET")
+	statsRouter.HandleFunc("/by-type", app.StatsHandler.GetActivityCountByType).Methods("GET")
 }
 
 // registerUserRoutes registers user-specific routes
 func (app *Application) registerUserRoutes(router *mux.Router) {
-	router.HandleFunc("/users/me/summary", app.StatsHandler.GetUserActivitySummary).Methods("GET")
-	router.HandleFunc("/users/me/tags/top", app.StatsHandler.GetTopTags).Methods("GET")
+	// Create protected subrouter for user endpoints
+	userRouter := router.PathPrefix("/users/me").Subrouter()
+	userRouter.Use(middleware.AuthMiddleware)
+
+	// Protected user endpoints
+	userRouter.HandleFunc("/summary", app.StatsHandler.GetUserActivitySummary).Methods("GET")
+	userRouter.HandleFunc("/tags/top", app.StatsHandler.GetTopTags).Methods("GET")
+
+	// Alternative user-scoped stats endpoints (as per Week 10 spec)
+	userRouter.HandleFunc("/stats/weekly", app.StatsHandler.GetWeeklyStats).Methods("GET")
+	userRouter.HandleFunc("/stats/monthly", app.StatsHandler.GetMonthlyStats).Methods("GET")
+	userRouter.HandleFunc("/stats/by-type", app.StatsHandler.GetActivityCountByType).Methods("GET")
 }
 
 // newServer creates and configures the HTTP server

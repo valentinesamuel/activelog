@@ -29,6 +29,7 @@ type TxConn interface {
 	Rollback() error
 }
 
+//go:generate mockgen -destination=mocks/mock_stats_repository.go -package=mocks github.com/valentinesamuel/activelog/internal/repository StatsRepositoryInterface
 type StatsRepositoryInterface interface {
 	GetWeeklyStats(ctx context.Context, userID int) (*WeeklyStats, error)
 	GetMonthlyStats(ctx context.Context, userID int) (*MonthlyStats, error)
@@ -37,6 +38,7 @@ type StatsRepositoryInterface interface {
 	GetTopTagsByUser(ctx context.Context, userID int, limit int) ([]TagUsage, error)
 }
 
+//go:generate mockgen -destination=mocks/mock_activity_repository.go -package=mocks github.com/valentinesamuel/activelog/internal/repository ActivityRepositoryInterface
 type ActivityRepositoryInterface interface {
 	Create(ctx context.Context, tx TxConn, activity *models.Activity) error
 	GetByID(ctx context.Context, id int64) (*models.Activity, error)
@@ -50,7 +52,15 @@ type ActivityRepositoryInterface interface {
 	GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error)
 }
 
+//go:generate mockgen -destination=mocks/mock_user_repository.go -package=mocks github.com/valentinesamuel/activelog/internal/repository UserRepositoryInterface
 type UserRepositoryInterface interface {
 	CreateUser(ctx context.Context, user *models.User) error
 	FindUserByEmail(ctx context.Context, email string) (*models.User, error)
+}
+
+//go:generate mockgen -destination=mocks/mock_tag_repository.go -package=mocks github.com/valentinesamuel/activelog/internal/repository TagRepositoryInterface
+type TagRepositoryInterface interface {
+	GetOrCreateTag(ctx context.Context, tx TxConn, name string) (int, error)
+	GetTagsForActivity(ctx context.Context, activityID int) ([]*models.Tag, error)
+	LinkActivityTag(ctx context.Context, tx TxConn, activityID int, tagID int) error
 }

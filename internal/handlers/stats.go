@@ -12,6 +12,12 @@ type StatsHandler struct {
 	repo repository.StatsRepositoryInterface
 }
 
+// getUserIDFromContext extracts the authenticated user ID from request context
+func getUserIDFromContext(r *http.Request) (int, bool) {
+	userID, ok := r.Context().Value("user_id").(int)
+	return userID, ok
+}
+
 func NewStatsHandler(repo repository.StatsRepositoryInterface) *StatsHandler {
 	return &StatsHandler{repo: repo}
 }
@@ -19,7 +25,11 @@ func NewStatsHandler(repo repository.StatsRepositoryInterface) *StatsHandler {
 func (sh *StatsHandler) GetWeeklyStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID := 1
+	userID, ok := getUserIDFromContext(r)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
 
 	weeklyStats, err := sh.repo.GetWeeklyStats(ctx, userID)
 	if err != nil {
@@ -33,21 +43,29 @@ func (sh *StatsHandler) GetWeeklyStats(w http.ResponseWriter, r *http.Request) {
 func (sh *StatsHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID := 1
-
-	weeklyStats, err := sh.repo.GetMonthlyStats(ctx, userID)
-	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Error fetching weekly stats")
+	userID, ok := getUserIDFromContext(r)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "User not authenticated")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, weeklyStats)
+	monthlyStats, err := sh.repo.GetMonthlyStats(ctx, userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Error fetching monthly stats")
+		return
+	}
+
+	response.SendJSON(w, http.StatusOK, monthlyStats)
 }
 
 func (sh *StatsHandler) GetUserActivitySummary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID := 1
+	userID, ok := getUserIDFromContext(r)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
 
 	activitySummary, err := sh.repo.GetUserActivitySummary(ctx, userID)
 	if err != nil {
@@ -62,7 +80,12 @@ func (sh *StatsHandler) GetUserActivitySummary(w http.ResponseWriter, r *http.Re
 func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID := 1
+	userID, ok := getUserIDFromContext(r)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
 	limit := 10 // Default limit
 
 	// Parse limit from query params if provided
@@ -84,6 +107,37 @@ func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
 	responseData := map[string]interface{}{
 		"tags":              topTags,
 		"total_unique_tags": len(topTags),
+	}
+
+	response.SendJSON(w, http.StatusOK, responseData)
+}
+
+func (sh *StatsHandler) GetActivityCountByType(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID, ok := getUserIDFromContext(r)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	activityBreakdown, err := sh.repo.GetActivityCountByType(ctx, userID)
+	if err != nil {
+		fmt.Println(err)
+		response.Error(w, http.StatusInternalServerError, "Error fetching activity breakdown")
+		return
+	}
+
+	// Calculate total activities
+	totalActivities := 0
+	for _, count := range activityBreakdown {
+		totalActivities += count
+	}
+
+	// Create response with breakdown and total
+	responseData := map[string]interface{}{
+		"activity_breakdown": activityBreakdown,
+		"total_activities":   totalActivities,
 	}
 
 	response.SendJSON(w, http.StatusOK, responseData)
