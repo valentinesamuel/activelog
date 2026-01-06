@@ -887,10 +887,10 @@ coverage.out                       [GENERATED]
 ### 📋 Implementation Tasks
 
 **Task 1: Install Testcontainers** (15 min)
-- [ ] Install package: `go get github.com/testcontainers/testcontainers-go`
-- [ ] Install postgres module: `go get github.com/testcontainers/testcontainers-go/modules/postgres`
-- [ ] Ensure Docker is running: `docker ps`
-- [ ] Pull postgres image: `docker pull postgres:15`
+- [X] Install package: `go get github.com/testcontainers/testcontainers-go`
+- [X] Install postgres module: `go get github.com/testcontainers/testcontainers-go/modules/postgres`
+- [X] Ensure Docker is running: `docker ps`
+- [X] Pull postgres image: `docker pull postgres:15`
 
 **Task 2: Create Testcontainer Setup Helper** (45 min)
 - [ ] Create `internal/repository/testhelpers/container.go`
@@ -925,12 +925,12 @@ coverage.out                       [GENERATED]
 - [ ] Test helper works
 
 **Task 3: Write Integration Tests with Testcontainers** (60 min)
-- [ ] Create `internal/repository/integration_test.go`
-- [ ] Test full transaction flow (create activity with tags)
-- [ ] Test concurrent insertions (multiple goroutines)
-- [ ] Test foreign key constraints
-- [ ] Test unique constraint violations
-- [ ] Verify actual database state after operations
+- [X] Create `internal/repository/integration_test.go`
+- [X] Test full transaction flow (create activity with tags)
+- [X] Test concurrent insertions (multiple goroutines)
+- [X] Test foreign key constraints
+- [X] Test unique constraint violations
+- [X] Verify actual database state after operations
 
 **Task 4: Write Benchmark Tests** (90 min)
 - [ ] Create `internal/repository/activity_repository_bench_test.go`

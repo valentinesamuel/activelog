@@ -19,11 +19,11 @@ func setupTestDB(t *testing.T) (*sql.DB, *database.LoggingDB) {
 	db, err := sql.Open("postgres", "postgres://activelog_user:activelog@localhost:5444/activelog_test?sslmode=disable")
 
 	if err != nil {
-		t.Fatalf("❌ Failed to connect to test database %v", err)
+		t.Fatalf("❌ Failed to connect to testcontainer database %v", err)
 	}
 
 	if err := db.Ping(); err != nil {
-		t.Fatalf("❌ Failed to ping test database %v", err)
+		t.Fatalf("❌ Failed to ping testcontainer database %v", err)
 	}
 
 	// Always use LoggingDB for consistency
