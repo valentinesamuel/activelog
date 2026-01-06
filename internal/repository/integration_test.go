@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository/testhelpers"
 )
@@ -16,7 +17,7 @@ import (
 // with existing test helpers in activity_repository_test.go
 
 // createIntegrationTestUser creates a test user and returns the user ID
-func createIntegrationTestUser(t *testing.T, db *sql.DB, email, username string) int {
+func createIntegrationTestUser(t *testing.T, db *database.LoggingDB, email, username string) int {
 	t.Helper()
 
 	var userID int
@@ -60,7 +61,7 @@ func createIntegrationTestActivity(t *testing.T, repo *ActivityRepository, userI
 }
 
 // verifyActivityExists checks if an activity exists in the database
-func verifyActivityExists(t *testing.T, db *sql.DB, activityID int64) bool {
+func verifyActivityExists(t *testing.T, db *database.LoggingDB, activityID int64) bool {
 	t.Helper()
 
 	var exists bool
@@ -73,7 +74,7 @@ func verifyActivityExists(t *testing.T, db *sql.DB, activityID int64) bool {
 }
 
 // verifyTagExists checks if a tag exists in the database
-func verifyTagExists(t *testing.T, db *sql.DB, tagName string) (bool, int) {
+func verifyTagExists(t *testing.T, db *database.LoggingDB, tagName string) (bool, int) {
 	t.Helper()
 
 	var tagID int
@@ -89,7 +90,7 @@ func verifyTagExists(t *testing.T, db *sql.DB, tagName string) (bool, int) {
 }
 
 // verifyActivityTagLink checks if an activity-tag link exists
-func verifyActivityTagLink(t *testing.T, db *sql.DB, activityID int64, tagID int) bool {
+func verifyActivityTagLink(t *testing.T, db *database.LoggingDB, activityID int64, tagID int) bool {
 	t.Helper()
 
 	var exists bool
@@ -105,7 +106,7 @@ func verifyActivityTagLink(t *testing.T, db *sql.DB, activityID int64, tagID int
 }
 
 // countActivities counts total activities for a user
-func countActivities(t *testing.T, db *sql.DB, userID int) int {
+func countActivities(t *testing.T, db *database.LoggingDB, userID int) int {
 	t.Helper()
 
 	var count int

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,12 +17,14 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/valentinesamuel/activelog/internal/database"
 )
 
 // SetupTestDB creates a PostgreSQL testcontainer and runs migrations
-// Returns: (*sql.DB, cleanup func())
+// Returns: (*database.LoggingDB, cleanup func())
 // The cleanup function must be called with defer to stop the container
-func SetupTestDB(t *testing.T) (*sql.DB, func()) {
+// Accepts testing.TB interface so it works with both *testing.T and *testing.B
+func SetupTestDB(t testing.TB) (*database.LoggingDB, func()) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -46,27 +50,37 @@ func SetupTestDB(t *testing.T) (*sql.DB, func()) {
 	}
 
 	// 3. Connect to database
-	db, err := sql.Open("postgres", connStr)
+	rawDB, err := sql.Open("postgres", connStr)
 	if err != nil {
 		t.Fatalf("❌ Failed to connect to test database: %v", err)
 	}
 
-	if err := db.Ping(); err != nil {
+	if err := rawDB.Ping(); err != nil {
 		t.Fatalf("❌ Failed to ping test database: %v", err)
 	}
 
+	// Configure connection pool for test workloads (especially benchmarks)
+	rawDB.SetMaxOpenConns(25)        // Allow up to 25 concurrent connections
+	rawDB.SetMaxIdleConns(25)         // Keep 25 idle connections ready
+	rawDB.SetConnMaxLifetime(5 * time.Minute) // Connections live for 5 minutes max
+
 	// 4. Run migrations
-	if err := runMigrations(t, db); err != nil {
-		db.Close()
+	if err := runMigrations(t, rawDB); err != nil {
+		rawDB.Close()
 		postgresContainer.Terminate(ctx)
 		t.Fatalf("❌ Failed to run migrations: %v", err)
 	}
 
+	// 5. Wrap in LoggingDB for transaction support
+	// Use a silent logger for tests/benchmarks to reduce noise
+	logger := log.New(io.Discard, "", 0) // Silent logger
+	db := database.NewLoggingDB(rawDB, logger)
+
 	t.Log("✅ Test database ready with migrations applied")
 
-	// 5. Return cleanup function
+	// 6. Return cleanup function
 	cleanup := func() {
-		db.Close()
+		rawDB.Close()
 		if err := postgresContainer.Terminate(ctx); err != nil {
 			t.Logf("⚠️ Warning: Failed to terminate container: %v", err)
 		}
@@ -75,22 +89,46 @@ func SetupTestDB(t *testing.T) (*sql.DB, func()) {
 	return db, cleanup
 }
 
-// runMigrations reads and executes all .up.sql migration files in order
-func runMigrations(t *testing.T, db *sql.DB) error {
-	t.Helper()
-
-	// Get the project root (assumes testhelpers is in internal/repository/testhelpers)
-	cwd, err := os.Getwd()
+// findProjectRoot walks up the directory tree to find the project root (where go.mod is)
+func findProjectRoot() (string, error) {
+	dir, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
+		return "", err
 	}
 
-	// Navigate to migrations directory from anywhere in the project
-	migrationsDir := filepath.Join(cwd, "..", "..", "..", "migrations")
+	// Walk up the directory tree looking for go.mod
+	for {
+		goModPath := filepath.Join(dir, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			return dir, nil
+		}
 
-	// If that doesn't exist, try alternative path (when running from project root)
+		// Move up one directory
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root without finding go.mod
+			return "", fmt.Errorf("could not find project root (go.mod not found)")
+		}
+		dir = parent
+	}
+}
+
+// runMigrations reads and executes all .up.sql migration files in order
+func runMigrations(t testing.TB, db *sql.DB) error {
+	t.Helper()
+
+	// Find project root by looking for go.mod
+	projectRoot, err := findProjectRoot()
+	if err != nil {
+		return fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	// Migrations are in the migrations/ directory at project root
+	migrationsDir := filepath.Join(projectRoot, "migrations")
+
+	// Verify migrations directory exists
 	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
-		migrationsDir = filepath.Join(cwd, "migrations")
+		return fmt.Errorf("migrations directory not found at %s", migrationsDir)
 	}
 
 	// Read all migration files
@@ -102,6 +140,8 @@ func runMigrations(t *testing.T, db *sql.DB) error {
 	if len(files) == 0 {
 		return fmt.Errorf("no migration files found in %s", migrationsDir)
 	}
+
+	t.Logf("📂 Found %d migration files in %s", len(files), migrationsDir)
 
 	// Sort files to ensure correct order (000001, 000002, etc.)
 	sort.Strings(files)

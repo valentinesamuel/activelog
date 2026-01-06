@@ -1,4 +1,4 @@
-.PHONY: run build test clean migrate-up migrate-down help mocks mocks-install mocks-verify clean-mocks test-unit test-integration test-verbose test-coverage test-coverage-html test-coverage-by-package test-coverage-threshold test-coverage-detailed vuln-check security format docker-up docker-down
+.PHONY: run build test clean migrate-up migrate-down help mocks mocks-install mocks-verify clean-mocks test-unit test-integration test-verbose test-coverage test-coverage-html test-coverage-by-package test-coverage-threshold test-coverage-detailed bench bench-verbose bench-compare bench-cpu bench-mem bench-all profile-cpu profile-mem profile-cpu-cli profile-mem-cli install-graphviz clean-bench vuln-check security format docker-up docker-down
 
 # Variables
 BINARY_NAME=activelog
@@ -113,6 +113,120 @@ test-coverage-detailed:
 	@go tool cover -func=coverage.out | grep total
 	@echo "✅ Detailed coverage report complete"
 
+## bench: Run benchmarks (skip regular tests)
+bench:
+	@echo "Running benchmarks..."
+	go test -bench=. -benchmem -run=^$$ ./internal/repository
+	@echo "✅ Benchmarks completed"
+
+## bench-verbose: Run benchmarks with verbose output (skip regular tests)
+bench-verbose:
+	@echo "Running benchmarks with verbose output..."
+	go test -bench=. -benchmem -run=^$$ -v ./internal/repository
+	@echo "✅ Verbose benchmarks completed"
+
+## bench-compare: Run N+1 comparison benchmark (skip regular tests)
+bench-compare:
+	@echo "Running N+1 comparison benchmark..."
+	go test -bench=BenchmarkComparison -benchmem -run=^$$ ./internal/repository
+	@echo "✅ Comparison benchmark completed"
+
+## bench-cpu: Run benchmarks with CPU profiling (skip regular tests)
+bench-cpu:
+	@echo "Running benchmarks with CPU profiling..."
+	go test -bench=. -benchmem -run=^$$ -cpuprofile=cpu.out ./internal/repository
+	@echo "✅ CPU profile saved to cpu.out"
+	@echo "💡 Analyze with: make profile-cpu"
+
+## bench-mem: Run benchmarks with memory profiling (skip regular tests)
+bench-mem:
+	@echo "Running benchmarks with memory profiling..."
+	go test -bench=. -benchmem -run=^$$ -memprofile=mem.out ./internal/repository
+	@echo "✅ Memory profile saved to mem.out"
+	@echo "💡 Analyze with: make profile-mem"
+
+## bench-all: Run all benchmarks with CPU and memory profiling (skip regular tests)
+bench-all:
+	@echo "Running all benchmarks with profiling..."
+	go test -bench=. -benchmem -run=^$$ -cpuprofile=cpu.out -memprofile=mem.out ./internal/repository
+	@echo "✅ All benchmarks completed"
+	@echo "✅ CPU profile saved to cpu.out"
+	@echo "✅ Memory profile saved to mem.out"
+	@echo "💡 Analyze CPU: make profile-cpu"
+	@echo "💡 Analyze Memory: make profile-mem"
+
+## profile-cpu: Analyze CPU profile
+profile-cpu:
+	@echo "Opening CPU profile analysis..."
+	@if [ ! -f cpu.out ]; then \
+		echo "❌ cpu.out not found. Run 'make bench-cpu' or 'make bench-all' first"; \
+		exit 1; \
+	fi
+	@echo "💡 If graphviz error occurs, run: make install-graphviz"
+	@go tool pprof -http=:8080 cpu.out || (echo "" && echo "⚠️  Graphviz not installed. Install with: make install-graphviz" && echo "📊 Alternative: Use CLI mode with: go tool pprof cpu.out")
+
+## profile-mem: Analyze memory profile
+profile-mem:
+	@echo "Opening memory profile analysis..."
+	@if [ ! -f mem.out ]; then \
+		echo "❌ mem.out not found. Run 'make bench-mem' or 'make bench-all' first"; \
+		exit 1; \
+	fi
+	@echo "💡 If graphviz error occurs, run: make install-graphviz"
+	@go tool pprof -http=:8080 mem.out || (echo "" && echo "⚠️  Graphviz not installed. Install with: make install-graphviz" && echo "📊 Alternative: Use CLI mode with: go tool pprof mem.out")
+
+## profile-cpu-cli: Analyze CPU profile in CLI mode (no graphviz required)
+profile-cpu-cli:
+	@echo "Opening CPU profile in CLI mode..."
+	@if [ ! -f cpu.out ]; then \
+		echo "❌ cpu.out not found. Run 'make bench-cpu' or 'make bench-all' first"; \
+		exit 1; \
+	fi
+	@echo "📊 Profile ready. Common commands: top, top20, list <func>, web"
+	go tool pprof cpu.out
+
+## profile-mem-cli: Analyze memory profile in CLI mode (no graphviz required)
+profile-mem-cli:
+	@echo "Opening memory profile in CLI mode..."
+	@if [ ! -f mem.out ]; then \
+		echo "❌ mem.out not found. Run 'make bench-mem' or 'make bench-all' first"; \
+		exit 1; \
+	fi
+	@echo "📊 Profile ready. Common commands: top, top20, list <func>, web"
+	go tool pprof mem.out
+
+## install-graphviz: Install graphviz for profile visualization
+install-graphviz:
+	@echo "Installing graphviz..."
+	@if command -v brew >/dev/null 2>&1; then \
+		echo "📦 Using Homebrew to install graphviz..."; \
+		brew install graphviz; \
+		echo "✅ Graphviz installed successfully"; \
+	elif command -v apt-get >/dev/null 2>&1; then \
+		echo "📦 Using apt-get to install graphviz..."; \
+		sudo apt-get update && sudo apt-get install -y graphviz; \
+		echo "✅ Graphviz installed successfully"; \
+	elif command -v yum >/dev/null 2>&1; then \
+		echo "📦 Using yum to install graphviz..."; \
+		sudo yum install -y graphviz; \
+		echo "✅ Graphviz installed successfully"; \
+	else \
+		echo "❌ Package manager not found"; \
+		echo ""; \
+		echo "Please install graphviz manually:"; \
+		echo "  macOS:   brew install graphviz"; \
+		echo "  Ubuntu:  sudo apt-get install graphviz"; \
+		echo "  CentOS:  sudo yum install graphviz"; \
+		echo "  Windows: Download from https://graphviz.org/download/"; \
+		exit 1; \
+	fi
+
+## clean-bench: Clean benchmark and profile files
+clean-bench:
+	@echo "Cleaning benchmark files..."
+	rm -f cpu.out mem.out *.test
+	@echo "✅ Benchmark files cleaned"
+
 ## vuln-check: Check for vulnerabilities
 vuln-check:
 	go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -132,7 +246,7 @@ format:
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf bin/
-	rm -f coverage.out
+	rm -f coverage.out cpu.out mem.out *.test
 	@echo "✅ Clean completed"
 
 ## clean-mocks: Remove generated mock files
