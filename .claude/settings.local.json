@@ -11,7 +11,9 @@
       "Bash(go get:*)",
       "Bash(go install:*)",
       "Bash(go generate:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)"
     ]
   }
 }
