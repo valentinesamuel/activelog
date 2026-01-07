@@ -25,6 +25,12 @@ func NewLoggingDB(db *sql.DB, logger *log.Logger) *LoggingDB {
 	}
 }
 
+// GetRawDB returns the underlying *sql.DB
+// Used for broker pattern which needs direct access to *sql.DB
+func (db *LoggingDB) GetRawDB() *sql.DB {
+	return db.DB
+}
+
 // QueryContext wraps db.QueryContext with logging
 func (db *LoggingDB) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	start := time.Now()

@@ -14,6 +14,23 @@ type UseCase interface {
 	Execute(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error)
 }
 
+// TransactionalUseCase is an optional marker interface for use cases that require transactions
+// Use cases that implement this interface can declare whether they need to run in a transaction
+// Similar to kuja_user_ms's transactional decorator pattern
+//
+// Default behavior: Use cases WITHOUT this method are assumed to be NON-TRANSACTIONAL
+// This optimizes read-heavy operations which don't need transaction overhead
+//
+// Example usage:
+//   type CreateActivityUseCase struct { ... }
+//   func (uc *CreateActivityUseCase) RequiresTransaction() bool { return true }  // Write operation
+//
+//   type GetActivityUseCase struct { ... }
+//   // No RequiresTransaction() method = non-transactional (read operation)
+type TransactionalUseCase interface {
+	RequiresTransaction() bool
+}
+
 // UseCaseFunc is a functional wrapper for simple use cases
 type UseCaseFunc func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error)
 
@@ -108,54 +125,30 @@ type executionResult struct {
 	err    error
 }
 
-// executeTransaction runs all use cases within a single transaction
+// executeTransaction runs all use cases with conditional transaction management
+// Supports transaction boundary breaking: UC1(tx) → UC2(tx) → UC3(non-tx) → UC4(tx)
 func (b *Broker) executeTransaction(
 	ctx context.Context,
 	useCases []UseCase,
 	initialInput map[string]interface{},
 	config *executionConfig,
 ) (map[string]interface{}, error) {
-	// Begin transaction with isolation level
-	tx, err := b.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: config.isolationLevel,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	// Ensure transaction is closed
-	defer func() {
-		if p := recover(); p != nil {
-			tx.Rollback()
-			panic(p) // Re-throw panic after rollback
-		}
-	}()
-
-	// Run all use cases
-	results, err := b.runAllUseCases(ctx, tx, useCases, initialInput)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			b.logger.Printf("failed to rollback transaction: %v", rbErr)
-		}
-		return nil, err
-	}
-
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return results, nil
+	// Run all use cases with conditional transaction management
+	// Transaction creation/commit is now handled inside runAllUseCases
+	return b.runAllUseCases(ctx, useCases, initialInput, config)
 }
 
-// runAllUseCases executes use cases sequentially
+// runAllUseCases executes use cases sequentially with conditional transaction management
+// Supports transaction boundary breaking:
+//   - UC1(tx) → UC2(tx) → UC3(non-tx) → UC4(tx)
+//   - Transaction commits before UC3, new transaction starts for UC4
 func (b *Broker) runAllUseCases(
 	ctx context.Context,
-	tx *sql.Tx,
 	useCases []UseCase,
 	initialInput map[string]interface{},
+	config *executionConfig,
 ) (map[string]interface{}, error) {
-	b.logger.Printf("Starting transaction with %d use cases", len(useCases))
+	b.logger.Printf("Starting use case chain with %d use cases", len(useCases))
 
 	// Initialize results with initial input
 	accumulatedResults := make(map[string]interface{})
@@ -163,28 +156,87 @@ func (b *Broker) runAllUseCases(
 		accumulatedResults[k] = v
 	}
 
+	var activeTx *sql.Tx = nil
+
+	// Cleanup: rollback any uncommitted transaction on panic
+	defer func() {
+		if activeTx != nil {
+			if rbErr := activeTx.Rollback(); rbErr != nil {
+				b.logger.Printf("failed to rollback transaction during panic recovery: %v", rbErr)
+			}
+		}
+		if p := recover(); p != nil {
+			panic(p) // Re-throw panic after cleanup
+		}
+	}()
+
 	// Execute each use case sequentially
 	for i, useCase := range useCases {
-		useCaseName := fmt.Sprintf("UseCase_%d", i+1)
-		b.logger.Printf("Executing use case %d/%d: %s", i+1, len(useCases), useCaseName)
+		useCaseName := fmt.Sprintf("UseCase_%d_%T", i+1, useCase)
 
+		// Check if use case requires transaction via marker interface
+		needsTx := false
+		if txUC, ok := useCase.(TransactionalUseCase); ok {
+			needsTx = txUC.RequiresTransaction()
+		}
+		// Default: non-transactional (if marker interface not implemented)
+
+		// Transaction boundary management
+		if needsTx && activeTx == nil {
+			// Start new transaction
+			b.logger.Printf("%s requires transaction, starting new transaction", useCaseName)
+			newTx, err := b.db.BeginTx(ctx, &sql.TxOptions{
+				Isolation: config.isolationLevel,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to begin transaction: %w", err)
+			}
+			activeTx = newTx
+		} else if !needsTx && activeTx != nil {
+			// TRANSACTION BOUNDARY BREAK: Commit active transaction
+			b.logger.Printf("%s does not require transaction, committing active transaction", useCaseName)
+			if err := activeTx.Commit(); err != nil {
+				return nil, fmt.Errorf("failed to commit transaction at boundary: %w", err)
+			}
+			activeTx = nil
+		}
+
+		// Execute use case
+		b.logger.Printf("Executing use case %d/%d: %s (tx: %v)", i+1, len(useCases), useCaseName, activeTx != nil)
 		startTime := time.Now()
 
-		// Execute use case with accumulated results
-		result, err := useCase.Execute(ctx, tx, accumulatedResults)
+		result, err := useCase.Execute(ctx, activeTx, accumulatedResults)
 		if err != nil {
 			duration := time.Since(startTime)
-			b.logger.Printf("Use case %s failed after %v: %v", useCaseName, duration, err)
-			return nil, fmt.Errorf("use case %s failed: %w", useCaseName, err)
+			b.logger.Printf("%s failed after %v: %v", useCaseName, duration, err)
+
+			// Rollback active transaction if exists
+			if activeTx != nil {
+				if rbErr := activeTx.Rollback(); rbErr != nil {
+					b.logger.Printf("failed to rollback transaction: %v", rbErr)
+				}
+				activeTx = nil
+			}
+
+			return nil, fmt.Errorf("%s failed: %w", useCaseName, err)
 		}
 
 		duration := time.Since(startTime)
-		b.logger.Printf("Use case %s completed in %v", useCaseName, duration)
+		b.logger.Printf("%s completed in %v", useCaseName, duration)
 
 		// Merge results (output of this use case becomes input to next)
 		for k, v := range result {
 			accumulatedResults[k] = v
 		}
+	}
+
+	// Commit final transaction if exists
+	if activeTx != nil {
+		b.logger.Printf("Committing final transaction")
+		if err := activeTx.Commit(); err != nil {
+			return nil, fmt.Errorf("failed to commit final transaction: %w", err)
+		}
+		activeTx = nil
 	}
 
 	// Remove initial input from final results (like kuja_user_ms does)
@@ -195,7 +247,7 @@ func (b *Broker) runAllUseCases(
 		}
 	}
 
-	b.logger.Printf("Transaction completed successfully")
+	b.logger.Printf("Use case chain completed successfully")
 	return finalResults, nil
 }
 

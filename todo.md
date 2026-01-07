@@ -1,3 +1,3 @@
-- make sure that the broker can marks ome usecases as transactinal or non- transactinal
+
 - Add the get all endpoint query filtering like kuja ms
-- 
+

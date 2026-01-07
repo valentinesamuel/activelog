@@ -7,19 +7,37 @@ import (
 
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	"github.com/valentinesamuel/activelog/internal/service"
 )
 
 // UpdateActivityUseCase handles activity updates
+// Has access to both service (for business logic) and repository (for simple operations)
+// The use case decides which one to use based on the operation's needs
 type UpdateActivityUseCase struct {
-	repo repository.ActivityRepository
+	service service.ActivityServiceInterface      // For operations requiring business logic
+	repo    repository.ActivityRepositoryInterface // For simple operations or when service not needed
 }
 
-// NewUpdateActivityUseCase creates a new instance
-func NewUpdateActivityUseCase(repo repository.ActivityRepository) *UpdateActivityUseCase {
-	return &UpdateActivityUseCase{repo: repo}
+// NewUpdateActivityUseCase creates a new instance with both service and repository
+// The use case will decide which one to use based on what it needs
+func NewUpdateActivityUseCase(
+	svc service.ActivityServiceInterface,
+	repo repository.ActivityRepositoryInterface,
+) *UpdateActivityUseCase {
+	return &UpdateActivityUseCase{
+		service: svc,
+		repo:    repo,
+	}
+}
+
+// RequiresTransaction indicates this use case needs a transaction
+// Write operations (UPDATE) must run within a transaction for data integrity
+func (uc *UpdateActivityUseCase) RequiresTransaction() bool {
+	return true
 }
 
 // Execute updates an existing activity
+// Decision: Use service for business logic validation, repo is available if needed
 func (uc *UpdateActivityUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -41,47 +59,18 @@ func (uc *UpdateActivityUseCase) Execute(
 		return nil, fmt.Errorf("invalid request type")
 	}
 
-	// Fetch existing activity
-	activity, err := uc.repo.GetByID(ctx, int64(activityID))
+	// DECISION: Use service for update operations because we need:
+	// - Ownership verification
+	// - Business rule validation (date, duration, distance)
+	// - Consistent error handling
+	// Alternative: Could use repo directly for simple field updates without validation
+	activity, err := uc.service.UpdateActivity(ctx, tx, userID, activityID, req)
 	if err != nil {
-		return nil, fmt.Errorf("activity not found: %w", err)
-	}
-
-	// Verify ownership
-	if activity.UserID != userID {
-		return nil, fmt.Errorf("activity not found or access denied")
-	}
-
-	// Apply updates
-	if req.ActivityType != nil {
-		activity.ActivityType = *req.ActivityType
-	}
-	if req.Title != nil {
-		activity.Title = *req.Title
-	}
-	if req.Description != nil {
-		activity.Description = *req.Description
-	}
-	if req.DurationMinutes != nil {
-		activity.DurationMinutes = *req.DurationMinutes
-	}
-	if req.DistanceKm != nil {
-		activity.DistanceKm = *req.DistanceKm
-	}
-	if req.CaloriesBurned != nil {
-		activity.CaloriesBurned = *req.CaloriesBurned
-	}
-	if req.Notes != nil {
-		activity.Notes = *req.Notes
-	}
-	if req.ActivityDate != nil {
-		activity.ActivityDate = *req.ActivityDate
-	}
-
-	// Save updates
-	if err := uc.repo.Update(ctx, tx, activityID, activity); err != nil {
 		return nil, fmt.Errorf("failed to update activity: %w", err)
 	}
+
+	// Example of using both: Could use repo for related data if needed
+	// relatedActivities, _ := uc.repo.ListByUser(ctx, userID)
 
 	// Return result
 	return map[string]interface{}{

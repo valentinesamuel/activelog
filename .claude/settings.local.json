@@ -13,7 +13,10 @@
       "Bash(go generate:*)",
       "Bash(make:*)",
       "Bash(tree:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Bash(ls:*)"
     ]
   }
 }

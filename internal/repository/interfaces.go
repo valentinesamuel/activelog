@@ -17,6 +17,7 @@ type DBConn interface {
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
 	Exec(query string, args ...interface{}) (sql.Result, error)
+	GetRawDB() *sql.DB // For broker pattern
 }
 
 // TxConn is an interface for database transactions

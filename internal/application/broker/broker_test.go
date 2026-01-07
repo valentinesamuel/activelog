@@ -15,10 +15,11 @@ import (
 
 // Mock use case for testing
 type mockUseCase struct {
-	name      string
-	output    map[string]interface{}
-	err       error
-	executeFn func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error)
+	name              string
+	output            map[string]interface{}
+	err               error
+	requiresTx        bool // Whether this mock requires a transaction
+	executeFn         func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error)
 }
 
 func (m *mockUseCase) Execute(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error) {
@@ -29,6 +30,12 @@ func (m *mockUseCase) Execute(ctx context.Context, tx *sql.Tx, input map[string]
 		return nil, m.err
 	}
 	return m.output, nil
+}
+
+// RequiresTransaction implements TransactionalUseCase marker interface
+// For backward compatibility, mock use cases default to requiring transactions
+func (m *mockUseCase) RequiresTransaction() bool {
+	return m.requiresTx
 }
 
 // Test helper to create test database
@@ -71,12 +78,14 @@ func TestRunUseCases_Success(t *testing.T) {
 
 	// Create simple use cases
 	useCase1 := &mockUseCase{
-		name:   "UseCase1",
-		output: map[string]interface{}{"step1": "completed"},
+		name:       "UseCase1",
+		output:     map[string]interface{}{"step1": "completed"},
+		requiresTx: true, // Requires transaction
 	}
 	useCase2 := &mockUseCase{
-		name:   "UseCase2",
-		output: map[string]interface{}{"step2": "completed"},
+		name:       "UseCase2",
+		output:     map[string]interface{}{"step2": "completed"},
+		requiresTx: true, // Requires transaction
 	}
 
 	initialInput := map[string]interface{}{"user_id": 123}
@@ -115,9 +124,11 @@ func TestRunUseCases_ResultChaining(t *testing.T) {
 	// Use case 1 outputs a value that use case 2 should receive
 	var receivedInput map[string]interface{}
 	useCase1 := &mockUseCase{
-		output: map[string]interface{}{"created_id": 456},
+		output:     map[string]interface{}{"created_id": 456},
+		requiresTx: true, // Requires transaction
 	}
 	useCase2 := &mockUseCase{
+		requiresTx: true, // Requires transaction
 		executeFn: func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error) {
 			receivedInput = input
 			return map[string]interface{}{"updated": true}, nil
@@ -153,10 +164,12 @@ func TestRunUseCases_FailureRollback(t *testing.T) {
 	mock.ExpectRollback()
 
 	useCase1 := &mockUseCase{
-		output: map[string]interface{}{"step1": "completed"},
+		output:     map[string]interface{}{"step1": "completed"},
+		requiresTx: true, // Requires transaction
 	}
 	useCase2 := &mockUseCase{
-		err: errors.New("use case 2 failed"),
+		err:        errors.New("use case 2 failed"),
+		requiresTx: true, // Requires transaction
 	}
 
 	useCases := []UseCase{useCase1, useCase2}
@@ -205,6 +218,7 @@ func TestRunUseCases_Timeout(t *testing.T) {
 
 	// Use case that takes longer than timeout
 	slowUseCase := &mockUseCase{
+		requiresTx: true, // Requires transaction
 		executeFn: func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error) {
 			select {
 			case <-time.After(200 * time.Millisecond):
@@ -249,7 +263,8 @@ func TestRunUseCases_WithOptions(t *testing.T) {
 	mock.ExpectCommit()
 
 	useCase := &mockUseCase{
-		output: map[string]interface{}{"result": "success"},
+		output:     map[string]interface{}{"result": "success"},
+		requiresTx: true, // Requires transaction
 	}
 
 	useCases := []UseCase{useCase}
@@ -280,7 +295,8 @@ func TestRunUseCases_TransactionBeginError(t *testing.T) {
 	mock.ExpectBegin().WillReturnError(errors.New("connection failed"))
 
 	useCase := &mockUseCase{
-		output: map[string]interface{}{"result": "success"},
+		output:     map[string]interface{}{"result": "success"},
+		requiresTx: true, // Requires transaction
 	}
 
 	result, err := broker.RunUseCases(context.Background(), []UseCase{useCase}, nil)
@@ -305,7 +321,8 @@ func TestRunUseCases_CommitError(t *testing.T) {
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 
 	useCase := &mockUseCase{
-		output: map[string]interface{}{"result": "success"},
+		output:     map[string]interface{}{"result": "success"},
+		requiresTx: true, // Requires transaction
 	}
 
 	result, err := broker.RunUseCases(context.Background(), []UseCase{useCase}, nil)
@@ -371,7 +388,8 @@ func BenchmarkRunUseCases_SingleUseCase(b *testing.B) {
 
 	broker := NewBroker(db).WithLogger(log.New(io.Discard, "", 0))
 	useCase := &mockUseCase{
-		output: map[string]interface{}{"result": "success"},
+		output:     map[string]interface{}{"result": "success"},
+		requiresTx: true, // Requires transaction
 	}
 
 	b.ResetTimer()
@@ -394,7 +412,8 @@ func BenchmarkRunUseCases_MultipleUseCases(b *testing.B) {
 	useCases := make([]UseCase, 5)
 	for i := range useCases {
 		useCases[i] = &mockUseCase{
-			output: map[string]interface{}{fmt.Sprintf("step%d", i): "completed"},
+			output:     map[string]interface{}{fmt.Sprintf("step%d", i): "completed"},
+			requiresTx: true, // Requires transaction
 		}
 	}
 
