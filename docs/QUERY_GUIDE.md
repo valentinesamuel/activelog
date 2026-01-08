@@ -1,8 +1,10 @@
 # ActiveLog Query Guide
 
 **Last Updated:** 2026-01-08
-**Version:** 2.0 (Auto-JOIN System + Operator Filtering)
+**Version:** 3.0 (Advanced Relationships + Deep Nesting)
 **Status:** Production Ready
+
+**New in v3.0:** Deep nesting, self-referential relationships, polymorphic relationships, and complex JOIN conditions. See [v3.0 Guide](./RELATIONSHIP_REGISTRY_V3_GUIDE.md) for details.
 
 ---
 
