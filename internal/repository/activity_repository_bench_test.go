@@ -9,6 +9,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository/testhelpers"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 // setupBenchDB creates a test database for benchmarking
@@ -369,4 +370,157 @@ func BenchmarkActivityRepository_GetActivitiesWithTags_N1Problem(b *testing.B) {
 func BenchmarkComparison(b *testing.B) {
 	b.Run("WithJOIN", BenchmarkActivityRepository_GetActivitiesWithTags)
 	b.Run("N+1Problem", BenchmarkActivityRepository_GetActivitiesWithTags_N1Problem)
+}
+// ==================== DYNAMIC FILTERING BENCHMARKS ====================
+// These benchmarks compare the old ActivityFilters approach vs the new
+// QueryOptions dynamic filtering approach
+
+// BenchmarkOldApproach_ListByUserWithFilters benchmarks the legacy filtering method
+func BenchmarkOldApproach_ListByUserWithFilters(b *testing.B) {
+	db, cleanup := setupBenchDB(b)
+	defer cleanup()
+
+	tagRepo := NewTagRepository(db)
+	repo := NewActivityRepository(db, tagRepo)
+
+	userID := createBenchUser(b, db)
+
+	// Create 100 activities with varying types
+	for i := 0; i < 100; i++ {
+		createBenchActivity(b, repo, userID)
+	}
+
+	filters := models.ActivityFilters{
+		ActivityType: "running",
+		Limit:        20,
+		Offset:       0,
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_, err := repo.ListByUserWithFilters(userID, filters)
+		if err != nil {
+			b.Fatalf("ListByUserWithFilters failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkNewApproach_ListActivitiesWithQuery benchmarks the new dynamic filtering
+func BenchmarkNewApproach_ListActivitiesWithQuery(b *testing.B) {
+	db, cleanup := setupBenchDB(b)
+	defer cleanup()
+
+	tagRepo := NewTagRepository(db)
+	repo := NewActivityRepository(db, tagRepo)
+	ctx := context.Background()
+
+	userID := createBenchUser(b, db)
+
+	// Create 100 activities with varying types
+	for i := 0; i < 100; i++ {
+		createBenchActivity(b, repo, userID)
+	}
+
+	opts := &query.QueryOptions{
+		Page:  1,
+		Limit: 20,
+		Filter: map[string]interface{}{
+			"user_id":       userID,
+			"activity_type": "running",
+		},
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_, err := repo.ListActivitiesWithQuery(ctx, opts)
+		if err != nil {
+			b.Fatalf("ListActivitiesWithQuery failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkDynamicFiltering_WithPagination benchmarks pagination performance
+func BenchmarkDynamicFiltering_WithPagination(b *testing.B) {
+	db, cleanup := setupBenchDB(b)
+	defer cleanup()
+
+	tagRepo := NewTagRepository(db)
+	repo := NewActivityRepository(db, tagRepo)
+	ctx := context.Background()
+
+	userID := createBenchUser(b, db)
+
+	// Create 1000 activities
+	for i := 0; i < 1000; i++ {
+		createBenchActivity(b, repo, userID)
+	}
+
+	opts := &query.QueryOptions{
+		Page:  10, // Middle page
+		Limit: 50,
+		Filter: map[string]interface{}{
+			"user_id": userID,
+		},
+		Order: map[string]string{
+			"created_at": "DESC",
+		},
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_, err := repo.ListActivitiesWithQuery(ctx, opts)
+		if err != nil {
+			b.Fatalf("ListActivitiesWithQuery failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkDynamicFiltering_WithSearch benchmarks search performance
+func BenchmarkDynamicFiltering_WithSearch(b *testing.B) {
+	db, cleanup := setupBenchDB(b)
+	defer cleanup()
+
+	tagRepo := NewTagRepository(db)
+	repo := NewActivityRepository(db, tagRepo)
+	ctx := context.Background()
+
+	userID := createBenchUser(b, db)
+
+	// Create 500 activities
+	for i := 0; i < 500; i++ {
+		createBenchActivity(b, repo, userID)
+	}
+
+	opts := &query.QueryOptions{
+		Page:  1,
+		Limit: 20,
+		Filter: map[string]interface{}{
+			"user_id": userID,
+		},
+		Search: map[string]interface{}{
+			"title": "Run", // Case-insensitive search
+		},
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_, err := repo.ListActivitiesWithQuery(ctx, opts)
+		if err != nil {
+			b.Fatalf("ListActivitiesWithQuery failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkComparison_OldVsNew runs both approaches for direct comparison
+func BenchmarkComparison_OldVsNew(b *testing.B) {
+	b.Run("OldApproach_ActivityFilters", BenchmarkOldApproach_ListByUserWithFilters)
+	b.Run("NewApproach_QueryOptions", BenchmarkNewApproach_ListActivitiesWithQuery)
 }

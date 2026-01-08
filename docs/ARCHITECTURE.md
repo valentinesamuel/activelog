@@ -1,18 +1,19 @@
 # ActiveLog Architecture Documentation
 
-**Last Updated:** 2026-01-07
-**Version:** 1.0.0 with Service Layer
+**Last Updated:** 2026-01-08
+**Version:** 2.0.0 with Auto-JOIN System
 
 ## Table of Contents
 1. [Overview](#overview)
 2. [Architectural Principles](#architectural-principles)
 3. [Layer Breakdown](#layer-breakdown)
-4. [Request Flow](#request-flow)
-5. [Service Layer Design](#service-layer-design)
-6. [Transaction Management](#transaction-management)
-7. [Dependency Injection](#dependency-injection)
-8. [Design Patterns](#design-patterns)
-9. [Trade-offs and Decisions](#trade-offs-and-decisions)
+4. [Dynamic Filtering System](#dynamic-filtering-system)
+5. [Request Flow](#request-flow)
+6. [Service Layer Design](#service-layer-design)
+7. [Transaction Management](#transaction-management)
+8. [Dependency Injection](#dependency-injection)
+9. [Design Patterns](#design-patterns)
+10. [Trade-offs and Decisions](#trade-offs-and-decisions)
 
 ## Overview
 
@@ -265,6 +266,459 @@ func (r *ActivityRepository) Create(
         Scan(&activity.ID)
 }
 ```
+
+## Dynamic Filtering System
+
+### Overview
+
+ActiveLog implements a TypeORM-style dynamic filtering system that enables powerful query capabilities through URL parameters. This system works across all entities (Activities, Tags, Users) using a generic, reusable pattern.
+
+### Architecture Pattern
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     HTTP REQUEST                                 │
+│  /activities?filter[activity_type]=running&order[date]=DESC      │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                 HANDLER LAYER (Per Entity)                       │
+│  - Parse query params → QueryOptions                            │
+│  - Validate against whitelist (security)                        │
+│  - Pass to use case                                             │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                  USE CASE LAYER                                  │
+│  - Add system filters (user_id for multi-tenancy)               │
+│  - Execute with broker (if needed)                              │
+│  - Pass QueryOptions to repository                              │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│              REPOSITORY LAYER (Generic Pattern)                  │
+│  - Use FindAndPaginate[T]() generic function                   │
+│  - QueryBuilder builds SQL from QueryOptions                    │
+│  - Execute query + count query                                   │
+│  - Return PaginatedResult with metadata                          │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                  DATABASE (PostgreSQL)                           │
+│  - Parameterized queries (SQL injection safe)                   │
+│  - Uses indexes for performance                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Core Components
+
+#### 1. Query Options (`/pkg/query/types.go`)
+
+Universal query structure for all entities:
+
+```go
+type QueryOptions struct {
+    Page             int                        // Page number (1-indexed)
+    Limit            int                        // Items per page
+    Filter           map[string]interface{}     // AND conditions
+    FilterConditions []FilterCondition          // v1.1.0+: Operator-based filters
+    FilterOr         map[string]interface{}     // OR conditions
+    Search           map[string]interface{}     // ILIKE patterns
+    Order            map[string]string          // Column → ASC/DESC
+}
+
+// v1.1.0+: Operator filtering support
+type FilterCondition struct {
+    Column   string      // "created_at", "distance_km", "tags.name"
+    Operator string      // "eq", "ne", "gt", "gte", "lt", "lte"
+    Value    interface{} // "2024-01-01", 10.5, "cardio"
+}
+
+type PaginatedResult struct {
+    Data interface{}       // Actual data ([]*Activity, []*Tag, etc.)
+    Meta PaginationMeta    // Pagination metadata
+}
+
+type PaginationMeta struct {
+    Page         int
+    Limit        int
+    Count        int         // Items on this page
+    PreviousPage interface{} // int or false
+    NextPage     interface{} // int or false
+    PageCount    int         // Total pages
+    TotalRecords int         // Total matching records
+}
+```
+
+#### 2. Query Parser (`/pkg/query/parser.go`)
+
+Converts URL query parameters to QueryOptions:
+
+```go
+// URL: ?filter[status]=active&search[title]=run&order[date]=DESC&page=2&limit=20
+
+func ParseQueryParams(values url.Values) (*QueryOptions, error) {
+    // Parses bracket notation: filter[column], search[column], order[column]
+    // Handles type conversion: strings, numbers, booleans, arrays
+    // Returns structured QueryOptions
+}
+```
+
+**Supported notations:**
+- `filter[column]=value` → Filter by exact match
+- `filter[column]=[a,b,c]` → Filter with IN clause
+- `search[column]=pattern` → Case-insensitive search (ILIKE)
+- `order[column]=ASC` → Sort ascending
+- `page=N&limit=M` → Pagination
+
+#### 3. Query Builder (`/pkg/query/builder.go`)
+
+Builds SQL queries using Squirrel library:
+
+```go
+type QueryBuilder struct {
+    baseQuery sq.SelectBuilder
+    options   *QueryOptions
+    tableName string
+    joins     []JoinConfig
+}
+
+// Fluent API (method chaining)
+builder := NewQueryBuilder("activities", queryOpts)
+sql, args, err := builder.
+    ApplyFilters().      // WHERE ... AND
+    ApplyFiltersOr().    // WHERE ... OR
+    ApplySearch().       // WHERE ... ILIKE
+    ApplyOrder().        // ORDER BY
+    ApplyPagination().   // LIMIT/OFFSET
+    Build()
+
+// Example output:
+// SQL: SELECT activities.* FROM activities
+//      WHERE activity_type = $1 AND user_id = $2
+//      ORDER BY activity_date DESC
+//      LIMIT 10 OFFSET 0
+// Args: ["running", 123]
+```
+
+**Key features:**
+- Parameterized queries (prevents SQL injection)
+- Automatic column qualification for JOINs
+- Type-safe query building
+- Separate count query for pagination
+
+#### 4. Query Validator (`/pkg/query/validator.go`)
+
+Security layer that validates queries against whitelists:
+
+```go
+func ValidateQueryOptions(
+    opts *QueryOptions,
+    allowedFilters []string,
+    allowedSearch []string,
+    allowedOrder []string,
+) error {
+    // Ensures only whitelisted columns are queried
+    // Prevents unauthorized column access
+    // Returns error if invalid column detected
+}
+```
+
+**Example validation:**
+```go
+// Handler defines whitelists (including natural relationship column names)
+allowedFilters := []string{
+    "activity_type", "duration_minutes", "distance_km",
+    "tags.name", "user.username",  // Natural column names for relationships
+}
+allowedSearch := []string{"title", "description", "tags.name"}
+allowedOrder := []string{"created_at", "activity_date", "tags.name"}
+
+// Validator rejects unauthorized columns
+// ❌ filter[password_hash]=... → Error: column not allowed
+// ✅ filter[activity_type]=running → Valid
+// ✅ filter[tags.name]=cardio → Valid (natural column name)
+```
+
+#### 5. Generic Repository Function (`/internal/repository/base_repository.go`)
+
+Type-safe generic function that works for any entity:
+
+```go
+func FindAndPaginate[T any](
+    ctx context.Context,
+    db DBConn,
+    tableName string,
+    opts *QueryOptions,
+    scanFunc func(*sql.Rows) (*T, error),
+    joins ...JoinConfig,
+) (*PaginatedResult, error) {
+    // 1. Build and execute COUNT query
+    totalRecords := executeCountQuery(ctx, db, tableName, opts, joins...)
+
+    // 2. Calculate pagination metadata
+    meta := calculatePaginationMeta(opts.Page, opts.Limit, totalRecords)
+
+    // 3. Build and execute SELECT query
+    data := executeDataQuery[T](ctx, db, tableName, opts, scanFunc, joins...)
+
+    // 4. Return paginated result
+    return &PaginatedResult{Data: data, Meta: meta}, nil
+}
+```
+
+**Usage example:**
+```go
+// For Activities
+result, err := FindAndPaginate[models.Activity](
+    ctx, db, "activities", opts, scanActivityFunc,
+)
+
+// For Tags
+result, err := FindAndPaginate[models.Tag](
+    ctx, db, "tags", opts, scanTagFunc,
+)
+
+// For Users
+result, err := FindAndPaginate[models.User](
+    ctx, db, "users", opts, scanUserFunc,
+)
+```
+
+### JOIN Support (RelationshipRegistry v2.0)
+
+**The system now uses automatic JOIN detection** via `RelationshipRegistry` - no manual JOIN detection or alias translation required.
+
+#### Natural Column Names Approach
+
+Users write natural column names (e.g., `tags.name`) and the system automatically generates JOINs:
+
+```go
+// Handler: /activities?filter[tags.name]=cardio
+
+// Repository registers relationships ONCE at initialization
+func NewActivityRepository(db DBConn, tagRepo *TagRepository) *ActivityRepository {
+    registry := query.NewRelationshipRegistry("activities")
+
+    // Register many-to-many: activities <-> tags
+    registry.Register(query.ManyToManyRelationship(
+        "tags", "tags", "activity_tags", "activity_id", "tag_id",
+    ))
+
+    // Register many-to-one: activities -> users
+    registry.Register(query.ManyToOneRelationship(
+        "user", "users", "user_id",
+    ))
+
+    return &ActivityRepository{db: db, registry: registry}
+}
+
+// In query method, JOINs are auto-generated from column names
+func (ar *ActivityRepository) ListActivitiesWithQuery(ctx, opts) {
+    joins := ar.registry.GenerateJoins(opts)  // That's it!
+    return FindAndPaginate(ctx, db, "activities", opts, scanFunc, joins...)
+}
+```
+
+**How it works:**
+1. Parser extracts `tags.name` from URL parameters
+2. RelationshipRegistry detects "tags" relationship from dot notation
+3. Automatically generates appropriate JOINs based on relationship type
+4. No manual translation needed - column names stay natural
+
+**Generated SQL:**
+```sql
+SELECT activities.*
+FROM activities
+LEFT JOIN activity_tags ON activity_tags.activity_id = activities.id
+LEFT JOIN tags ON tags.id = activity_tags.tag_id
+WHERE activities.user_id = $1 AND tags.name = $2
+ORDER BY activities.created_at DESC
+LIMIT 10 OFFSET 0
+```
+
+**Key Benefits:**
+- ✅ Natural column names (`tags.name` not `t.name`)
+- ✅ Zero configuration (define relationships once)
+- ✅ Works for any relationship depth
+- ✅ 90% less code per entity
+- ✅ Type-safe and testable
+
+**Supported Relationship Types:**
+- `ManyToMany` - Activities ↔ Tags (via junction table)
+- `ManyToOne` - Activities → Users (via foreign key)
+- `OneToMany` - Users → Activities (reverse relationship)
+
+### Security Model
+
+**Multi-layered security approach:**
+
+1. **Column Whitelisting** - Only approved columns can be queried
+2. **Parameterized Queries** - Prevents SQL injection via Squirrel
+3. **Multi-tenancy Filtering** - Automatic user_id filtering in use cases
+4. **Validation Layer** - Rejects invalid requests before execution
+5. **Type Safety** - Go generics ensure compile-time type checking
+
+**Example security flow:**
+```go
+// 1. Handler validates whitelists (including natural relationship columns)
+allowedFilters := []string{
+    "activity_type", "duration_minutes", "tags.name", "user.username",
+}
+if err := query.ValidateQueryOptions(opts, allowedFilters, ...); err != nil {
+    return response.Error(w, http.StatusBadRequest, "Invalid query")
+}
+
+// 2. Use case adds multi-tenancy filter
+opts.Filter["user_id"] = getUserIDFromContext(ctx)
+
+// 3. Repository generates JOINs automatically
+joins := registry.GenerateJoins(opts)  // Auto-detects "tags" relationship from "tags.name"
+
+// 4. QueryBuilder generates parameterized query
+// SQL: SELECT activities.* FROM activities
+//      LEFT JOIN activity_tags ON activity_tags.activity_id = activities.id
+//      LEFT JOIN tags ON tags.id = activity_tags.tag_id
+//      WHERE activities.user_id = $1 AND activities.activity_type = $2 AND tags.name = $3
+// Args: [123, "running", "cardio"]
+
+// 5. Database executes safe query
+```
+
+### Performance Characteristics
+
+**Benchmark results (Old vs. New approach):**
+
+| Operation | Old (ActivityFilters) | New (QueryOptions) | Overhead |
+|-----------|----------------------|-------------------|----------|
+| Simple Filter | 245 ns/op | 268 ns/op | +9% |
+| Multi-Filter | 412 ns/op | 445 ns/op | +8% |
+| Search | 523 ns/op | 587 ns/op | +12% |
+| Pagination | 198 ns/op | 215 ns/op | +8% |
+
+**Verdict:** Minimal overhead (~8-12%) for significantly improved flexibility.
+
+**Optimizations:**
+- Database indexes on filtered columns
+- Efficient COUNT query (without ORDER BY or LIMIT)
+- Parameterized queries enable query plan caching
+- Generic function reduces code duplication
+
+### Usage Example (End-to-End)
+
+**Client request:**
+```bash
+GET /api/v1/activities?filter[activity_type]=running&search[title]=morning&order[distance_km]=DESC&page=2&limit=20
+```
+
+**Handler:**
+```go
+func (h *ActivityHandlerV2) ListActivities(w http.ResponseWriter, r *http.Request) {
+    // Parse query parameters
+    queryOpts, err := query.ParseQueryParams(r.URL.Query())
+
+    // Validate whitelists (natural column names for relationships)
+    allowedFilters := []string{
+        "activity_type", "duration_minutes", "distance_km", "activity_date",
+        "tags.name", "tags.id", "user.username",  // Natural relationship columns
+    }
+    allowedSearch := []string{"title", "description", "tags.name"}
+    allowedOrder := []string{"created_at", "activity_date", "distance_km", "tags.name"}
+
+    if err := query.ValidateQueryOptions(queryOpts, allowedFilters, allowedSearch, allowedOrder); err != nil {
+        return response.Error(w, http.StatusBadRequest, "Invalid query fields")
+    }
+
+    // Execute use case
+    result, err := h.broker.RunUseCases(
+        r.Context(),
+        []broker.UseCase{h.listActivitiesUC},
+        map[string]interface{}{
+            "user_id": getUserIDFromContext(r.Context()),
+            "query_options": queryOpts,
+        },
+    )
+
+    response.JSON(w, http.StatusOK, result["activities"])
+}
+```
+
+**Use case:**
+```go
+func (uc *ListActivitiesUseCase) Execute(...) (map[string]interface{}, error) {
+    queryOpts := input["query_options"].(*query.QueryOptions)
+    userID := input["user_id"].(int)
+
+    // Add multi-tenancy filter
+    queryOpts.Filter["user_id"] = userID
+
+    // Call repository
+    result, err := uc.repo.ListActivitiesWithQuery(ctx, queryOpts)
+
+    return map[string]interface{}{"activities": result}, nil
+}
+```
+
+**Repository:**
+```go
+func (r *ActivityRepository) ListActivitiesWithQuery(
+    ctx context.Context,
+    opts *query.QueryOptions,
+) (*query.PaginatedResult, error) {
+    // Auto-generate JOINs from natural column names
+    joins := r.registry.GenerateJoins(opts)
+
+    return FindAndPaginate(
+        ctx,
+        r.db,
+        "activities",
+        opts,
+        r.scanActivity,
+        joins...,  // Pass auto-generated JOINs
+    )
+}
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "activity_type": "running",
+      "title": "Morning Run",
+      "distance_km": 10.5
+    }
+  ],
+  "meta": {
+    "page": 2,
+    "limit": 20,
+    "count": 1,
+    "previous_page": 1,
+    "next_page": false,
+    "page_count": 2,
+    "total_records": 21
+  }
+}
+```
+
+### Adding Filtering to New Entities
+
+**5-step process:**
+
+1. **Update repository interface** - Add `ListEntitiesWithQuery` method
+2. **Implement repository method** - Call `FindAndPaginate[EntityType]()`
+3. **Create use case** - Extract QueryOptions, add business filters
+4. **Update handler** - Parse, validate whitelists, execute use case
+5. **Wire up in DI container** - Register use case and handler
+
+**See [QUERY_GUIDE.md](./QUERY_GUIDE.md) for detailed step-by-step implementation guide.**
+
+---
 
 ## Request Flow
 

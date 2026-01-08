@@ -8,11 +8,13 @@ import (
 
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/pkg/errors"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 type ActivityRepository struct {
-	db      DBConn
-	tagRepo *TagRepository
+	db       DBConn
+	tagRepo  *TagRepository
+	registry *query.RelationshipRegistry
 }
 
 type ActivityStats struct {
@@ -24,9 +26,29 @@ type ActivityStats struct {
 }
 
 func NewActivityRepository(db DBConn, tagRepo *TagRepository) *ActivityRepository {
+	// Initialize RelationshipRegistry for auto-JOIN support
+	registry := query.NewRelationshipRegistry("activities")
+
+	// Register Many-to-Many relationship: activities <-> tags
+	registry.Register(query.ManyToManyRelationship(
+		"tags",          // Relationship name (users write: tags.name)
+		"tags",          // Target table
+		"activity_tags", // Junction table
+		"activity_id",   // FK to activities
+		"tag_id",        // FK to tags
+	))
+
+	// Register Many-to-One relationship: activities -> users
+	registry.Register(query.ManyToOneRelationship(
+		"user",    // Relationship name (users write: user.username)
+		"users",   // Target table
+		"user_id", // FK in activities table
+	))
+
 	return &ActivityRepository{
-		db:      db,
-		tagRepo: tagRepo,
+		db:       db,
+		tagRepo:  tagRepo,
+		registry: registry,
 	}
 }
 
@@ -429,17 +451,16 @@ func (ar *ActivityRepository) CreateWithTags(ctx context.Context, activity *mode
 
 func (ar *ActivityRepository) GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error) {
 	query := `
-		  SELECT 
-            activities.id, activities.user_id, activities.activity_type, activities.title, 
-            activities.description, activities.duration_minutes, activities.distance_km, 
-            activities.calories_burned, activities.notes, activities.activity_date, 
+		  SELECT
+            activities.id, activities.user_id, activities.activity_type, activities.title,
+            activities.description, activities.duration_minutes, activities.distance_km,
+            activities.calories_burned, activities.notes, activities.activity_date,
             activities.created_at, activities.updated_at,
             COALESCE(tags.id, 0) as tag_id, COALESCE(tags.name, '') as tag_name
-        FROM activities 
+        FROM activities
         LEFT JOIN activity_tags ON activities.id = activity_tags.activity_id
         LEFT JOIN tags ON activity_tags.tag_id = tags.id
         WHERE activities.user_id = $1
-       --  ORDER BY activities.id
 	`
 
 	args := []interface{}{userID}
@@ -543,4 +564,73 @@ func (ar *ActivityRepository) GetActivitiesWithTags(ctx context.Context, userID 
 	fmt.Println("✅ Activities fetched successfully!")
 
 	return activities, nil
+}
+
+// scanActivity is a reusable function to scan a single activity row
+// This is used by both legacy methods and the new dynamic filtering approach
+func (ar *ActivityRepository) scanActivity(rows *sql.Rows) (*models.Activity, error) {
+	activity := &models.Activity{}
+	err := rows.Scan(
+		&activity.ID,
+		&activity.UserID,
+		&activity.ActivityType,
+		&activity.Title,
+		&activity.Description,
+		&activity.DurationMinutes,
+		&activity.DistanceKm,
+		&activity.CaloriesBurned,
+		&activity.Notes,
+		&activity.ActivityDate,
+		&activity.CreatedAt,
+		&activity.UpdatedAt,
+	)
+	return activity, err
+}
+
+// ListActivitiesWithQuery uses the new dynamic filtering pattern with QueryOptions
+// This method leverages the generic FindAndPaginate function for flexible, type-safe queries.
+//
+// Supports automatic JOIN detection using natural column names:
+//   - filter[tags.name]=cardio → Automatically JOINs tags table and filters by tag name
+//   - filter[user.username]=john → Automatically JOINs users table and filters by username
+//   - search[tags.name]=run → Automatically JOINs and searches tag names
+//   - order[tags.name]=ASC → Automatically JOINs and orders by tag name
+//
+// Example usage in handler:
+//   opts := &query.QueryOptions{
+//       Page: 1,
+//       Limit: 20,
+//       Filter: map[string]interface{}{
+//           "activity_type": "running",
+//           "user_id": 123,
+//           "tags.name": "cardio",  // Natural column name - auto-JOINs!
+//       },
+//       Search: map[string]interface{}{
+//           "title": "morning",
+//           "tags.name": "run",     // Auto-JOINs for search too!
+//       },
+//       Order: map[string]string{
+//           "created_at": "DESC",
+//           "tags.name": "ASC",     // Auto-JOINs for ordering!
+//       },
+//   }
+//   result, err := repo.ListActivitiesWithQuery(ctx, opts)
+func (ar *ActivityRepository) ListActivitiesWithQuery(
+	ctx context.Context,
+	opts *query.QueryOptions,
+) (*query.PaginatedResult, error) {
+	// Auto-generate JOINs based on relationship column names
+	// The registry detects columns like "tags.name" and "user.username"
+	// and automatically generates the appropriate JOINs
+	joins := ar.registry.GenerateJoins(opts)
+
+	// Use the generic FindAndPaginate function with auto-generated JOINs
+	return FindAndPaginate[models.Activity](
+		ctx,
+		ar.db,
+		"activities",
+		opts,
+		ar.scanActivity,
+		joins...,
+	)
 }

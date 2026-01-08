@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,33 +9,54 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
+	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/validator"
 	appErrors "github.com/valentinesamuel/activelog/pkg/errors"
+	"github.com/valentinesamuel/activelog/pkg/query"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
-// ActivityRepositoryInterface defines the interface for activity repository operations
-type ActivityRepositoryInterface interface {
-	Create(ctx context.Context, tx repository.TxConn, activity *models.Activity) error
-	GetByID(ctx context.Context, id int64) (*models.Activity, error)
-	GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error)
-	Count(userID int) (int, error)
-	Update(ctx context.Context, tx repository.TxConn, id int, activity *models.Activity) error
-	Delete(ctx context.Context, tx repository.TxConn, id int, userID int) error
-	GetStats(userID int, startDate, endDate *time.Time) (*repository.ActivityStats, error)
-}
-
+// ActivityHandler uses the broker pattern for use case orchestration
+// All operations flow through broker → use cases for consistency
 type ActivityHandler struct {
-	repo ActivityRepositoryInterface
+	broker               *broker.Broker
+	repo                 repository.ActivityRepositoryInterface
+	createActivityUC     broker.UseCase
+	getActivityUC        broker.UseCase
+	listActivitiesUC     broker.UseCase
+	updateActivityUC     broker.UseCase
+	deleteActivityUC     broker.UseCase
+	getActivityStatsUC   broker.UseCase
 }
 
-func NewActivityHandler(repo ActivityRepositoryInterface) *ActivityHandler {
-	return &ActivityHandler{repo: repo}
+// NewActivityHandler creates a handler with broker pattern
+func NewActivityHandler(
+	brokerInstance *broker.Broker,
+	repo repository.ActivityRepositoryInterface,
+	createActivityUC broker.UseCase,
+	getActivityUC broker.UseCase,
+	listActivitiesUC broker.UseCase,
+	updateActivityUC broker.UseCase,
+	deleteActivityUC broker.UseCase,
+	getActivityStatsUC broker.UseCase,
+) *ActivityHandler {
+	return &ActivityHandler{
+		broker:             brokerInstance,
+		repo:               repo,
+		createActivityUC:   createActivityUC,
+		getActivityUC:      getActivityUC,
+		listActivitiesUC:   listActivitiesUC,
+		updateActivityUC:   updateActivityUC,
+		deleteActivityUC:   deleteActivityUC,
+		getActivityStatsUC: getActivityStatsUC,
+	}
 }
 
-func (a *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request) {
+// CreateActivity handles activity creation using broker pattern
+// Similar to kuja_user_ms: shopSignin method (line 316-336)
+func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req models.CreateActivityRequest
@@ -46,6 +66,7 @@ func (a *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Validate request
 	err := validator.Validate(&req)
 	if err != nil {
 		validationErrors := validator.FormatValidationErrors(err)
@@ -54,34 +75,35 @@ func (a *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":  "Validation failed",
 			"fields": validationErrors,
+		})
+		return
+	}
+
+	// Execute use case through broker
+	// Pattern: broker.runUsecases([useCase], input)
+	result, err := h.broker.RunUseCases(
+		ctx,
+		[]broker.UseCase{h.createActivityUC},
+		map[string]interface{}{
+			"user_id": 1, // TODO: Get from auth context
+			"request": &req,
 		},
-		)
-		return
-	}
+	)
 
-	activity := &models.Activity{
-		UserID:          1,
-		ActivityType:    req.ActivityType,
-		Title:           req.Title,
-		Description:     req.Description,
-		DurationMinutes: req.DurationMinutes,
-		DistanceKm:      req.DistanceKm,
-		CaloriesBurned:  req.CaloriesBurned,
-		Notes:           req.Notes,
-		ActivityDate:    req.ActivityDate,
-	}
-
-	if err := a.repo.Create(ctx, nil, activity); err != nil {
+	if err != nil {
 		log.Error().Err(err).Msg("❌ Failed to create activity")
-		response.Error(w, http.StatusInternalServerError, "❌ Failed to create activity")
+		response.Error(w, http.StatusInternalServerError, "Failed to create activity")
 		return
 	}
 
-	log.Info().Int("activityId", int(activity.ID)).Msg("✅ Activity Created")
+	// Extract activity from result
+	activity := result["activity"]
+	log.Info().Interface("activityId", result["activity_id"]).Msg("✅ Activity Created")
 	response.SendJSON(w, http.StatusCreated, activity)
 }
 
-func (a *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
+// GetActivity fetches a single activity using broker pattern
+func (h *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	vars := mux.Vars(r)
@@ -91,7 +113,15 @@ func (a *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activity, err := a.repo.GetByID(ctx, int64(id))
+	// Execute use case through broker (consistent with other operations)
+	result, err := h.broker.RunUseCases(
+		ctx,
+		[]broker.UseCase{h.getActivityUC},
+		map[string]interface{}{
+			"activity_id": int64(id),
+		},
+	)
+
 	if err != nil {
 		if errors.Is(err, appErrors.ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "Activity not found")
@@ -102,73 +132,134 @@ func (a *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusInternalServerError, "Failed to fetch activity")
 		return
 	}
+
+	activity := result["activity"]
 	response.SendJSON(w, http.StatusOK, activity)
 }
 
-func (a *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request) {
-
-	UserID := 1
+// ListActivities fetches activities using dynamic filtering with QueryOptions
+// Supports flexible filtering, searching, sorting, and pagination via URL parameters:
+//   - filter[column]=value - Filter by exact match (e.g., filter[activity_type]=running)
+//   - filter[tags]=value - Filter by tag name (automatically JOINs tags table)
+//   - search[column]=value - Case-insensitive search (e.g., search[title]=morning)
+//   - order[column]=ASC|DESC - Sort results (e.g., order[created_at]=DESC)
+//   - page=N - Page number (default: 1)
+//   - limit=N - Items per page (default: 10, max: 100)
+//
+// Example URLs:
+//   - /activities?filter[activity_type]=running&page=1&limit=20
+//   - /activities?filter[tags]=cardio&search[title]=morning&order[created_at]=DESC
+//   - /activities?filter[activity_type]=[running,cycling]&limit=50
+func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request) {
+	UserID := 1 // TODO: Get from auth context
 	ctx := r.Context()
-	filters := models.ActivityFilters{
-		ActivityType: r.URL.Query().Get("type"),
-		Limit:        10,
-		Offset:       0,
+
+	// Parse query parameters into QueryOptions
+	queryOpts, err := query.ParseQueryParams(r.URL.Query())
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid query parameters")
+		return
 	}
 
-	parsedFilters := parseFilters(r, &filters)
+	// Define whitelists for security (CRITICAL: Only allow safe columns)
+	allowedFilters := []string{
+		// Direct columns (main table)
+		"activity_type",
+		"duration_minutes",
+		"distance_km",
+		"calories_burned",
+		"activity_date",
+		"created_at",
+		"updated_at",
 
-	activities, err := a.repo.GetActivitiesWithTags(ctx, UserID, parsedFilters)
+		// Relationship columns (natural names - auto-JOINs!)
+		"tags.name", // Filter by tag name - automatically JOINs tags table
+		"tags.id",   // Filter by tag ID
+	}
+
+	allowedSearch := []string{
+		// Direct columns
+		"title",
+		"description",
+		"notes",
+
+		// Relationship columns (natural names - auto-JOINs!)
+		"tags.name", // Search tag names
+	}
+
+	allowedOrder := []string{
+		// Direct columns
+		"created_at",
+		"updated_at",
+		"activity_date",
+		"duration_minutes",
+		"distance_km",
+		"calories_burned",
+
+		// Relationship columns (natural names - auto-JOINs!)
+		"tags.name", // Order by tag name alphabetically
+	}
+
+	// Operator whitelisting (v1.1.0+)
+	// Define which operators are allowed for each column
+	operatorWhitelists := query.OperatorWhitelist{
+		// Direct columns - comparison operators
+		"activity_date":    query.ComparisonOperators(), // All 6: eq, ne, gt, gte, lt, lte
+		"distance_km":      query.ComparisonOperators(),
+		"duration_minutes": query.ComparisonOperators(),
+		"calories_burned":  query.ComparisonOperators(),
+		"created_at":       query.ComparisonOperators(),
+
+		// Direct columns - equality only
+		"activity_type": query.EqualityOperators(), // eq, ne only
+
+		// Relationship columns
+		"tags.name": query.EqualityOperators(), // eq, ne for tag names
+		"tags.id":   query.StrictEqualityOnly(), // eq only for tag IDs
+	}
+
+	// Validate query options against whitelists
+	if err := query.ValidateQueryOptions(queryOpts, allowedFilters, allowedSearch, allowedOrder); err != nil {
+		log.Warn().Err(err).Msg("❌ Invalid query parameters")
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Validate operator-based filters (v1.1.0+)
+	if err := query.ValidateFilterConditions(queryOpts, allowedFilters, operatorWhitelists); err != nil {
+		log.Warn().Err(err).Msg("❌ Invalid filter operator")
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Execute use case through broker with QueryOptions
+	result, err := h.broker.RunUseCases(
+		ctx,
+		[]broker.UseCase{h.listActivitiesUC},
+		map[string]interface{}{
+			"user_id":       UserID,
+			"query_options": queryOpts, // NEW: Pass QueryOptions instead of legacy filters
+		},
+	)
+
 	if err != nil {
 		log.Error().Err(err).Msg("❌ Failed to list activities")
 		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
 		return
 	}
 
-	total, err := a.repo.Count(UserID)
-	if err != nil {
-		log.Err(err).Msg("❌ Failed to count activities")
-		total = len(activities)
-	}
+	// Extract paginated result
+	paginatedResult := result["result"].(*query.PaginatedResult)
 
+	// Return standardized response with pagination metadata
 	response.SendJSON(w, http.StatusOK, map[string]interface{}{
-		"activities": activities,
-		"count":      len(activities),
-		"total":      total,
-		"limit":      filters.Limit,
-		"offset":     filters.Offset,
+		"data": paginatedResult.Data,
+		"meta": paginatedResult.Meta,
 	})
 }
 
-func parseFilters(r *http.Request, filters *models.ActivityFilters) models.ActivityFilters {
-	// parse limit
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
-			if limit > 100 {
-				limit = 100
-			}
-			filters.Limit = limit
-		}
-	}
-	// Parse offset
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
-			filters.Offset = offset
-		}
-	}
-	// Parse date range
-	if startStr := r.URL.Query().Get("startDate"); startStr != "" {
-		if startDate, err := time.Parse(time.RFC3339, startStr); err == nil {
-			filters.StartDate = &startDate
-		}
-	}
-	if endStr := r.URL.Query().Get("endDate"); endStr != "" {
-		if endDate, err := time.Parse(time.RFC3339, endStr); err == nil {
-			filters.EndDate = &endDate
-		}
-	}
-	return *filters
-}
-
+// UpdateActivity handles activity updates using broker pattern
+// Similar to kuja_user_ms: resetShopPassword method (line 373-380)
 func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	vars := mux.Vars(r)
@@ -196,50 +287,29 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Fetch existing activity
-	userID := 1
-	activity, err := h.repo.GetByID(ctx, int64(id))
-	if err != nil || activity.UserID != userID {
-		response.Error(w, http.StatusNotFound, "Activity not found")
-		return
-	}
+	// Execute use case through broker
+	result, err := h.broker.RunUseCases(
+		ctx,
+		[]broker.UseCase{h.updateActivityUC},
+		map[string]interface{}{
+			"user_id":     1, // TODO: Get from auth context
+			"activity_id": id,
+			"request":     &req,
+		},
+	)
 
-	// Apply updates
-	if req.ActivityType != nil {
-		activity.ActivityType = *req.ActivityType
-	}
-	if req.Title != nil {
-		activity.Title = *req.Title
-	}
-	if req.Description != nil {
-		activity.Description = *req.Description
-	}
-	if req.DurationMinutes != nil {
-		activity.DurationMinutes = *req.DurationMinutes
-	}
-	if req.DistanceKm != nil {
-		activity.DistanceKm = *req.DistanceKm
-	}
-	if req.CaloriesBurned != nil {
-		activity.CaloriesBurned = *req.CaloriesBurned
-	}
-	if req.Notes != nil {
-		activity.Notes = *req.Notes
-	}
-	if req.ActivityDate != nil {
-		activity.ActivityDate = *req.ActivityDate
-	}
-
-	// Save
-	if err := h.repo.Update(ctx, nil, id, activity); err != nil {
+	if err != nil {
 		log.Error().Err(err).Msg("Failed to update activity")
 		response.Error(w, http.StatusInternalServerError, "Failed to update activity")
 		return
 	}
 
+	activity := result["activity"]
 	response.SendJSON(w, http.StatusOK, activity)
 }
 
+// DeleteActivity handles activity deletion using broker pattern
+// Similar to kuja_user_ms: logout method (line 413-434)
 func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	vars := mux.Vars(r)
@@ -249,9 +319,19 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	userID := 1
+	userID := 1 // TODO: Get from auth context
 
-	if err := h.repo.Delete(ctx, nil, id, userID); err != nil {
+	// Execute use case through broker
+	_, err = h.broker.RunUseCases(
+		ctx,
+		[]broker.UseCase{h.deleteActivityUC},
+		map[string]interface{}{
+			"user_id":     userID,
+			"activity_id": id,
+		},
+	)
+
+	if err != nil {
 		log.Error().Err(err).Int("id", id).Msg("Failed to delete activity")
 		response.Error(w, http.StatusNotFound, "Activity not found")
 		return
@@ -260,29 +340,42 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GetStats fetches activity statistics using broker pattern
 func (h *ActivityHandler) GetStats(w http.ResponseWriter, r *http.Request) {
-	userID := 1
+	ctx := r.Context()
+	userID := 1 // TODO: Get from auth context
 
-	var startDate, endDate *time.Time
+	// Parse query parameters
+	input := map[string]interface{}{
+		"user_id": userID,
+	}
 
 	if startStr := r.URL.Query().Get("startDate"); startStr != "" {
 		if parsed, err := time.Parse(time.RFC3339, startStr); err == nil {
-			startDate = &parsed
+			input["start_date"] = parsed
 		}
 	}
 
 	if endStr := r.URL.Query().Get("endDate"); endStr != "" {
 		if parsed, err := time.Parse(time.RFC3339, endStr); err == nil {
-			endDate = &parsed
+			input["end_date"] = parsed
 		}
 	}
 
-	stats, err := h.repo.GetStats(userID, startDate, endDate)
+	// Execute use case through broker
+	result, err := h.broker.RunUseCases(
+		ctx,
+		[]broker.UseCase{h.getActivityStatsUC},
+		input,
+	)
+
 	if err != nil {
 		log.Error().Err(err).Msg("❌ Failed to get stats")
 		response.Error(w, http.StatusInternalServerError, "Failed to get statistics")
 		return
 	}
+
+	stats := result["stats"]
 
 	response.SendJSON(w, http.StatusOK, stats)
 }

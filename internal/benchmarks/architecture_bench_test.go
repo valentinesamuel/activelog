@@ -12,6 +12,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 // Mock repository for benchmarking
@@ -62,6 +63,13 @@ func (m *mockActivityRepo) CreateWithTags(ctx context.Context, activity *models.
 	return nil
 }
 
+func (m *mockActivityRepo) ListActivitiesWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error) {
+	return &query.PaginatedResult{
+		Data: []*models.Activity{},
+		Meta: query.PaginationMeta{},
+	}, nil
+}
+
 type mockTagRepo struct{}
 
 func (m *mockTagRepo) GetByID(ctx context.Context, id int64) (*models.Tag, error) {
@@ -100,6 +108,13 @@ func (m *mockTagRepo) LinkActivityTag(ctx context.Context, tx repository.TxConn,
 
 func (m *mockTagRepo) ListByUser(ctx context.Context, userID int) ([]*models.Tag, error) {
 	return nil, nil
+}
+
+func (m *mockTagRepo) ListTagsWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error) {
+	return &query.PaginatedResult{
+		Data: []*models.Tag{},
+		Meta: query.PaginationMeta{},
+	}, nil
 }
 
 // =============================================================================

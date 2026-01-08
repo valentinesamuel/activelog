@@ -8,6 +8,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 // ListActivitiesUseCase handles fetching activities with filters
@@ -33,7 +34,8 @@ func NewListActivitiesUseCase(
 // No RequiresTransaction() method = defaults to non-transactional
 // Read operations don't need transaction overhead for performance
 
-// Execute retrieves activities with optional filters
+// Execute retrieves activities with dynamic filtering using QueryOptions
+// This is the NEW approach that supports flexible filtering, searching, and sorting
 // Decision: Use repo directly for simple list operations (no business logic needed)
 func (uc *ListActivitiesUseCase) Execute(
 	ctx context.Context,
@@ -46,18 +48,39 @@ func (uc *ListActivitiesUseCase) Execute(
 		return nil, fmt.Errorf("user_id is required")
 	}
 
-	// Extract filters (optional)
+	// Check if using new QueryOptions approach or legacy filters
+	if queryOpts, exists := input["query_options"]; exists {
+		// NEW APPROACH: Dynamic filtering with QueryOptions
+		opts, ok := queryOpts.(*query.QueryOptions)
+		if !ok {
+			return nil, fmt.Errorf("invalid query_options type")
+		}
+
+		// SECURITY: Add user_id filter for multi-tenancy
+		// This ensures users can only see their own activities
+		opts.Filter["user_id"] = userID
+
+		// Use new dynamic filtering method
+		result, err := uc.repo.ListActivitiesWithQuery(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list activities: %w", err)
+		}
+
+		// Return paginated result
+		return map[string]interface{}{
+			"result": result,
+		}, nil
+	}
+
+	// LEGACY APPROACH: Backward compatibility with old ActivityFilters
 	var filters models.ActivityFilters
 	if filtersInput, exists := input["filters"]; exists {
 		if f, ok := filtersInput.(models.ActivityFilters); ok {
 			filters = f
-		} else {
-			return nil, fmt.Errorf("invalid filters type")
 		}
 	}
 
-	// DECISION: Use repo directly for simple list queries - no validation or business logic needed
-	// Alternative: Could use service if we needed permission filtering or data enrichment
+	// Use old method for backward compatibility
 	activities, err := uc.repo.ListByUserWithFilters(userID, filters)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list activities: %w", err)
@@ -69,10 +92,7 @@ func (uc *ListActivitiesUseCase) Execute(
 		return nil, fmt.Errorf("failed to count activities: %w", err)
 	}
 
-	// Example of using both: Could use service for analytics enrichment if needed
-	// stats, _ := uc.service.CalculateUserStats(ctx, userID)
-
-	// Return result
+	// Return result in legacy format
 	return map[string]interface{}{
 		"activities": activities,
 		"total":      totalCount,

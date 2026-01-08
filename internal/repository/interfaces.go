@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/valentinesamuel/activelog/internal/models"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 // DBConn is an interface that abstracts database operations
@@ -51,6 +52,7 @@ type ActivityRepositoryInterface interface {
 	GetStats(userID int, startDate, endDate *time.Time) (*ActivityStats, error)
 	CreateWithTags(ctx context.Context, activity *models.Activity, tags []*models.Tag) error
 	GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error)
+	ListActivitiesWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error)
 }
 
 //go:generate mockgen -destination=mocks/mock_user_repository.go -package=mocks github.com/valentinesamuel/activelog/internal/repository UserRepositoryInterface
@@ -64,4 +66,5 @@ type TagRepositoryInterface interface {
 	GetOrCreateTag(ctx context.Context, tx TxConn, name string) (int, error)
 	GetTagsForActivity(ctx context.Context, activityID int) ([]*models.Tag, error)
 	LinkActivityTag(ctx context.Context, tx TxConn, activityID int, tagID int) error
+	ListTagsWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error)
 }

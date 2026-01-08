@@ -11,6 +11,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 // Mock repository for benchmarking
@@ -59,6 +60,13 @@ func (m *mockActivityRepo) CreateWithTags(ctx context.Context, activity *models.
 	return nil
 }
 
+func (m *mockActivityRepo) ListActivitiesWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error) {
+	return &query.PaginatedResult{
+		Data: []*models.Activity{},
+		Meta: query.PaginationMeta{},
+	}, nil
+}
+
 // Mock tag repository for benchmarking
 type mockTagRepo struct{}
 
@@ -95,10 +103,16 @@ func (m *mockTagRepo) ListByUser(ctx context.Context, userID int) ([]*models.Tag
 	return nil, nil
 }
 
-// Benchmark: Original approach (direct repository call)
-func BenchmarkOriginalHandler_CreateActivity(b *testing.B) {
+func (m *mockTagRepo) ListTagsWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error) {
+	return &query.PaginatedResult{
+		Data: []*models.Tag{},
+		Meta: query.PaginationMeta{},
+	}, nil
+}
+
+// Benchmark: Direct repository call (baseline)
+func BenchmarkDirectRepositoryCall_CreateActivity(b *testing.B) {
 	repo := &mockActivityRepo{}
-	_ = NewActivityHandler(repo) // Handler created but not used in benchmark
 
 	ctx := context.Background()
 	req := &models.CreateActivityRequest{

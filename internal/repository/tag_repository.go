@@ -2,10 +2,13 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	_ "github.com/lib/pq"
+	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/pkg/logger"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 type TagRepository struct {
@@ -96,4 +99,48 @@ func (tr *TagRepository) LinkActivityTag(ctx context.Context, activityID, tagID 
 	fmt.Println("✅ Activity tag created successfully!")
 
 	return nil
+}
+
+// scanTag is a reusable function to scan a single tag row
+// This is used by the new dynamic filtering approach
+func (tr *TagRepository) scanTag(rows *sql.Rows) (*models.Tag, error) {
+	tag := &models.Tag{}
+	err := rows.Scan(
+		&tag.ID,
+		&tag.Name,
+		&tag.CreatedAt,
+	)
+	return tag, err
+}
+
+// ListTagsWithQuery uses the new dynamic filtering pattern with QueryOptions
+// This method leverages the generic FindAndPaginate function for flexible, type-safe queries.
+//
+// Example usage in handler:
+//   opts := &query.QueryOptions{
+//       Page: 1,
+//       Limit: 20,
+//       Filter: map[string]interface{}{
+//           "name": "cardio",
+//       },
+//       Search: map[string]interface{}{
+//           "name": "run",
+//       },
+//       Order: map[string]string{
+//           "name": "ASC",
+//       },
+//   }
+//   result, err := repo.ListTagsWithQuery(ctx, opts)
+func (tr *TagRepository) ListTagsWithQuery(
+	ctx context.Context,
+	opts *query.QueryOptions,
+) (*query.PaginatedResult, error) {
+	// Use the generic FindAndPaginate function with our scanTag function
+	return FindAndPaginate[models.Tag](
+		ctx,
+		tr.db,
+		"tags",
+		opts,
+		tr.scanTag,
+	)
 }

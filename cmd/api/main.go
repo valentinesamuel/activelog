@@ -25,16 +25,15 @@ import (
 
 // Application holds all dependencies
 type Application struct {
-	Config            *config.Config
-	DB                repository.DBConn
-	DBCloser          interface{ Close() error } // For cleanup during shutdown
-	Container         *container.Container        // DI container
-	Broker            *broker.Broker              // Use case orchestrator
-	HealthHandler     *handlers.HealthHandler
-	ActivityHandler   *handlers.ActivityHandler   // Original handler (legacy)
-	ActivityHandlerV2 *handlers.ActivityHandlerV2 // Broker-based handler (new pattern)
-	UserHandler       *handlers.UserHandler
-	StatsHandler      *handlers.StatsHandler
+	Config          *config.Config
+	DB              repository.DBConn
+	DBCloser        interface{ Close() error } // For cleanup during shutdown
+	Container       *container.Container       // DI container
+	Broker          *broker.Broker             // Use case orchestrator
+	HealthHandler   *handlers.HealthHandler
+	ActivityHandler *handlers.ActivityHandler
+	UserHandler     *handlers.UserHandler
+	StatsHandler    *handlers.StatsHandler
 }
 
 func main() {
@@ -74,8 +73,7 @@ func run() error {
 }
 
 // setupDependencies initializes all repositories and handlers using DI container
-// Following kuja_user_ms pattern: broker + use cases + handlers
-// All dependencies are now registered and resolved through the centralized container
+// All dependencies are registered and resolved through the centralized container
 func (app *Application) setupDependencies() {
 	// Initialize container with all dependencies
 	app.Container = setupContainer(app.DB)
@@ -85,14 +83,9 @@ func (app *Application) setupDependencies() {
 
 	// Resolve handlers from container
 	app.HealthHandler = app.Container.MustResolve("healthHandler").(*handlers.HealthHandler)
-	app.ActivityHandlerV2 = app.Container.MustResolve("activityHandler").(*handlers.ActivityHandlerV2)
+	app.ActivityHandler = app.Container.MustResolve("activityHandler").(*handlers.ActivityHandler)
 	app.UserHandler = app.Container.MustResolve("userHandler").(*handlers.UserHandler)
 	app.StatsHandler = app.Container.MustResolve("statsHandler").(*handlers.StatsHandler)
-
-	// Keep legacy ActivityHandler for backward compatibility
-	// This handler doesn't use broker pattern yet
-	activityRepo := app.Container.MustResolve("activityRepo").(repository.ActivityRepositoryInterface)
-	app.ActivityHandler = handlers.NewActivityHandler(activityRepo)
 }
 
 // setupRoutes configures all application routes and middleware
@@ -114,11 +107,8 @@ func (app *Application) setupRoutes() http.Handler {
 	// Auth routes
 	app.registerAuthRoutes(api)
 
-	// Activity routes (original)
+	// Activity routes
 	app.registerActivityRoutes(api)
-
-	// Activity routes (broker pattern) - v2 endpoints
-	app.registerActivityRoutesV2(api)
 
 	// Stats routes
 	app.registerStatsRoutes(api)
@@ -141,7 +131,7 @@ func (app *Application) registerAuthRoutes(router *mux.Router) {
 	router.HandleFunc("/auth/login", app.UserHandler.LoginUser).Methods("POST")
 }
 
-// registerActivityRoutes registers activity CRUD routes (original)
+// registerActivityRoutes registers activity CRUD routes
 func (app *Application) registerActivityRoutes(router *mux.Router) {
 	// router.Use(middleware.AuthMiddleware) // TODO: Enable when auth is ready
 	router.HandleFunc("/activities", app.ActivityHandler.ListActivities).Methods("GET")
@@ -150,21 +140,6 @@ func (app *Application) registerActivityRoutes(router *mux.Router) {
 	router.HandleFunc("/activities/{id}", app.ActivityHandler.GetActivity).Methods("GET")
 	router.HandleFunc("/activities/{id}", app.ActivityHandler.UpdateActivity).Methods("PATCH")
 	router.HandleFunc("/activities/{id}", app.ActivityHandler.DeleteActivity).Methods("DELETE")
-}
-
-// registerActivityRoutesV2 registers activity routes using broker pattern
-// Similar to kuja_user_ms auth routes (line 122-677)
-func (app *Application) registerActivityRoutesV2(router *mux.Router) {
-	// V2 routes with broker pattern
-	v2 := router.PathPrefix("/v2").Subrouter()
-	// v2.Use(middleware.AuthMiddleware) // TODO: Enable when auth is ready
-
-	v2.HandleFunc("/activities", app.ActivityHandlerV2.ListActivities).Methods("GET")
-	v2.HandleFunc("/activities", app.ActivityHandlerV2.CreateActivity).Methods("POST")
-	v2.HandleFunc("/activities/stats", app.ActivityHandlerV2.GetStats).Methods("GET")
-	v2.HandleFunc("/activities/{id}", app.ActivityHandlerV2.GetActivity).Methods("GET")
-	v2.HandleFunc("/activities/{id}", app.ActivityHandlerV2.UpdateActivity).Methods("PATCH")
-	v2.HandleFunc("/activities/{id}", app.ActivityHandlerV2.DeleteActivity).Methods("DELETE")
 }
 
 // registerStatsRoutes registers statistics and analytics routes

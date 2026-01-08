@@ -5,6 +5,7 @@ import (
 
 	"github.com/valentinesamuel/activelog/internal/application/activity/usecases"
 	statsUsecases "github.com/valentinesamuel/activelog/internal/application/stats/usecases"
+	tagUsecases "github.com/valentinesamuel/activelog/internal/application/tag/usecases"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/handlers"
@@ -32,6 +33,7 @@ func setupContainer(db repository.DBConn) *container.Container {
 
 	// Register use cases
 	registerActivityUseCases(c)
+	registerTagUseCases(c)
 	registerStatsUseCases(c)
 
 	// Register handlers
@@ -144,6 +146,16 @@ func registerActivityUseCases(c *container.Container) {
 	})
 }
 
+// registerTagUseCases registers all tag-related use cases
+func registerTagUseCases(c *container.Container) {
+	// Read operations (non-transactional)
+	// Tags are typically read-only operations with dynamic filtering
+	c.Register("listTagsUC", func(c *container.Container) (interface{}, error) {
+		repo := c.MustResolve("tagRepo").(repository.TagRepositoryInterface)
+		return tagUsecases.NewListTagsUseCase(repo), nil
+	})
+}
+
 // registerStatsUseCases registers all stats-related use cases
 func registerStatsUseCases(c *container.Container) {
 	// All stats operations are read-only (non-transactional)
@@ -186,7 +198,7 @@ func registerHandlers(c *container.Container) {
 		return handlers.NewUserHandler(repo), nil
 	})
 
-	// Activity handler V2 (broker pattern with all use cases)
+	// Activity handler (broker pattern with all use cases)
 	c.Register("activityHandler", func(c *container.Container) (interface{}, error) {
 		brokerInstance := c.MustResolve("broker").(*broker.Broker)
 		repo := c.MustResolve("activityRepo").(repository.ActivityRepositoryInterface)
@@ -199,7 +211,7 @@ func registerHandlers(c *container.Container) {
 		deleteUC := c.MustResolve("deleteActivityUC").(broker.UseCase)
 		getStatsUC := c.MustResolve("getActivityStatsUC").(broker.UseCase)
 
-		return handlers.NewActivityHandlerV2(
+		return handlers.NewActivityHandler(
 			brokerInstance,
 			repo,
 			createUC,
