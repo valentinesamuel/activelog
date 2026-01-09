@@ -45,14 +45,13 @@ type ActivityRepositoryInterface interface {
 	Create(ctx context.Context, tx TxConn, activity *models.Activity) error
 	GetByID(ctx context.Context, id int64) (*models.Activity, error)
 	ListByUser(ctx context.Context, UserID int) ([]*models.Activity, error)
-	ListByUserWithFilters(UserID int, filters models.ActivityFilters) ([]*models.Activity, error)
 	Count(userID int) (int, error)
 	Update(ctx context.Context, tx TxConn, id int, activity *models.Activity) error
 	Delete(ctx context.Context, tx TxConn, id int, userID int) error
 	GetStats(userID int, startDate, endDate *time.Time) (*ActivityStats, error)
 	CreateWithTags(ctx context.Context, activity *models.Activity, tags []*models.Tag) error
-	GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error)
 	ListActivitiesWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error)
+	GetRegistry() *query.RelationshipRegistry
 }
 
 //go:generate mockgen -destination=mocks/mock_user_repository.go -package=mocks github.com/valentinesamuel/activelog/internal/repository UserRepositoryInterface

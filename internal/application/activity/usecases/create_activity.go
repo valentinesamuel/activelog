@@ -64,9 +64,6 @@ func (uc *CreateActivityUseCase) Execute(
 		return nil, fmt.Errorf("failed to create activity: %w", err)
 	}
 
-	// Example of using both: Could use repo for additional operations if needed
-	// tags, _ := uc.repo.GetActivitiesWithTags(ctx, userID, filters)
-
 	// Return result
 	return map[string]interface{}{
 		"activity":    activity,

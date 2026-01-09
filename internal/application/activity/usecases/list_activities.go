@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
 	"github.com/valentinesamuel/activelog/pkg/query"
@@ -48,54 +47,29 @@ func (uc *ListActivitiesUseCase) Execute(
 		return nil, fmt.Errorf("user_id is required")
 	}
 
-	// Check if using new QueryOptions approach or legacy filters
-	if queryOpts, exists := input["query_options"]; exists {
-		// NEW APPROACH: Dynamic filtering with QueryOptions
-		opts, ok := queryOpts.(*query.QueryOptions)
-		if !ok {
-			return nil, fmt.Errorf("invalid query_options type")
-		}
-
-		// SECURITY: Add user_id filter for multi-tenancy
-		// This ensures users can only see their own activities
-		opts.Filter["user_id"] = userID
-
-		// Use new dynamic filtering method
-		result, err := uc.repo.ListActivitiesWithQuery(ctx, opts)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list activities: %w", err)
-		}
-
-		// Return paginated result
-		return map[string]interface{}{
-			"result": result,
-		}, nil
+	// Extract QueryOptions (required)
+	queryOpts, exists := input["query_options"]
+	if !exists {
+		return nil, fmt.Errorf("query_options is required")
 	}
 
-	// LEGACY APPROACH: Backward compatibility with old ActivityFilters
-	var filters models.ActivityFilters
-	if filtersInput, exists := input["filters"]; exists {
-		if f, ok := filtersInput.(models.ActivityFilters); ok {
-			filters = f
-		}
+	opts, ok := queryOpts.(*query.QueryOptions)
+	if !ok {
+		return nil, fmt.Errorf("invalid query_options type")
 	}
 
-	// Use old method for backward compatibility
-	activities, err := uc.repo.ListByUserWithFilters(userID, filters)
+	// SECURITY: Add user_id filter for multi-tenancy
+	// This ensures users can only see their own activities
+	opts.Filter["user_id"] = userID
+
+	// Use dynamic filtering with RelationshipRegistry v3.0
+	result, err := uc.repo.ListActivitiesWithQuery(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list activities: %w", err)
 	}
 
-	// Get total count for pagination
-	totalCount, err := uc.repo.Count(userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count activities: %w", err)
-	}
-
-	// Return result in legacy format
+	// Return paginated result
 	return map[string]interface{}{
-		"activities": activities,
-		"total":      totalCount,
-		"count":      len(activities),
+		"result": result,
 	}, nil
 }

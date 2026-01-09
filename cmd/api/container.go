@@ -11,6 +11,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/handlers"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 // setupContainer creates and configures the DI container
@@ -46,6 +47,25 @@ func setupContainer(db repository.DBConn) *container.Container {
 func registerCoreDependencies(c *container.Container, db repository.DBConn) {
 	c.RegisterSingleton("db", db)
 	c.RegisterSingleton("rawDB", db.GetRawDB())
+
+	// Register RegistryManager (v3.0) for cross-registry path resolution
+	// This enables deep nesting like: filter[user.company.department.country]=USA
+	c.RegisterSingleton("registryManager", setupRegistryManager())
+}
+
+// setupRegistryManager creates and configures the global RegistryManager (v3.0)
+// All table registries are registered here for deep nesting support
+func setupRegistryManager() *query.RegistryManager {
+	manager := query.NewRegistryManager()
+
+	// Activities registry will be registered later (needs TagRepository)
+	// See registerRepositories() for actual registration
+
+	// Future: Register other table registries here as needed
+	// manager.RegisterTable("users", usersRegistry)
+	// manager.RegisterTable("companies", companiesRegistry)
+
+	return manager
 }
 
 // registerRepositories registers all repository factories
@@ -56,11 +76,19 @@ func registerRepositories(c *container.Container) {
 		return repository.NewTagRepository(db), nil
 	})
 
-	// Activity repository (depends on TagRepository)
+	// Activity repository (depends on TagRepository and RegistryManager)
 	c.Register("activityRepo", func(c *container.Container) (interface{}, error) {
 		db := c.MustResolve("db").(repository.DBConn)
 		tagRepo := c.MustResolve("tagRepo").(*repository.TagRepository)
-		return repository.NewActivityRepository(db, tagRepo), nil
+		manager := c.MustResolve("registryManager").(*query.RegistryManager)
+
+		// Create repository with manager support (v3.0)
+		activityRepo := repository.NewActivityRepository(db, tagRepo)
+
+		// Register this repository's registry with the manager for deep nesting
+		manager.RegisterTable("activities", activityRepo.GetRegistry())
+
+		return activityRepo, nil
 	})
 
 	// User repository

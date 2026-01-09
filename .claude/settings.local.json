@@ -17,7 +17,10 @@
       "WebFetch(domain:github.com)",
       "WebSearch",
       "Bash(ls:*)",
-      "Bash(go tool cover:*)"
+      "Bash(go tool cover:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git restore:*)"
     ]
   }
 }

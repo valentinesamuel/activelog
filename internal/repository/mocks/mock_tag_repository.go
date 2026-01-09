@@ -15,6 +15,7 @@ import (
 
 	models "github.com/valentinesamuel/activelog/internal/models"
 	repository "github.com/valentinesamuel/activelog/internal/repository"
+	query "github.com/valentinesamuel/activelog/pkg/query"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -84,4 +85,19 @@ func (m *MockTagRepositoryInterface) LinkActivityTag(ctx context.Context, tx rep
 func (mr *MockTagRepositoryInterfaceMockRecorder) LinkActivityTag(ctx, tx, activityID, tagID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkActivityTag", reflect.TypeOf((*MockTagRepositoryInterface)(nil).LinkActivityTag), ctx, tx, activityID, tagID)
+}
+
+// ListTagsWithQuery mocks base method.
+func (m *MockTagRepositoryInterface) ListTagsWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTagsWithQuery", ctx, opts)
+	ret0, _ := ret[0].(*query.PaginatedResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTagsWithQuery indicates an expected call of ListTagsWithQuery.
+func (mr *MockTagRepositoryInterfaceMockRecorder) ListTagsWithQuery(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTagsWithQuery", reflect.TypeOf((*MockTagRepositoryInterface)(nil).ListTagsWithQuery), ctx, opts)
 }

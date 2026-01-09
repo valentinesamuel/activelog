@@ -52,6 +52,12 @@ func NewActivityRepository(db DBConn, tagRepo *TagRepository) *ActivityRepositor
 	}
 }
 
+// GetRegistry returns the RelationshipRegistry for this repository (v3.0)
+// Used by RegistryManager for cross-registry path resolution
+func (ar *ActivityRepository) GetRegistry() *query.RelationshipRegistry {
+	return ar.registry
+}
+
 // Create creates a new activity
 // tx is optional - if nil, uses direct DB connection; if provided, uses the transaction
 func (ar *ActivityRepository) Create(ctx context.Context, tx TxConn, activity *models.Activity) error {
@@ -169,87 +175,6 @@ func (ar *ActivityRepository) ListByUser(ctx context.Context, UserID int) ([]*mo
 	return activities, nil
 }
 
-func (ar *ActivityRepository) ListByUserWithFilters(UserID int, filters models.ActivityFilters) ([]*models.Activity, error) {
-	query := `
-		SELECT id, user_id, activity_type, title, description, duration_minutes,
-			distance_km, calories_burned, notes, activity_date, created_at, updated_at
-		FROM activities
-		WHERE user_id = $1
-	`
-
-	args := []interface{}{UserID}
-	argsCount := 1
-
-	// add activity filter type
-	if filters.ActivityType != "" {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_type = $%d", argsCount)
-		args = append(args, filters.ActivityType)
-	}
-
-	if filters.StartDate != nil {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_date >= $%d", argsCount)
-		args = append(args, filters.StartDate)
-	}
-
-	if filters.EndDate != nil {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_date <= $%d", argsCount)
-		args = append(args, filters.EndDate)
-	}
-
-	query += " ORDER BY activity_date DESC"
-
-	// add pagination
-	if filters.Limit > 0 {
-		argsCount++
-		query += fmt.Sprintf(" LIMIT $%d", argsCount)
-		args = append(args, filters.Limit)
-	}
-
-	if filters.Offset > 0 {
-		argsCount++
-		query += fmt.Sprintf(" OFFSET $%d", argsCount)
-		args = append(args, filters.Limit)
-	}
-
-	rows, err := ar.db.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("❌ Error listing activities: %w", err)
-	}
-
-	defer rows.Close()
-
-	var activities []*models.Activity
-
-	for rows.Next() {
-		activity := &models.Activity{}
-		err := rows.Scan(
-			&activity.ID,
-			&activity.UserID,
-			&activity.ActivityType,
-			&activity.Title,
-			&activity.Description,
-			&activity.DurationMinutes,
-			&activity.DistanceKm,
-			&activity.CaloriesBurned,
-			&activity.Notes,
-			&activity.ActivityDate,
-			&activity.CreatedAt,
-			&activity.UpdatedAt,
-		)
-
-		if err != nil {
-			return nil, fmt.Errorf("❌ Error scanning activity: %w", err)
-		}
-		activities = append(activities, activity)
-	}
-
-	fmt.Println("✅ Activities fetched successfully!")
-
-	return activities, rows.Err()
-}
 
 func (ar *ActivityRepository) Count(userID int) (int, error) {
 	var count int
@@ -449,125 +374,8 @@ func (ar *ActivityRepository) CreateWithTags(ctx context.Context, activity *mode
 	})
 }
 
-func (ar *ActivityRepository) GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error) {
-	query := `
-		  SELECT
-            activities.id, activities.user_id, activities.activity_type, activities.title,
-            activities.description, activities.duration_minutes, activities.distance_km,
-            activities.calories_burned, activities.notes, activities.activity_date,
-            activities.created_at, activities.updated_at,
-            COALESCE(tags.id, 0) as tag_id, COALESCE(tags.name, '') as tag_name
-        FROM activities
-        LEFT JOIN activity_tags ON activities.id = activity_tags.activity_id
-        LEFT JOIN tags ON activity_tags.tag_id = tags.id
-        WHERE activities.user_id = $1
-	`
-
-	args := []interface{}{userID}
-	argsCount := 1
-
-	// add activity filter type
-	if filters.ActivityType != "" {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_type = $%d", argsCount)
-		args = append(args, filters.ActivityType)
-	}
-
-	if filters.StartDate != nil {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_date >= $%d", argsCount)
-		args = append(args, filters.StartDate)
-	}
-
-	if filters.EndDate != nil {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_date <= $%d", argsCount)
-		args = append(args, filters.EndDate)
-	}
-
-	query += " ORDER BY activities.id DESC"
-
-	// add pagination
-	if filters.Limit > 0 {
-		argsCount++
-		query += fmt.Sprintf(" LIMIT $%d", argsCount)
-		args = append(args, filters.Limit)
-	}
-
-	if filters.Offset > 0 {
-		argsCount++
-		query += fmt.Sprintf(" OFFSET $%d", argsCount)
-		args = append(args, filters.Limit)
-	}
-
-	rows, err := ar.db.QueryContext(ctx, query, args...)
-
-	if err != nil {
-		return nil, fmt.Errorf("❌ Error querying activities: %w", err)
-	}
-	defer rows.Close()
-
-	var activitiesMap = make(map[int]*models.Activity)
-	var activities []*models.Activity
-
-	for rows.Next() {
-		activity := &models.Activity{}
-		var tagID int
-		var tagName string
-
-		err := rows.Scan(
-			&activity.ID,
-			&activity.UserID,
-			&activity.ActivityType,
-			&activity.Title,
-			&activity.Description,
-			&activity.DurationMinutes,
-			&activity.DistanceKm,
-			&activity.CaloriesBurned,
-			&activity.Notes,
-			&activity.ActivityDate,
-			&activity.CreatedAt,
-			&activity.UpdatedAt,
-			&tagID,
-			&tagName,
-		)
-
-		if err != nil {
-			return nil, fmt.Errorf("❌ Error scanning activities: %w", err)
-		}
-
-		actID := int(activity.ID)
-		act, found := activitiesMap[actID]
-
-		if !found {
-			activity.Tags = []*models.Tag{}
-			activities = append(activities, activity)
-			act = activity
-			activitiesMap[actID] = act
-		}
-
-		if tagID > 0 {
-			act.Tags = append(act.Tags, &models.Tag{
-				BaseEntity: models.BaseEntity{
-					ID: int64(tagID),
-				},
-				Name: tagName,
-			})
-		}
-	}
-
-	if err = rows.Err(); err != nil {
-		fmt.Println("❌ Error listing activities")
-		return nil, err
-	}
-
-	fmt.Println("✅ Activities fetched successfully!")
-
-	return activities, nil
-}
-
 // scanActivity is a reusable function to scan a single activity row
-// This is used by both legacy methods and the new dynamic filtering approach
+// Used by the generic FindAndPaginate function for dynamic filtering
 func (ar *ActivityRepository) scanActivity(rows *sql.Rows) (*models.Activity, error) {
 	activity := &models.Activity{}
 	err := rows.Scan(

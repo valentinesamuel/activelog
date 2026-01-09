@@ -16,6 +16,7 @@ import (
 
 	models "github.com/valentinesamuel/activelog/internal/models"
 	repository "github.com/valentinesamuel/activelog/internal/repository"
+	query "github.com/valentinesamuel/activelog/pkg/query"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -100,21 +101,6 @@ func (mr *MockActivityRepositoryInterfaceMockRecorder) Delete(ctx, tx, id, userI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockActivityRepositoryInterface)(nil).Delete), ctx, tx, id, userID)
 }
 
-// GetActivitiesWithTags mocks base method.
-func (m *MockActivityRepositoryInterface) GetActivitiesWithTags(ctx context.Context, userID int, filters models.ActivityFilters) ([]*models.Activity, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetActivitiesWithTags", ctx, userID, filters)
-	ret0, _ := ret[0].([]*models.Activity)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetActivitiesWithTags indicates an expected call of GetActivitiesWithTags.
-func (mr *MockActivityRepositoryInterfaceMockRecorder) GetActivitiesWithTags(ctx, userID, filters any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivitiesWithTags", reflect.TypeOf((*MockActivityRepositoryInterface)(nil).GetActivitiesWithTags), ctx, userID, filters)
-}
-
 // GetByID mocks base method.
 func (m *MockActivityRepositoryInterface) GetByID(ctx context.Context, id int64) (*models.Activity, error) {
 	m.ctrl.T.Helper()
@@ -128,6 +114,20 @@ func (m *MockActivityRepositoryInterface) GetByID(ctx context.Context, id int64)
 func (mr *MockActivityRepositoryInterfaceMockRecorder) GetByID(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByID", reflect.TypeOf((*MockActivityRepositoryInterface)(nil).GetByID), ctx, id)
+}
+
+// GetRegistry mocks base method.
+func (m *MockActivityRepositoryInterface) GetRegistry() *query.RelationshipRegistry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRegistry")
+	ret0, _ := ret[0].(*query.RelationshipRegistry)
+	return ret0
+}
+
+// GetRegistry indicates an expected call of GetRegistry.
+func (mr *MockActivityRepositoryInterfaceMockRecorder) GetRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegistry", reflect.TypeOf((*MockActivityRepositoryInterface)(nil).GetRegistry))
 }
 
 // GetStats mocks base method.
@@ -145,6 +145,21 @@ func (mr *MockActivityRepositoryInterfaceMockRecorder) GetStats(userID, startDat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStats", reflect.TypeOf((*MockActivityRepositoryInterface)(nil).GetStats), userID, startDate, endDate)
 }
 
+// ListActivitiesWithQuery mocks base method.
+func (m *MockActivityRepositoryInterface) ListActivitiesWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActivitiesWithQuery", ctx, opts)
+	ret0, _ := ret[0].(*query.PaginatedResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActivitiesWithQuery indicates an expected call of ListActivitiesWithQuery.
+func (mr *MockActivityRepositoryInterfaceMockRecorder) ListActivitiesWithQuery(ctx, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActivitiesWithQuery", reflect.TypeOf((*MockActivityRepositoryInterface)(nil).ListActivitiesWithQuery), ctx, opts)
+}
+
 // ListByUser mocks base method.
 func (m *MockActivityRepositoryInterface) ListByUser(ctx context.Context, UserID int) ([]*models.Activity, error) {
 	m.ctrl.T.Helper()
@@ -158,21 +173,6 @@ func (m *MockActivityRepositoryInterface) ListByUser(ctx context.Context, UserID
 func (mr *MockActivityRepositoryInterfaceMockRecorder) ListByUser(ctx, UserID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByUser", reflect.TypeOf((*MockActivityRepositoryInterface)(nil).ListByUser), ctx, UserID)
-}
-
-// ListByUserWithFilters mocks base method.
-func (m *MockActivityRepositoryInterface) ListByUserWithFilters(UserID int, filters models.ActivityFilters) ([]*models.Activity, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListByUserWithFilters", UserID, filters)
-	ret0, _ := ret[0].([]*models.Activity)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListByUserWithFilters indicates an expected call of ListByUserWithFilters.
-func (mr *MockActivityRepositoryInterfaceMockRecorder) ListByUserWithFilters(UserID, filters any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByUserWithFilters", reflect.TypeOf((*MockActivityRepositoryInterface)(nil).ListByUserWithFilters), UserID, filters)
 }
 
 // Update mocks base method.

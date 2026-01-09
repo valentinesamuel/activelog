@@ -10,6 +10,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository/testhelpers"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 // ==================== HELPER FUNCTIONS ====================
@@ -508,8 +509,8 @@ func TestIntegration_UniqueConstraintViolations(t *testing.T) {
 	})
 }
 
-// TestIntegration_ComplexQueryWithJoins tests querying activities with tags
-func TestIntegration_ComplexQueryWithJoins(t *testing.T) {
+// TestIntegration_DynamicFilteringWithJoins tests the new QueryOptions approach with JOIN support
+func TestIntegration_DynamicFilteringWithJoins(t *testing.T) {
 	db, cleanup := testhelpers.SetupTestDB(t)
 	defer cleanup()
 
@@ -519,7 +520,7 @@ func TestIntegration_ComplexQueryWithJoins(t *testing.T) {
 
 	userID := createIntegrationTestUser(t, db, "joins@example.com", "joinsuser")
 
-	// Create activities with varying tag counts
+	// Create activities with varying tags
 	activity1 := &models.Activity{
 		UserID:       userID,
 		ActivityType: "running",
@@ -547,37 +548,32 @@ func TestIntegration_ComplexQueryWithJoins(t *testing.T) {
 	// No tags
 	_ = activityRepo.Create(ctx, nil, activity3)
 
-	// Query activities with tags
-	activities, err := activityRepo.GetActivitiesWithTags(ctx, userID, models.ActivityFilters{})
+	// Test filtering by tag name using the new dynamic filtering approach
+	opts := &query.QueryOptions{
+		Page:  1,
+		Limit: 10,
+		Filter: map[string]interface{}{
+			"user_id":   userID,
+			"tags.name": "outdoor",
+		},
+	}
+
+	result, err := activityRepo.ListActivitiesWithQuery(ctx, opts)
 	if err != nil {
-		t.Fatalf("GetActivitiesWithTags failed: %v", err)
+		t.Fatalf("ListActivitiesWithQuery failed: %v", err)
 	}
 
-	// Verify: Got all 3 activities
-	if len(activities) != 3 {
-		t.Fatalf("Expected 3 activities, got %d", len(activities))
+	// Should find only the activity with "outdoor" tag
+	activities := result.Data.([]*models.Activity)
+	if len(activities) != 1 {
+		t.Fatalf("Expected 1 activity with 'outdoor' tag, got %d", len(activities))
 	}
 
-	// Verify: Activity with multiple tags has correct tag count
-	for _, act := range activities {
-		if act.Title == "Morning Run" {
-			if len(act.Tags) != 2 {
-				t.Errorf("Expected 2 tags for Morning Run, got %d", len(act.Tags))
-			}
-		}
-		if act.Title == "Evening Yoga" {
-			if len(act.Tags) != 1 {
-				t.Errorf("Expected 1 tag for Evening Yoga, got %d", len(act.Tags))
-			}
-		}
-		if act.Title == "Pool Session" {
-			if len(act.Tags) != 0 {
-				t.Errorf("Expected 0 tags for Pool Session, got %d", len(act.Tags))
-			}
-		}
+	if activities[0].Title != "Morning Run" {
+		t.Errorf("Expected Morning Run, got %s", activities[0].Title)
 	}
 
-	t.Log("✅ Complex JOIN query properly retrieved activities with their tags")
+	t.Log("✅ Dynamic filtering with automatic JOINs works correctly")
 }
 
 // Helper function to check if string contains substring
