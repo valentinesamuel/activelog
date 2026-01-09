@@ -21,7 +21,7 @@ func NewTagRepository(db DBConn) *TagRepository {
 	}
 }
 
-func (tr *TagRepository) GetOrCreateTag(ctx context.Context, name string) (int, error) {
+func (tr *TagRepository) GetOrCreateTag(ctx context.Context, tx TxConn, name string) (int, error) {
 	query := `
 		INSERT INTO tags (name)
 		VALUES ($1)
@@ -31,7 +31,15 @@ func (tr *TagRepository) GetOrCreateTag(ctx context.Context, name string) (int, 
 	`
 
 	var id int
-	err := tr.db.QueryRowContext(ctx, query, name).Scan(&id)
+	var err error
+
+	// Use transaction if provided, otherwise use db connection
+	if tx != nil {
+		err = tx.QueryRowContext(ctx, query, name).Scan(&id)
+	} else {
+		err = tr.db.QueryRowContext(ctx, query, name).Scan(&id)
+	}
+
 	if err != nil {
 		return 0, err
 	}
@@ -40,11 +48,13 @@ func (tr *TagRepository) GetOrCreateTag(ctx context.Context, name string) (int, 
 	return id, nil
 }
 
-func (tr *TagRepository) GetTagsForActivity(ctx context.Context, activityID int) ([]string, error) {
+func (tr *TagRepository) GetTagsForActivity(ctx context.Context, activityID int) ([]*models.Tag, error) {
 
 	query := `
-		SELECT 
-		 tags.name
+		SELECT
+		 tags.id,
+		 tags.name,
+		 tags.created_at
 		FROM activity_tags as at
 		JOIN tags ON at.tag_id = tags.id
 		WHERE activity_id = $1
@@ -57,18 +67,20 @@ func (tr *TagRepository) GetTagsForActivity(ctx context.Context, activityID int)
 
 	defer rows.Close()
 
-	var tags []string
+	var tags []*models.Tag
 
 	for rows.Next() {
-		var tagName string
+		tag := &models.Tag{}
 		err := rows.Scan(
-			&tagName,
+			&tag.ID,
+			&tag.Name,
+			&tag.CreatedAt,
 		)
 
 		if err != nil {
 			return nil, fmt.Errorf("❌ Error scanning tags: %w", err)
 		}
-		tags = append(tags, tagName)
+		tags = append(tags, tag)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -82,7 +94,7 @@ func (tr *TagRepository) GetTagsForActivity(ctx context.Context, activityID int)
 
 }
 
-func (tr *TagRepository) LinkActivityTag(ctx context.Context, activityID, tagID int) error {
+func (tr *TagRepository) LinkActivityTag(ctx context.Context, tx TxConn, activityID int, tagID int) error {
 	query := `
 		INSERT INTO activity_tags
 		(tag_id, activity_id)
@@ -90,7 +102,14 @@ func (tr *TagRepository) LinkActivityTag(ctx context.Context, activityID, tagID 
 		ON CONFLICT (tag_id, activity_id) DO NOTHING;
 	`
 
-	err := tr.db.QueryRowContext(ctx, query, tagID, activityID).Scan()
+	var err error
+
+	// Use transaction if provided, otherwise use db connection
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, tagID, activityID)
+	} else {
+		_, err = tr.db.ExecContext(ctx, query, tagID, activityID)
+	}
 
 	if err != nil {
 		return fmt.Errorf("❌ Error creating activity tag %w", err)

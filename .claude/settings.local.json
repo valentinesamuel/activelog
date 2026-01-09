@@ -20,7 +20,9 @@
       "Bash(go tool cover:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(go clean:*)",
+      "Bash(./activelog)"
     ]
   }
 }
