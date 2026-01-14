@@ -75,9 +75,11 @@ func (ua *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Info().Str("email", user.Email).Msg("✅ Activity Created")
-	response.SendJSON(w, http.StatusOK, map[string]string{
-		"email":    user.Email,
-		"username": user.Username,
+	response.SendJSON(w, http.StatusCreated, map[string]map[string]string{
+		"user": {
+			"email":    user.Email,
+			"username": user.Username,
+		},
 	})
 }
 

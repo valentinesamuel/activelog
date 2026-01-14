@@ -9,11 +9,12 @@ import (
 	"testing"
 
 	_ "github.com/lib/pq"
+	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
 
 // setupTestDB creates a test database connection and runs migrations
-func setupTestDB(t *testing.T) *sql.DB {
+func setupTestDB(t *testing.T) repository.DBConn {
 	t.Helper() // Mark this as a test helper function
 
 	// Connect to test database
@@ -43,11 +44,12 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("Failed to create users table: %v", err)
 	}
 
-	return db
+	// Wrap with LoggingDB to satisfy DBConn interface
+	return database.NewLoggingDB(db, nil)
 }
 
 // cleanupTestDB removes all data from tables
-func cleanupTestDB(t *testing.T, db *sql.DB) {
+func cleanupTestDB(t *testing.T, db repository.DBConn) {
 	t.Helper()
 
 	// Clean up all tables before each test
@@ -60,7 +62,7 @@ func cleanupTestDB(t *testing.T, db *sql.DB) {
 func TestRegistration(t *testing.T) {
 	// Setup: Create handler with real database
 	db := setupTestDB(t)
-	defer db.Close()
+	defer db.GetRawDB().Close()
 
 	userRepo := repository.NewUserRepository(db)
 	handler := NewUserHandler(userRepo) // Adjust based on your handler name
@@ -68,13 +70,15 @@ func TestRegistration(t *testing.T) {
 	tests := []struct {
 		name       string
 		email      string
+		username   string
 		password   string
 		wantStatus int
 	}{
-		{"valid registration", "test@example.com", "SecurePass123!", 201},
-		{"duplicate email", "test@example.com", "SecurePass123!", 409},
-		{"weak password", "test2@example.com", "123", 400},
-		{"invalid email", "notanemail", "SecurePass123!", 400},
+		{"valid registration", "test@test.com", "tesuers", "SecurePass123!", 201},
+		{"duplicate email", "test@test.com", "tesuers", "SecurePass123!", 400},
+		{"weak password", "bright@test.com", "madisson", "123", 400},
+		{"short username", "test@test.com", "1", "SecurePass123!", 400},
+		{"not an email", "hehe", "1", "SecurePass123!", 400},
 	}
 
 	for _, tt := range tests {
@@ -86,7 +90,8 @@ func TestRegistration(t *testing.T) {
 
 			// --- A. Prepare the Request Body ---
 			payload := map[string]string{
-				"email":    tt.email,
+				"email": tt.email,
+				"username": tt.username,
 				"password": tt.password,
 			}
 

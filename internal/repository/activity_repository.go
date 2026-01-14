@@ -8,10 +8,13 @@ import (
 
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/pkg/errors"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 type ActivityRepository struct {
-	db *sql.DB
+	db       DBConn
+	tagRepo  *TagRepository
+	registry *query.RelationshipRegistry
 }
 
 type ActivityStats struct {
@@ -22,28 +25,61 @@ type ActivityStats struct {
 	ActivityTypes   map[string]int
 }
 
-func NewActivityRepository(db *sql.DB) *ActivityRepository {
+func NewActivityRepository(db DBConn, tagRepo *TagRepository) *ActivityRepository {
+	// Initialize RelationshipRegistry for auto-JOIN support
+	registry := query.NewRelationshipRegistry("activities")
+
+	// Register Many-to-Many relationship: activities <-> tags
+	registry.Register(query.ManyToManyRelationship(
+		"tags",          // Relationship name (users write: tags.name)
+		"tags",          // Target table
+		"activity_tags", // Junction table
+		"activity_id",   // FK to activities
+		"tag_id",        // FK to tags
+	))
+
+	// Register Many-to-One relationship: activities -> users
+	registry.Register(query.ManyToOneRelationship(
+		"user",    // Relationship name (users write: user.username)
+		"users",   // Target table
+		"user_id", // FK in activities table
+	))
+
 	return &ActivityRepository{
-		db: db,
+		db:       db,
+		tagRepo:  tagRepo,
+		registry: registry,
 	}
 }
 
-func (ar *ActivityRepository) Create(ctx context.Context, activity *models.Activity) error {
+// GetRegistry returns the RelationshipRegistry for this repository (v3.0)
+// Used by RegistryManager for cross-registry path resolution
+func (ar *ActivityRepository) GetRegistry() *query.RelationshipRegistry {
+	return ar.registry
+}
+
+// Create creates a new activity
+// tx is optional - if nil, uses direct DB connection; if provided, uses the transaction
+func (ar *ActivityRepository) Create(ctx context.Context, tx TxConn, activity *models.Activity) error {
 	query := `
-		INSERT INTO activities 
-		(user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date) 
+		INSERT INTO activities
+		(user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at, updated_at
 	`
 
-	err := ar.db.QueryRowContext(ctx, query, activity.UserID, activity.ActivityType, activity.Title, activity.Description, activity.DurationMinutes, activity.DistanceKm, activity.CaloriesBurned, activity.Notes, activity.ActivityDate).Scan(&activity.ID, &activity.CreatedAt, &activity.UpdatedAt)
+	// Use helper - automatically chooses tx or db
+	row := QueryRowInTx(ctx, tx, ar.db, query,
+		activity.UserID, activity.ActivityType, activity.Title, activity.Description,
+		activity.DurationMinutes, activity.DistanceKm, activity.CaloriesBurned,
+		activity.Notes, activity.ActivityDate)
 
+	err := row.Scan(&activity.ID, &activity.CreatedAt, &activity.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("❌ Error creating activity %w", err)
 	}
 
 	fmt.Println("✅ Activity created successfully!")
-
 	return nil
 }
 
@@ -139,87 +175,6 @@ func (ar *ActivityRepository) ListByUser(ctx context.Context, UserID int) ([]*mo
 	return activities, nil
 }
 
-func (ar *ActivityRepository) ListByUserWithFilters(UserID int, filters models.ActivityFilters) ([]*models.Activity, error) {
-	query := `
-		SELECT id, user_id, activity_type, title, description, duration_minutes,
-			distance_km, calories_burned, notes, activity_date, created_at, updated_at
-		FROM activities
-		WHERE user_id = $1
-	`
-
-	args := []interface{}{UserID}
-	argsCount := 1
-
-	// add activity filter type
-	if filters.ActivityType != "" {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_type = $%d", argsCount)
-		args = append(args, filters.ActivityType)
-	}
-
-	if filters.StartDate != nil {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_date >= $%d", argsCount)
-		args = append(args, filters.StartDate)
-	}
-
-	if filters.EndDate != nil {
-		argsCount++
-		query += fmt.Sprintf(" AND activity_date <= $%d", argsCount)
-		args = append(args, filters.EndDate)
-	}
-
-	query += " ORDER BY activity_date DESC"
-
-	// add pagination
-	if filters.Limit > 0 {
-		argsCount++
-		query += fmt.Sprintf(" LIMIT $%d", argsCount)
-		args = append(args, filters.Limit)
-	}
-
-	if filters.Offset > 0 {
-		argsCount++
-		query += fmt.Sprintf(" OFFSET $%d", argsCount)
-		args = append(args, filters.Limit)
-	}
-
-	rows, err := ar.db.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("❌ Error listing activities: %w", err)
-	}
-
-	defer rows.Close()
-
-	var activities []*models.Activity
-
-	for rows.Next() {
-		activity := &models.Activity{}
-		err := rows.Scan(
-			&activity.ID,
-			&activity.UserID,
-			&activity.ActivityType,
-			&activity.Title,
-			&activity.Description,
-			&activity.DurationMinutes,
-			&activity.DistanceKm,
-			&activity.CaloriesBurned,
-			&activity.Notes,
-			&activity.ActivityDate,
-			&activity.CreatedAt,
-			&activity.UpdatedAt,
-		)
-
-		if err != nil {
-			return nil, fmt.Errorf("❌ Error scanning activity: %w", err)
-		}
-		activities = append(activities, activity)
-	}
-
-	fmt.Println("✅ Activities fetched successfully!")
-
-	return activities, rows.Err()
-}
 
 func (ar *ActivityRepository) Count(userID int) (int, error) {
 	var count int
@@ -228,7 +183,9 @@ func (ar *ActivityRepository) Count(userID int) (int, error) {
 	return count, err
 }
 
-func (r *ActivityRepository) Update(id int, activity *models.Activity) error {
+// Update updates an existing activity
+// tx is optional - if nil, uses direct DB connection; if provided, uses the transaction
+func (ar *ActivityRepository) Update(ctx context.Context, tx TxConn, id int, activity *models.Activity) error {
 	query := `
 		UPDATE activities
 		SET activity_type = $1, title = $2, description = $3,
@@ -238,8 +195,8 @@ func (r *ActivityRepository) Update(id int, activity *models.Activity) error {
 		RETURNING updated_at
 	`
 
-	err := r.db.QueryRow(
-		query,
+	// Use helper - automatically chooses tx or db
+	row := QueryRowInTx(ctx, tx, ar.db, query,
 		activity.ActivityType,
 		activity.Title,
 		activity.Description,
@@ -250,8 +207,9 @@ func (r *ActivityRepository) Update(id int, activity *models.Activity) error {
 		activity.ActivityDate,
 		id,
 		activity.UserID,
-	).Scan(&activity.UpdatedAt)
+	)
 
+	err := row.Scan(&activity.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("❌ Activity not found")
 	}
@@ -259,9 +217,13 @@ func (r *ActivityRepository) Update(id int, activity *models.Activity) error {
 	return err
 }
 
-func (r *ActivityRepository) Delete(id int, userID int) error {
+// Delete deletes an activity
+// tx is optional - if nil, uses direct DB connection; if provided, uses the transaction
+func (ar *ActivityRepository) Delete(ctx context.Context, tx TxConn, id int, userID int) error {
 	query := "DELETE FROM activities WHERE id = $1 AND user_id = $2"
-	result, err := r.db.Exec(query, id, userID)
+
+	// Use helper - automatically chooses tx or db
+	result, err := ExecInTx(ctx, tx, ar.db, query, id, userID)
 	if err != nil {
 		return err
 	}
@@ -358,4 +320,125 @@ func (r *ActivityRepository) GetStats(userID int, startDate, endDate *time.Time)
 	}
 
 	return stats, nil
+}
+
+// CreateWithTags creates an activity with associated tags in a transaction
+// This demonstrates a multi-step operation that requires a transaction
+func (ar *ActivityRepository) CreateWithTags(ctx context.Context, activity *models.Activity, tags []*models.Tag) error {
+	// Use WithTransaction helper for automatic commit/rollback
+	return WithTransaction(ctx, ar.db, func(tx TxConn) error {
+		// 1. Insert activity
+		activityQuery := `
+			INSERT INTO activities
+			(user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING id, created_at, updated_at
+		`
+		row := QueryRowInTx(ctx, tx, ar.db, activityQuery,
+			activity.UserID, activity.ActivityType, activity.Title, activity.Description,
+			activity.DurationMinutes, activity.DistanceKm, activity.CaloriesBurned,
+			activity.Notes, activity.ActivityDate)
+
+		if err := row.Scan(&activity.ID, &activity.CreatedAt, &activity.UpdatedAt); err != nil {
+			return fmt.Errorf("failed to insert activity: %w", err)
+		}
+
+		// 2. Create tags and link them (within the same transaction)
+		for _, tag := range tags {
+			// Get or create tag
+			tagQuery := `
+				INSERT INTO tags (name)
+				VALUES ($1)
+				ON CONFLICT (name) DO UPDATE
+				SET name = EXCLUDED.name
+				RETURNING id
+			`
+			var tagID int
+			row := QueryRowInTx(ctx, tx, ar.db, tagQuery, tag.Name)
+			if err := row.Scan(&tagID); err != nil {
+				return fmt.Errorf("failed to create tag: %w", err)
+			}
+
+			// Link activity to tag
+			linkQuery := `
+				INSERT INTO activity_tags (tag_id, activity_id)
+				VALUES ($1, $2)
+				ON CONFLICT (tag_id, activity_id) DO NOTHING
+			`
+			if _, err := ExecInTx(ctx, tx, ar.db, linkQuery, tagID, activity.ID); err != nil {
+				return fmt.Errorf("failed to link activity to tag: %w", err)
+			}
+		}
+
+		return nil // Commit happens automatically on success
+	})
+}
+
+// scanActivity is a reusable function to scan a single activity row
+// Used by the generic FindAndPaginate function for dynamic filtering
+func (ar *ActivityRepository) scanActivity(rows *sql.Rows) (*models.Activity, error) {
+	activity := &models.Activity{}
+	err := rows.Scan(
+		&activity.ID,
+		&activity.UserID,
+		&activity.ActivityType,
+		&activity.Title,
+		&activity.Description,
+		&activity.DurationMinutes,
+		&activity.DistanceKm,
+		&activity.CaloriesBurned,
+		&activity.Notes,
+		&activity.ActivityDate,
+		&activity.CreatedAt,
+		&activity.UpdatedAt,
+	)
+	return activity, err
+}
+
+// ListActivitiesWithQuery uses the new dynamic filtering pattern with QueryOptions
+// This method leverages the generic FindAndPaginate function for flexible, type-safe queries.
+//
+// Supports automatic JOIN detection using natural column names:
+//   - filter[tags.name]=cardio → Automatically JOINs tags table and filters by tag name
+//   - filter[user.username]=john → Automatically JOINs users table and filters by username
+//   - search[tags.name]=run → Automatically JOINs and searches tag names
+//   - order[tags.name]=ASC → Automatically JOINs and orders by tag name
+//
+// Example usage in handler:
+//   opts := &query.QueryOptions{
+//       Page: 1,
+//       Limit: 20,
+//       Filter: map[string]interface{}{
+//           "activity_type": "running",
+//           "user_id": 123,
+//           "tags.name": "cardio",  // Natural column name - auto-JOINs!
+//       },
+//       Search: map[string]interface{}{
+//           "title": "morning",
+//           "tags.name": "run",     // Auto-JOINs for search too!
+//       },
+//       Order: map[string]string{
+//           "created_at": "DESC",
+//           "tags.name": "ASC",     // Auto-JOINs for ordering!
+//       },
+//   }
+//   result, err := repo.ListActivitiesWithQuery(ctx, opts)
+func (ar *ActivityRepository) ListActivitiesWithQuery(
+	ctx context.Context,
+	opts *query.QueryOptions,
+) (*query.PaginatedResult, error) {
+	// Auto-generate JOINs based on relationship column names
+	// The registry detects columns like "tags.name" and "user.username"
+	// and automatically generates the appropriate JOINs
+	joins := ar.registry.GenerateJoins(opts)
+
+	// Use the generic FindAndPaginate function with auto-generated JOINs
+	return FindAndPaginate[models.Activity](
+		ctx,
+		ar.db,
+		"activities",
+		opts,
+		ar.scanActivity,
+		joins...,
+	)
 }

@@ -117,6 +117,62 @@ Error Response:
 }
 ```
 
+## Dynamic Filtering (v1.1.0+)
+
+ActiveLog supports powerful TypeORM-style dynamic filtering with natural column names for relationships.
+
+### Quick Examples
+
+**Filter by activity type:**
+```bash
+GET /api/v1/activities?filter[activity_type]=running
+```
+
+**Filter by tag (auto-JOIN):**
+```bash
+GET /api/v1/activities?filter[tags.name]=cardio
+```
+
+**Date range filtering:**
+```bash
+GET /api/v1/activities?filter[activity_date][gte]=2024-01-01&filter[activity_date][lte]=2024-12-31
+```
+
+**Search and sort:**
+```bash
+GET /api/v1/activities?search[title]=morning&order[distance_km]=DESC&page=1&limit=20
+```
+
+**Complex query with relationships:**
+```bash
+GET /api/v1/activities?filter[tags.name]=cardio&filter[user.username]=john&search[title]=run&order[activity_date]=DESC
+```
+
+### Key Features
+
+- ✅ **Natural column names** - Use `tags.name` instead of aliases
+- ✅ **Auto-JOIN detection** - Relationships detected from dot notation
+- ✅ **Operator filtering** - Support for `eq`, `ne`, `gt`, `gte`, `lt`, `lte`
+- ✅ **Secure** - Column whitelisting prevents unauthorized access
+- ✅ **Performant** - Parameterized queries with automatic indexing
+
+### Supported Operators (v1.1.0+)
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `eq` | Equal (default) | `filter[distance_km][eq]=10` |
+| `ne` | Not equal | `filter[activity_type][ne]=running` |
+| `gt` | Greater than | `filter[distance_km][gt]=5.0` |
+| `gte` | Greater than or equal | `filter[activity_date][gte]=2024-01-01` |
+| `lt` | Less than | `filter[duration_minutes][lt]=60` |
+| `lte` | Less than or equal | `filter[activity_date][lte]=2024-12-31` |
+
+### Documentation
+
+For complete filtering and querying documentation, see:
+- [Query Guide](docs/QUERY_GUIDE.md) - Complete guide to filtering, ordering, and relationships
+- [Architecture Documentation](docs/ARCHITECTURE.md) - System architecture overview
+
 ## Project Structure
 
 ```

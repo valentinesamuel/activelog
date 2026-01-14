@@ -12,6 +12,192 @@ This month introduces asynchronous processing to your application. You'll learn 
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+### Background Job Endpoints (Week 21)
+
+**Trigger Weekly Summary Email:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/users/me/reports/weekly-summary`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "message": "weekly summary email queued",
+    "job_id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+    "estimated_delivery": "2024-01-15T14:35:22Z"
+  }
+  ```
+
+### Export Endpoints (Week 24)
+
+**Request CSV Export:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/export/csv`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "start_date": "2024-01-01T00:00:00Z",
+    "end_date": "2024-01-31T23:59:59Z",
+    "include_tags": true
+  }
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "message": "export job started",
+    "job_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "status_url": "/api/v1/jobs/a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "estimated_completion": "2024-01-15T14:32:00Z"
+  }
+  ```
+
+**Request PDF Report:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/export/pdf`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "report_type": "monthly",
+    "month": "2024-01",
+    "include_charts": true,
+    "include_photos": false
+  }
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "message": "pdf generation started",
+    "job_id": "f1e2d3c4-b5a6-7890-1234-567890abcdef",
+    "status_url": "/api/v1/jobs/f1e2d3c4-b5a6-7890-1234-567890abcdef",
+    "estimated_completion": "2024-01-15T14:33:30Z"
+  }
+  ```
+
+**Check Job Status:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/jobs/{job_id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK) - In Progress:**
+  ```json
+  {
+    "job_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "status": "processing",
+    "progress": 45,
+    "message": "Processing activities...",
+    "created_at": "2024-01-15T14:30:00Z"
+  }
+  ```
+- **Success Response (200 OK) - Completed:**
+  ```json
+  {
+    "job_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "status": "completed",
+    "progress": 100,
+    "result": {
+      "download_url": "https://bucket.s3.amazonaws.com/exports/user-1-2024-01-activities.csv",
+      "expires_at": "2024-01-22T14:30:00Z",
+      "file_size": 245760,
+      "record_count": 150
+    },
+    "created_at": "2024-01-15T14:30:00Z",
+    "completed_at": "2024-01-15T14:31:45Z"
+  }
+  ```
+- **Success Response (200 OK) - Failed:**
+  ```json
+  {
+    "job_id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+    "status": "failed",
+    "progress": 0,
+    "error": "failed to generate export: database connection lost",
+    "retry_count": 3,
+    "created_at": "2024-01-15T14:30:00Z",
+    "failed_at": "2024-01-15T14:32:15Z"
+  }
+  ```
+
+**Download Export (Direct CSV Stream):**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/activities/export/csv/download`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters:**
+  ```
+  ?start_date=2024-01-01&end_date=2024-01-31
+  ```
+- **Success Response (200 OK):**
+  ```
+  Headers:
+    Content-Type: text/csv
+    Content-Disposition: attachment; filename="activities-2024-01.csv"
+
+  Body (CSV):
+  id,activity_type,duration_minutes,distance_km,activity_date,tags,notes
+  123,running,45,7.5,2024-01-15T06:30:00Z,"morning,outdoor,cardio","Morning run"
+  122,yoga,30,0,2024-01-14T18:00:00Z,"evening,flexibility","Evening yoga"
+  ...
+  ```
+
+### Email Verification Endpoints (Week 22)
+
+**Resend Verification Email:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/auth/resend-verification`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (202 Accepted):**
+  ```json
+  {
+    "message": "verification email queued",
+    "email": "john@example.com"
+  }
+  ```
+
+**Verify Email:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/auth/verify-email?token=abc123def456`
+- **Query Parameters:**
+  ```
+  token=abc123def456
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "email verified successfully",
+    "verified_at": "2024-01-15T14:30:22Z"
+  }
+  ```
+- **Error Response (400 Bad Request):**
+  ```json
+  {
+    "error": "invalid token",
+    "message": "verification token is invalid or expired"
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 21: Job Queue System
@@ -62,16 +248,22 @@ This month introduces asynchronous processing to your application. You'll learn 
 **Task 3: Create Job Client** (60 min)
 - [ ] Create `internal/jobs/client.go`
 - [ ] Implement `NewJobClient(redisAddr) (*JobClient, error)`
+  - **Logic:** Create `asynq.RedisClientOpt` with Redis address. Create `asynq.Client` with options. Return JobClient struct wrapping the asynq client. Used by API server to enqueue jobs.
 - [ ] Add method `EnqueueWelcomeEmail(ctx, userID, email, name) error`
+  - **Logic:** Create payload struct with userID, email, name. Marshal to JSON. Create `asynq.NewTask(TypeWelcomeEmail, payload)`. Call `client.Enqueue(task, asynq.MaxRetry(3), asynq.Queue("critical"))`. Returns task ID on success.
 - [ ] Add method `EnqueueWeeklySummary(ctx, userID) error`
+  - **Logic:** Similar to welcome email but payload only has userID. Use different queue priority (default queue). Set `asynq.ProcessIn(5*time.Minute)` to delay processing.
 - [ ] Set appropriate retry policies (max 3 retries)
 - [ ] Set timeouts for different job types
 
 **Task 4: Implement Job Handlers** (90 min)
 - [ ] Create `internal/jobs/handlers.go`
 - [ ] Implement `HandleWelcomeEmail(ctx, task) error`
+  - **Logic:** Unmarshal task.Payload() into WelcomeEmailPayload struct. Call emailService.SendWelcomeEmail(payload.Email, payload.Name). If error, return it (asynq will retry). If success, return nil. Log start and completion.
 - [ ] Implement `HandleWeeklySummary(ctx, task) error`
+  - **Logic:** Unmarshal payload to get userID. Fetch user's weekly stats from repository. Fetch user email. Render email template with stats data. Send email. Return error for retry if any step fails.
 - [ ] Implement `HandleGenerateReport(ctx, task) error`
+  - **Logic:** Unmarshal payload. Generate PDF report using activity data. Upload PDF to S3. Store S3 key in database. Send notification email with download link. Can take 30+ seconds for large reports.
 - [ ] Unmarshal task payload in each handler
 - [ ] Add error handling and logging
 - [ ] Return errors for retry on failure
@@ -168,7 +360,9 @@ Makefile                           [MODIFY - add worker target]
 **Task 3: Create Email Service** (60 min)
 - [ ] Create `internal/email/service.go`
 - [ ] Implement `NewEmailService(config) *EmailService`
+  - **Logic:** Parse config for SMTP host, port, username, password. Create `gomail.Dialer` with TLS config. Parse all HTML templates from templates/ directory. Return EmailService with dialer and parsed templates.
 - [ ] Add `SendEmail(to, subject, body) error` method
+  - **Logic:** Create `gomail.NewMessage()`. Set From, To, Subject, HTML body. Call `dialer.DialAndSend(msg)`. Returns error if SMTP fails. Retry logic handled by asynq, not here.
 - [ ] Configure SMTP dialer or API client
 - [ ] Add connection pooling for SMTP
 - [ ] Handle send errors gracefully
@@ -191,11 +385,19 @@ Makefile                           [MODIFY - add worker target]
 
 **Task 6: Implement Specific Email Types** (90 min)
 - [ ] Implement `SendWelcomeEmail(to, name) error`
+  - **Logic:** Build template data with name. Execute welcome.html template with data. Get HTML string. Call SendEmail(to, "Welcome to ActiveLog!", html). Return error if template execution or send fails.
 - [ ] Implement `SendWeeklySummary(userID) error`
+  - **Logic:**
+    1. Fetch user from repository to get email
+    2. Fetch weekly stats from stats repository
+    3. Build template data with user name, stats (total activities, distance, time, top activity type)
+    4. Execute weekly_summary.html template
+    5. Send email with rendered HTML
   - Fetch user's weekly stats from repository
   - Render with template
   - Send email
 - [ ] Implement `SendFriendRequest(to, fromName) error`
+  - **Logic:** Execute friend_request.html template with fromName data. Send email with "Friend Request from {fromName}" subject.
 - [ ] Test each email type
 
 **Task 7: Integrate with Job Queue** (45 min)

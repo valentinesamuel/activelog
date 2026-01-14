@@ -12,6 +12,21 @@ This month focuses on modern DevOps practices. You'll containerize your applicat
 
 ---
 
+## API Endpoints Reference
+
+**Note:** Month 10 focuses on containerization and CI/CD automation. There are no new user-facing API endpoints. The existing API endpoints from Months 1-9 will now:
+- Run inside Docker containers
+- Be automatically tested on every commit (GitHub Actions)
+- Be built and deployed automatically via CI/CD pipelines
+
+### Infrastructure Improvements:
+- **Docker**: Application runs in isolated containers
+- **Docker Compose**: Local development with database, Redis, and API all containerized
+- **CI/CD**: Automated testing, linting, and deployment on git push
+- **Health Checks**: Container health monitoring
+
+---
+
 ## Learning Path
 
 ### Week 37: Docker Basics

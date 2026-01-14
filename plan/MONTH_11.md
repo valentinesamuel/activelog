@@ -12,6 +12,59 @@ This month brings your application to production on AWS. You'll deploy to ECS Fa
 
 ---
 
+## API Endpoints Reference
+
+**Note:** Month 11 focuses on AWS deployment and monitoring infrastructure. The API endpoints remain the same but are now:
+- Deployed on AWS ECS Fargate (production environment)
+- Accessible via HTTPS with SSL/TLS certificates
+- Load balanced with Application Load Balancer
+- Monitored with Prometheus and Grafana dashboards
+- Traced with OpenTelemetry distributed tracing
+
+### Production URLs:
+- **Development**: `http://localhost:8080`
+- **Production**: `https://api.activelog.com`
+
+### Monitoring Dashboards:
+- **Grafana**: `https://monitoring.activelog.com`
+- **Prometheus**: `https://prometheus.activelog.com` (internal only)
+
+### Enhanced Health Check (Production):
+- **HTTP Method:** `GET`
+- **URL:** `https://api.activelog.com/health`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "status": "healthy",
+    "environment": "production",
+    "version": "1.0.0",
+    "services": {
+      "database": {
+        "status": "up",
+        "latency_ms": 2.5,
+        "connection_pool": {
+          "active": 5,
+          "idle": 15,
+          "max": 20
+        }
+      },
+      "redis": {
+        "status": "up",
+        "latency_ms": 0.8
+      },
+      "s3": {
+        "status": "up",
+        "latency_ms": 45.2
+      }
+    },
+    "instance_id": "i-0123456789abcdef0",
+    "region": "us-east-1",
+    "uptime_seconds": 864000
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 41: AWS ECS Deployment Setup

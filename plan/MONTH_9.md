@@ -12,6 +12,338 @@ This month focuses on extracting insights from your activity data. You'll write 
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+### Advanced Analytics Endpoints (Week 33)
+
+**Get Monthly Trends:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/analytics/trends/monthly`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters:**
+  ```
+  ?months=12&activity_type=running
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "trends": [
+      {
+        "month": "2024-01",
+        "total_activities": 18,
+        "total_distance_km": 95.5,
+        "total_duration_minutes": 540,
+        "average_pace_min_per_km": 5.65,
+        "vs_previous_month": {
+          "activities_change_pct": 12.5,
+          "distance_change_pct": 8.3
+        }
+      },
+      {
+        "month": "2024-02",
+        "total_activities": 20,
+        "total_distance_km": 108.2,
+        "total_duration_minutes": 600,
+        "average_pace_min_per_km": 5.54,
+        "vs_previous_month": {
+          "activities_change_pct": 11.1,
+          "distance_change_pct": 13.3
+        }
+      }
+    ],
+    "total_months": 12
+  }
+  ```
+
+**Get Personal Records:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/analytics/records`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "records": {
+      "longest_run_km": {
+        "value": 21.1,
+        "activity_id": 456,
+        "activity_date": "2024-06-15T06:00:00Z"
+      },
+      "longest_duration_minutes": {
+        "value": 135,
+        "activity_id": 457,
+        "activity_date": "2024-07-20T06:00:00Z"
+      },
+      "fastest_5k_pace": {
+        "value": 4.45,
+        "activity_id": 458,
+        "activity_date": "2024-08-10T06:00:00Z"
+      },
+      "longest_streak_days": {
+        "value": 45,
+        "start_date": "2024-01-01T00:00:00Z",
+        "end_date": "2024-02-15T00:00:00Z"
+      }
+    }
+  }
+  ```
+
+### Goal Tracking Endpoints (Week 34)
+
+**Create Goal:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/goals`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "goal_type": "distance",
+    "target_value": 200,
+    "activity_type": "running",
+    "period": "monthly",
+    "start_date": "2024-02-01T00:00:00Z"
+  }
+  ```
+- **Success Response (201 Created):**
+  ```json
+  {
+    "id": 10,
+    "goal_type": "distance",
+    "target_value": 200,
+    "activity_type": "running",
+    "period": "monthly",
+    "start_date": "2024-02-01T00:00:00Z",
+    "end_date": "2024-02-29T23:59:59Z",
+    "status": "active",
+    "created_at": "2024-01-15T14:30:22Z"
+  }
+  ```
+
+**Get Active Goals with Progress:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/goals/active`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "goals": [
+      {
+        "id": 10,
+        "goal_type": "distance",
+        "target_value": 200,
+        "current_value": 145.5,
+        "progress_pct": 72.75,
+        "activity_type": "running",
+        "period": "monthly",
+        "start_date": "2024-02-01T00:00:00Z",
+        "end_date": "2024-02-29T23:59:59Z",
+        "days_remaining": 14,
+        "on_track": true,
+        "status": "active"
+      },
+      {
+        "id": 11,
+        "goal_type": "frequency",
+        "target_value": 20,
+        "current_value": 12,
+        "progress_pct": 60.0,
+        "activity_type": "any",
+        "period": "monthly",
+        "start_date": "2024-02-01T00:00:00Z",
+        "end_date": "2024-02-29T23:59:59Z",
+        "days_remaining": 14,
+        "on_track": false,
+        "status": "active"
+      }
+    ],
+    "total": 2
+  }
+  ```
+
+**Update Goal:**
+- **HTTP Method:** `PATCH`
+- **URL:** `/api/v1/goals/{id}`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "target_value": 250,
+    "status": "active"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "id": 10,
+    "target_value": 250,
+    "status": "active",
+    "updated_at": "2024-01-15T14:35:22Z"
+  }
+  ```
+
+**Delete Goal:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/goals/{id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (204 No Content):**
+  ```
+  (empty body)
+  ```
+
+### Chart Data Endpoints (Week 36)
+
+**Get Activity Distribution Chart Data:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/analytics/charts/distribution`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters:**
+  ```
+  ?period=last_30_days
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "chart_type": "pie",
+    "data": [
+      {
+        "label": "Running",
+        "value": 45,
+        "percentage": 45.0,
+        "color": "#FF6384"
+      },
+      {
+        "label": "Cycling",
+        "value": 25,
+        "percentage": 25.0,
+        "color": "#36A2EB"
+      },
+      {
+        "label": "Yoga",
+        "value": 15,
+        "percentage": 15.0,
+        "color": "#FFCE56"
+      },
+      {
+        "label": "Swimming",
+        "value": 10,
+        "percentage": 10.0,
+        "color": "#4BC0C0"
+      },
+      {
+        "label": "Other",
+        "value": 5,
+        "percentage": 5.0,
+        "color": "#9966FF"
+      }
+    ],
+    "total": 100
+  }
+  ```
+
+**Get Time Series Chart Data:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/analytics/charts/timeseries`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters:**
+  ```
+  ?metric=distance&granularity=daily&days=30&activity_type=running
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "chart_type": "line",
+    "metric": "distance_km",
+    "granularity": "daily",
+    "data_points": [
+      {
+        "date": "2024-01-01",
+        "value": 5.2
+      },
+      {
+        "date": "2024-01-02",
+        "value": 0
+      },
+      {
+        "date": "2024-01-03",
+        "value": 7.8
+      },
+      {
+        "date": "2024-01-04",
+        "value": 6.5
+      }
+    ],
+    "summary": {
+      "total": 185.5,
+      "average": 6.18,
+      "max": 12.5,
+      "min": 0
+    }
+  }
+  ```
+
+**Get Comparison Chart Data:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/analytics/charts/comparison`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Query Parameters:**
+  ```
+  ?metric=duration&period=monthly&compare_periods=3
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "chart_type": "bar",
+    "metric": "duration_minutes",
+    "data": [
+      {
+        "period": "December 2024",
+        "value": 540,
+        "change_from_previous": null
+      },
+      {
+        "period": "January 2025",
+        "value": 625,
+        "change_from_previous": 15.7
+      },
+      {
+        "period": "February 2025",
+        "value": 680,
+        "change_from_previous": 8.8
+      }
+    ]
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 33: Advanced SQL Queries

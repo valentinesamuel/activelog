@@ -12,6 +12,173 @@ This month introduces file handling capabilities to your application. You'll lea
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+### Photo Upload Endpoints
+
+**Upload Photos to Activity:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/photos`
+- **Headers:**
+  ```
+  Content-Type: multipart/form-data
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body (multipart/form-data):**
+  ```
+  Form field: "photos" (file, multiple allowed - max 5)
+  - photo1.jpg
+  - photo2.png
+  - photo3.webp
+  ```
+- **Postman Setup:**
+  - Select "Body" tab
+  - Choose "form-data"
+  - Add key: `photos`, Type: `File`
+  - Click "Select Files" and choose up to 5 images
+  - Can add multiple `photos` fields or use multi-select
+- **Success Response (201 Created):**
+  ```json
+  {
+    "photos": [
+      {
+        "id": 45,
+        "activity_id": 123,
+        "s3_key": "activities/123/uuid-photo1.jpg",
+        "thumbnail_key": "activities/123/thumb-uuid-photo1.jpg",
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo1.jpg",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo1.jpg",
+        "content_type": "image/jpeg",
+        "file_size": 2457600,
+        "uploaded_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "id": 46,
+        "activity_id": 123,
+        "s3_key": "activities/123/uuid-photo2.png",
+        "thumbnail_key": "activities/123/thumb-uuid-photo2.png",
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo2.png",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo2.png",
+        "content_type": "image/png",
+        "file_size": 1856432,
+        "uploaded_at": "2024-01-15T14:30:23Z"
+      }
+    ],
+    "uploaded_count": 2
+  }
+  ```
+- **Error Response (400 Bad Request - Too Many Files):**
+  ```json
+  {
+    "error": "validation error",
+    "message": "maximum 5 photos allowed per activity"
+  }
+  ```
+- **Error Response (400 Bad Request - Invalid File Type):**
+  ```json
+  {
+    "error": "validation error",
+    "message": "invalid file type, only JPEG, PNG, and WebP images are allowed"
+  }
+  ```
+- **Error Response (413 Payload Too Large):**
+  ```json
+  {
+    "error": "file too large",
+    "message": "file size exceeds maximum of 10MB"
+  }
+  ```
+
+**Get Photos for Activity:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/activities/{id}/photos`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "photos": [
+      {
+        "id": 45,
+        "activity_id": 123,
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo1.jpg",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo1.jpg",
+        "content_type": "image/jpeg",
+        "file_size": 2457600,
+        "uploaded_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "id": 46,
+        "activity_id": 123,
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo2.png",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo2.png",
+        "content_type": "image/png",
+        "file_size": 1856432,
+        "uploaded_at": "2024-01-15T14:30:23Z"
+      }
+    ],
+    "total": 2
+  }
+  ```
+
+**Delete Photo:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/photos/{id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (204 No Content):**
+  ```
+  (empty body)
+  ```
+- **Error Response (404 Not Found):**
+  ```json
+  {
+    "error": "not found",
+    "message": "photo not found"
+  }
+  ```
+- **Error Response (403 Forbidden):**
+  ```json
+  {
+    "error": "forbidden",
+    "message": "you can only delete photos from your own activities"
+  }
+  ```
+
+### S3 Signed URL Endpoint (Week 14)
+
+**Get Presigned Upload URL:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/photos/upload-url`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "filename": "my-photo.jpg",
+    "content_type": "image/jpeg",
+    "file_size": 2457600
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "upload_url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...",
+    "s3_key": "activities/123/uuid-photo.jpg",
+    "expires_at": "2024-01-15T15:30:22Z"
+  }
+  ```
+  **Note:** Client uploads directly to this URL using PUT request, then confirms upload to your API
+
+---
+
 ## Learning Path
 
 ### Week 13: Local File Upload Basics
@@ -62,6 +229,13 @@ This month introduces file handling capabilities to your application. You'll lea
 **Task 3: Implement Multipart Form Handler** (60 min)
 - [ ] Create `internal/handlers/photo_handler.go`
 - [ ] Implement `Upload(w, r)` method
+  - **Logic:**
+    1. Extract activity ID from URL path parameters
+    2. Parse multipart form with `r.ParseMultipartForm(50 << 20)` - loads up to 50MB into memory
+    3. Get files from `r.MultipartForm.File["photos"]` - returns slice of file headers
+    4. Validate file count (reject if > 5 photos)
+    5. For each file: open file, validate type/size, process (save temp or upload to S3)
+    6. Return JSON response with uploaded file metadata (IDs, URLs, sizes)
 - [ ] Parse multipart form: `r.ParseMultipartForm(50 << 20)` (50MB limit)
 - [ ] Extract files from `r.MultipartForm.File["photos"]`
 - [ ] Validate file count (max 5 photos per activity)
@@ -70,8 +244,10 @@ This month introduces file handling capabilities to your application. You'll lea
 **Task 4: File Validation** (45 min)
 - [ ] Create `pkg/upload/validator.go`
 - [ ] Implement `ValidateFileType(contentType string) error`
+  - **Logic:** Check if contentType is in allowed list (image/jpeg, image/png, image/webp). Return error if not. Also read first 512 bytes of file and use `http.DetectContentType()` to verify magic bytes match (prevents MIME type spoofing).
 - [ ] Check MIME type: accept image/jpeg, image/png, image/webp
 - [ ] Implement `ValidateFileSize(size int64) error` (max 10MB)
+  - **Logic:** Check if size > 10*1024*1024 bytes. If yes, return error with message "file too large, maximum size is 10MB". If no, return nil.
 - [ ] Check magic bytes (not just extension) for security
 - [ ] Add tests for validation logic
 
@@ -85,9 +261,13 @@ This month introduces file handling capabilities to your application. You'll lea
 **Task 6: Create Photo Repository** (45 min)
 - [ ] Create `internal/repository/photo_repository.go`
 - [ ] Implement `Create(ctx, photo) error`
+  - **Logic:** INSERT photo into activity_photos table with activity_id, s3_key, thumbnail_key, content_type, file_size. Use RETURNING clause to get generated ID and timestamps. Update photo struct with returned values.
 - [ ] Implement `GetByActivityID(ctx, activityID) ([]*Photo, error)`
+  - **Logic:** SELECT * FROM activity_photos WHERE activity_id = $1 ORDER BY uploaded_at DESC. Scan all rows into Photo slice. Return empty slice if no photos (not an error).
 - [ ] Implement `GetByID(ctx, id) (*Photo, error)`
+  - **Logic:** SELECT * FROM activity_photos WHERE id = $1. Scan into Photo struct. Return sql.ErrNoRows if photo doesn't exist.
 - [ ] Implement `Delete(ctx, id) error`
+  - **Logic:** DELETE FROM activity_photos WHERE id = $1. Check rows affected - if 0, return error "photo not found". This only deletes DB record, caller must delete S3 files separately.
 - [ ] Write tests for repository methods
 
 **Task 7: Wire Up Routes and Test** (30 min)
@@ -181,13 +361,23 @@ pkg/
 **Task 4: Implement S3 Client** (60 min)
 - [ ] Create `pkg/storage/s3_client.go`
 - [ ] Implement `NewS3Client(bucket, region) (*S3Client, error)`
+  - **Logic:** Load AWS config using `config.LoadDefaultConfig(ctx)` which reads credentials from env vars or ~/.aws/credentials. Create S3 client from config with specified region. Return S3Client struct containing bucket name and S3 service client.
 - [ ] Load AWS credentials from environment
 - [ ] Implement `Upload(ctx, key, file, contentType) error`
+  - **Logic:** Use `s3.PutObjectInput` with Bucket, Key, Body (file reader), ContentType. Call `s3Client.PutObject(ctx, input)`. Check for errors. Key is full path like "activities/123/uuid.jpg". File must be io.Reader. Return wrapped error on failure.
 - [ ] Implement `Delete(ctx, key) error`
+  - **Logic:** Use `s3.DeleteObjectInput` with Bucket and Key. Call `s3Client.DeleteObject(ctx, input)`. Note: DeleteObject succeeds even if key doesn't exist (idempotent). Return wrapped error on failure.
 - [ ] Handle AWS errors and wrap with context
 
 **Task 5: Implement Presigned URLs** (45 min)
 - [ ] Add `GetPresignedURL(ctx, key, duration) (string, error)` to S3Client
+  - **Logic:**
+    1. Create presign client with `s3.NewPresignClient(s3Client)`
+    2. Build GetObjectInput with Bucket and Key
+    3. Call `presignClient.PresignGetObject(ctx, input, func(opts *PresignOptions) { opts.Expires = duration })`
+    4. Returns signed URL string that allows temporary public access to private S3 object
+    5. URL expires after specified duration (typically 1 hour)
+    - **Why:** S3 bucket is private, so direct links don't work. Presigned URLs grant temporary access without making bucket public.
 - [ ] Use `s3.NewPresignClient()` for presigning
 - [ ] Set expiration to 1 hour for view URLs
 - [ ] Test presigned URL generation

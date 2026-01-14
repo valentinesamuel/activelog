@@ -17,14 +17,15 @@ type Activity struct {
 	CaloriesBurned  int       `json:"caloriesBurned,omitempty" `
 	Notes           string    `json:"notes,omitempty" `
 	ActivityDate    time.Time `json:"activityDate" `
+	Tags            []*Tag    `json:"tags,omitempty" `
 }
 
 type CreateActivityRequest struct {
 	ActivityType    string    `json:"activityType" validate:"required,min=2,max=50"`
-	Title           string    `json:"title" validate:"max=255"`
-	Description     string    `json:"description" validate:"max=1000"`
-	DurationMinutes int       `json:"durationMinutes" validate:"omitempty,min=1,max=1440"`
-	DistanceKm      float64   `json:"distanceKm" validate:"omitempty,min=0"`
+	Title           string    `json:"title" validate:"required,max=255"`
+	Description     string    `json:"description" validate:"required,max=1000"`
+	DurationMinutes int       `json:"durationMinutes" validate:"required,omitempty,min=1,max=1440"`
+	DistanceKm      float64   `json:"distanceKm" validate:"required,omitempty,min=0"`
 	CaloriesBurned  int       `json:"caloriesBurned" validate:"omitempty,min=0"`
 	Notes           string    `json:"notes" validate:"max=2000"`
 	ActivityDate    time.Time `json:"activityDate" validate:"required"`
