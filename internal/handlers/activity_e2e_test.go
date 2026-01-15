@@ -42,16 +42,11 @@ func TestE2E_ListActivities_DynamicFiltering(t *testing.T) {
 	listActivitiesUC := usecases.NewListActivitiesUseCase(nil, activityRepo)
 
 	// Create handler
-	handler := handlers.NewActivityHandler(
-		brokerInstance,
-		activityRepo,
-		nil, // createActivityUC - not needed for these tests
-		nil, // getActivityUC - not needed for these tests
-		listActivitiesUC,
-		nil, // updateActivityUC - not needed for these tests
-		nil, // deleteActivityUC - not needed for these tests
-		nil, // getActivityStatsUC - not needed for these tests
-	)
+	handler := handlers.NewActivityHandler(handlers.ActivityHandlerDeps{
+		Broker:           brokerInstance,
+		Repo:             activityRepo,
+		ListActivitiesUC: listActivitiesUC,
+	})
 
 	// Create test user
 	userID := createE2ETestUser(t, db, "e2e@example.com", "e2euser")
@@ -335,11 +330,11 @@ func TestE2E_ListActivities_WithRouter(t *testing.T) {
 	brokerInstance := broker.NewBroker(db.GetRawDB())
 	listActivitiesUC := usecases.NewListActivitiesUseCase(nil, activityRepo)
 
-	handler := handlers.NewActivityHandler(
-		brokerInstance,
-		activityRepo,
-		nil, nil, listActivitiesUC, nil, nil, nil,
-	)
+	handler := handlers.NewActivityHandler(handlers.ActivityHandlerDeps{
+		Broker:           brokerInstance,
+		Repo:             activityRepo,
+		ListActivitiesUC: listActivitiesUC,
+	})
 
 	// Create router (mimic production routing)
 	router := mux.NewRouter()
@@ -445,11 +440,11 @@ func TestE2E_OperatorFiltering_HTTPRequests(t *testing.T) {
 	brokerInstance := broker.NewBroker(db.GetRawDB())
 	listActivitiesUC := usecases.NewListActivitiesUseCase(nil, activityRepo)
 
-	handler := handlers.NewActivityHandler(
-		brokerInstance,
-		activityRepo,
-		nil, nil, listActivitiesUC, nil, nil, nil,
-	)
+	handler := handlers.NewActivityHandler(handlers.ActivityHandlerDeps{
+		Broker:           brokerInstance,
+		Repo:             activityRepo,
+		ListActivitiesUC: listActivitiesUC,
+	})
 
 	// Create test user and data
 	userID := createE2ETestUser(t, db, "operator@example.com", "operatoruser")
