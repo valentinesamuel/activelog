@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE TABLE tags (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
@@ -15,3 +17,5 @@ CREATE INDEX idx_activities_user_date ON activities(user_id, activity_date);
 CREATE INDEX idx_activity_tags_activity ON activity_tags(activity_id);
 CREATE INDEX idx_activity_tags_tag ON activity_tags(tag_id);
 CREATE INDEX idx_tags_name ON tags(name);
+
+COMMIT;

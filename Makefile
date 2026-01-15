@@ -1,4 +1,4 @@
-.PHONY: run build test clean migrate-up migrate-down help mocks mocks-install mocks-verify clean-mocks test-unit test-integration test-verbose test-coverage test-coverage-html test-coverage-by-package test-coverage-threshold test-coverage-detailed bench bench-verbose bench-compare bench-cpu bench-mem bench-all profile-cpu profile-mem profile-cpu-cli profile-mem-cli install-graphviz clean-bench vuln-check security format docker-up docker-down
+.PHONY: run build test clean migrate-up migrate-down migrate-force migrate-version help mocks mocks-install mocks-verify clean-mocks test-unit test-integration test-verbose test-coverage test-coverage-html test-coverage-by-package test-coverage-threshold test-coverage-detailed bench bench-verbose bench-compare bench-cpu bench-mem bench-all profile-cpu profile-mem profile-cpu-cli profile-mem-cli install-graphviz clean-bench vuln-check security format docker-up docker-down
 
 # Variables
 BINARY_NAME=activelog
@@ -23,7 +23,33 @@ migrate-up:
 
 ## migrate-create: Create a new migration file (usage: make migrate-create NAME=migration_name)
 migrate-create:
-	migrate create -ext sql -dir migrations -seq $(NAME)
+	@if [ -z "$(NAME)" ]; then \
+		echo "❌ NAME is required. Usage: make migrate-create NAME=migration_name"; \
+		exit 1; \
+	fi
+	@migrate create -ext sql -dir migrations -seq $(NAME)
+	@UP_FILE=$$(ls -t migrations/*.up.sql | head -1); \
+	DOWN_FILE=$$(ls -t migrations/*.down.sql | head -1); \
+	echo "BEGIN;\n\n-- Add your migration SQL here\n\nCOMMIT;" > "$$UP_FILE"; \
+	echo "BEGIN;\n\n-- Add your rollback SQL here\n\nCOMMIT;" > "$$DOWN_FILE"; \
+	echo "✅ Created migration files with transaction wrappers:"; \
+	echo "   $$UP_FILE"; \
+	echo "   $$DOWN_FILE"
+
+## migrate-version: Show current migration version
+migrate-version:
+	@migrate -path migrations -database "${DB_URL}" version
+
+## migrate-force: Force set migration version without running migrations (usage: make migrate-force VERSION=3)
+migrate-force:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "❌ VERSION is required. Usage: make migrate-force VERSION=3"; \
+		echo "💡 Run 'make migrate-version' to see current version"; \
+		exit 1; \
+	fi
+	@echo "⚠️  Forcing migration version to $(VERSION)..."
+	migrate -path migrations -database "${DB_URL}" force $(VERSION)
+	@echo "✅ Migration version forced to $(VERSION)"
 
 int:
 	golangci-lint run

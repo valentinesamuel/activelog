@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -27,3 +29,5 @@ CREATE TABLE IF NOT EXISTS activities (
 CREATE INDEX idx_activities_user_id ON activities(user_id);
 CREATE INDEX idx_activities_date ON activities(activity_date);
 CREATE INDEX idx_activities_type ON activities(activity_type);
+
+COMMIT;

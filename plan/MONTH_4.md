@@ -214,17 +214,17 @@ This month introduces file handling capabilities to your application. You'll lea
 ### 📋 Implementation Tasks
 
 **Task 1: Create Photo Model** (20 min)
-- [ ] Create `internal/models/photo.go`
-- [ ] Define Photo struct with fields: id, activity_id, s3_key, thumbnail_key, content_type, file_size, uploaded_at
-- [ ] Add JSON tags for API responses
-- [ ] Add validation tags for file size limits
+- [X] Create `internal/models/photo.go`
+- [X] Define Photo struct with fields: id, activity_id, s3_key, thumbnail_key, content_type, file_size, uploaded_at
+- [X] Add JSON tags for API responses
+- [X] Add validation tags for file size limits
 
 **Task 2: Create Database Migration for Photos** (15 min)
-- [ ] Create migration `migrations/004_create_activity_photos.up.sql`
-- [ ] Add activity_photos table with foreign key to activities
-- [ ] Add ON DELETE CASCADE for cleanup
-- [ ] Create index on activity_id
-- [ ] Run migration
+- [X] Create migration `migrations/004_create_activity_photos.up.sql`
+- [X] Add activity_photos table with foreign key to activities
+- [X] Add ON DELETE CASCADE for cleanup
+- [X] Create index on activity_id
+- [X] Run migration
 
 **Task 3: Implement Multipart Form Handler** (60 min)
 - [ ] Create `internal/handlers/photo_handler.go`
