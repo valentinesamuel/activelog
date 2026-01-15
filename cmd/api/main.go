@@ -34,7 +34,7 @@ type Application struct {
 	ActivityHandler *handlers.ActivityHandler
 	UserHandler     *handlers.UserHandler
 	StatsHandler    *handlers.StatsHandler
-	photoHandler    *handlers.PhotoHandler
+	photoHandler    *handlers.ActivityPhotoHandler
 }
 
 func main() {
@@ -87,7 +87,7 @@ func (app *Application) setupDependencies() {
 	app.ActivityHandler = app.Container.MustResolve("activityHandler").(*handlers.ActivityHandler)
 	app.UserHandler = app.Container.MustResolve("userHandler").(*handlers.UserHandler)
 	app.StatsHandler = app.Container.MustResolve("statsHandler").(*handlers.StatsHandler)
-	app.photoHandler = app.Container.MustResolve("photoHandler").(*handlers.PhotoHandler)
+	app.photoHandler = app.Container.MustResolve("activityPhotoHandler").(*handlers.ActivityPhotoHandler)
 }
 
 // setupRoutes configures all application routes and middleware

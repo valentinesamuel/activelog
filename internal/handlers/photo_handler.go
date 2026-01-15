@@ -12,21 +12,21 @@ import (
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
-type PhotoHandler struct {
-	broker                 *broker.Broker
+type ActivityPhotoHandler struct {
+	brokerInstance         *broker.Broker
 	repo                   repository.ActivityRepositoryInterface
 	uploadActivityPhotosUC broker.UseCase
 }
 
-func NewPhotoHandler(broker *broker.Broker, repo repository.ActivityRepositoryInterface, uploadActivityPhotosUC broker.UseCase) *PhotoHandler {
-	return &PhotoHandler{
-		broker:                 broker,
+func NewActivityPhotoHandler(brokerInstance *broker.Broker, repo repository.ActivityRepositoryInterface, uploadActivityPhotosUC broker.UseCase) *ActivityPhotoHandler {
+	return &ActivityPhotoHandler{
+		brokerInstance:         brokerInstance,
 		repo:                   repo,
 		uploadActivityPhotosUC: uploadActivityPhotosUC,
 	}
 }
 
-func (h *PhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
+func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	vars := mux.Vars(r)
@@ -52,7 +52,7 @@ func (h *PhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	// 	}
 
-	result, err := h.broker.RunUseCases(
+	result, err := h.brokerInstance.RunUseCases(
 		ctx,
 		[]broker.UseCase{h.uploadActivityPhotosUC},
 		map[string]interface{}{

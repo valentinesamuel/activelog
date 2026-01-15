@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
 )
@@ -28,8 +27,13 @@ func (uc *UploadActivityPhotoUseCase) RequiresTransaction() bool {
 	return true
 }
 
-func (uc *UploadActivityPhotoUseCase) Execute(ctx context.Context,
+func (uc *UploadActivityPhotoUseCase) Execute(
+	ctx context.Context,
 	tx *sql.Tx,
-	input map[string]interface{}) (*models.ActivityPhoto, error) {
-	return nil, nil
+	input map[string]interface{},
+) (map[string]interface{}, error) {
+	// TODO: Implement photo upload logic
+	return map[string]interface{}{
+		"activityPhotos": nil,
+	}, nil
 }

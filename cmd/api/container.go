@@ -4,9 +4,10 @@ import (
 	"database/sql"
 
 	"github.com/valentinesamuel/activelog/internal/application/activity/usecases"
+	"github.com/valentinesamuel/activelog/internal/application/broker"
+	activityPhotoUsecases "github.com/valentinesamuel/activelog/internal/application/photo/usecases"
 	statsUsecases "github.com/valentinesamuel/activelog/internal/application/stats/usecases"
 	tagUsecases "github.com/valentinesamuel/activelog/internal/application/tag/usecases"
-	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/handlers"
 	"github.com/valentinesamuel/activelog/internal/repository"
@@ -36,6 +37,7 @@ func setupContainer(db repository.DBConn) *container.Container {
 	registerActivityUseCases(c)
 	registerTagUseCases(c)
 	registerStatsUseCases(c)
+	registerActivityPhotoUseCases(c)
 
 	// Register handlers
 	registerHandlers(c)
@@ -213,6 +215,15 @@ func registerStatsUseCases(c *container.Container) {
 	})
 }
 
+// registerPhotoUseCases registers all photo-related use cases
+func registerActivityPhotoUseCases(c *container.Container) {
+	c.Register("uploadActivityPhotosUC", func(c *container.Container) (interface{}, error) {
+		svc := c.MustResolve("activityService").(service.ActivityServiceInterface)
+		repo := c.MustResolve("activityRepo").(repository.ActivityRepositoryInterface)
+		return activityPhotoUsecases.NewUploadActivityPhotoUseCase(svc, repo), nil
+	})
+}
+
 // registerHandlers registers all HTTP handlers
 func registerHandlers(c *container.Container) {
 	// Health handler (no dependencies)
@@ -239,15 +250,15 @@ func registerHandlers(c *container.Container) {
 		deleteUC := c.MustResolve("deleteActivityUC").(broker.UseCase)
 		getStatsUC := c.MustResolve("getActivityStatsUC").(broker.UseCase)
 
-		return handlers.NewActivityHandler(
-			brokerInstance,
-			repo,
-			createUC,
-			getUC,
-			listUC,
-			updateUC,
-			deleteUC,
-			getStatsUC,
+		return handlers.NewActivityHandler(handlers.ActivityHandlerDeps{
+			Broker:             brokerInstance,
+			Repo:               repo,
+			CreateActivityUC:   createUC,
+			GetActivityUC:      getUC,
+			ListActivitiesUC:   listUC,
+			UpdateActivityUC:   updateUC,
+			DeleteActivityUC:   deleteUC,
+			GetActivityStatsUC: getStatsUC},
 		), nil
 	})
 
@@ -255,5 +266,20 @@ func registerHandlers(c *container.Container) {
 	c.Register("statsHandler", func(c *container.Container) (interface{}, error) {
 		repo := c.MustResolve("statsRepo").(repository.StatsRepositoryInterface)
 		return handlers.NewStatsHandler(repo), nil
+	})
+
+	// Activity photo handler
+	c.Register("activityPhotoHandler", func(c *container.Container) (interface{}, error) {
+		brokerInstance := c.MustResolve("broker").(*broker.Broker)
+		repo := c.MustResolve("activityRepo").(repository.ActivityRepositoryInterface)
+
+		// Resolve all use cases
+		uploadActivityPhotosUC := c.MustResolve("uploadActivityPhotosUC").(broker.UseCase)
+
+		return handlers.NewActivityPhotoHandler(
+			brokerInstance,
+			repo,
+			uploadActivityPhotosUC,
+		), nil
 	})
 }
