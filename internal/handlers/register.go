@@ -3,7 +3,7 @@ package handlers
 import (
 	activityUsecases "github.com/valentinesamuel/activelog/internal/application/activity/usecases"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
-	photoUsecases "github.com/valentinesamuel/activelog/internal/application/photo/usecases"
+	photoUsecases "github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
