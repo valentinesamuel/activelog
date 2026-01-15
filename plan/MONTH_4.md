@@ -227,8 +227,8 @@ This month introduces file handling capabilities to your application. You'll lea
 - [X] Run migration
 
 **Task 3: Implement Multipart Form Handler** (60 min)
-- [ ] Create `internal/handlers/photo_handler.go`
-- [ ] Implement `Upload(w, r)` method
+- [X] Create `internal/handlers/photo_handler.go`
+- [X] Implement `Upload(w, r)` method
   - **Logic:**
     1. Extract activity ID from URL path parameters
     2. Parse multipart form with `r.ParseMultipartForm(50 << 20)` - loads up to 50MB into memory

@@ -34,6 +34,7 @@ type Application struct {
 	ActivityHandler *handlers.ActivityHandler
 	UserHandler     *handlers.UserHandler
 	StatsHandler    *handlers.StatsHandler
+	photoHandler    *handlers.PhotoHandler
 }
 
 func main() {
@@ -86,6 +87,7 @@ func (app *Application) setupDependencies() {
 	app.ActivityHandler = app.Container.MustResolve("activityHandler").(*handlers.ActivityHandler)
 	app.UserHandler = app.Container.MustResolve("userHandler").(*handlers.UserHandler)
 	app.StatsHandler = app.Container.MustResolve("statsHandler").(*handlers.StatsHandler)
+	app.photoHandler = app.Container.MustResolve("photoHandler").(*handlers.PhotoHandler)
 }
 
 // setupRoutes configures all application routes and middleware
@@ -140,6 +142,7 @@ func (app *Application) registerActivityRoutes(router *mux.Router) {
 	router.HandleFunc("/activities/{id}", app.ActivityHandler.GetActivity).Methods("GET")
 	router.HandleFunc("/activities/{id}", app.ActivityHandler.UpdateActivity).Methods("PATCH")
 	router.HandleFunc("/activities/{id}", app.ActivityHandler.DeleteActivity).Methods("DELETE")
+	router.HandleFunc("/activities/{id}/photos", app.photoHandler.Upload).Methods("POST")
 }
 
 // registerStatsRoutes registers statistics and analytics routes

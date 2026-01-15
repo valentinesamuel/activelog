@@ -21,36 +21,40 @@ import (
 // ActivityHandler uses the broker pattern for use case orchestration
 // All operations flow through broker → use cases for consistency
 type ActivityHandler struct {
-	broker               *broker.Broker
-	repo                 repository.ActivityRepositoryInterface
-	createActivityUC     broker.UseCase
-	getActivityUC        broker.UseCase
-	listActivitiesUC     broker.UseCase
-	updateActivityUC     broker.UseCase
-	deleteActivityUC     broker.UseCase
-	getActivityStatsUC   broker.UseCase
+	broker             *broker.Broker
+	repo               repository.ActivityRepositoryInterface
+	createActivityUC   broker.UseCase
+	getActivityUC      broker.UseCase
+	listActivitiesUC   broker.UseCase
+	updateActivityUC   broker.UseCase
+	deleteActivityUC   broker.UseCase
+	getActivityStatsUC broker.UseCase
+}
+
+type ActivityHandlerDeps struct {
+	Broker             *broker.Broker
+	Repo               repository.ActivityRepositoryInterface
+	CreateActivityUC   broker.UseCase
+	GetActivityUC      broker.UseCase
+	ListActivitiesUC   broker.UseCase
+	UpdateActivityUC   broker.UseCase
+	DeleteActivityUC   broker.UseCase
+	GetActivityStatsUC broker.UseCase
 }
 
 // NewActivityHandler creates a handler with broker pattern
 func NewActivityHandler(
-	brokerInstance *broker.Broker,
-	repo repository.ActivityRepositoryInterface,
-	createActivityUC broker.UseCase,
-	getActivityUC broker.UseCase,
-	listActivitiesUC broker.UseCase,
-	updateActivityUC broker.UseCase,
-	deleteActivityUC broker.UseCase,
-	getActivityStatsUC broker.UseCase,
+	deps ActivityHandlerDeps,
 ) *ActivityHandler {
 	return &ActivityHandler{
-		broker:             brokerInstance,
-		repo:               repo,
-		createActivityUC:   createActivityUC,
-		getActivityUC:      getActivityUC,
-		listActivitiesUC:   listActivitiesUC,
-		updateActivityUC:   updateActivityUC,
-		deleteActivityUC:   deleteActivityUC,
-		getActivityStatsUC: getActivityStatsUC,
+		broker:             deps.Broker,
+		repo:               deps.Repo,
+		createActivityUC:   deps.CreateActivityUC,
+		getActivityUC:      deps.GetActivityUC,
+		listActivitiesUC:   deps.ListActivitiesUC,
+		updateActivityUC:   deps.UpdateActivityUC,
+		deleteActivityUC:   deps.DeleteActivityUC,
+		getActivityStatsUC: deps.GetActivityStatsUC,
 	}
 }
 
@@ -214,7 +218,7 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 		"activity_type": query.EqualityOperators(), // eq, ne only
 
 		// Relationship columns
-		"tags.name": query.EqualityOperators(), // eq, ne for tag names
+		"tags.name": query.EqualityOperators(),  // eq, ne for tag names
 		"tags.id":   query.StrictEqualityOnly(), // eq only for tag IDs
 	}
 
