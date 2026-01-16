@@ -84,7 +84,6 @@ func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Execute use case through broker
-	// Pattern: broker.runUsecases([useCase], input)
 	result, err := h.broker.RunUseCases(
 		ctx,
 		[]broker.UseCase{h.createActivityUC},

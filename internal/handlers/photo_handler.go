@@ -53,16 +53,12 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 	for _, photo := range photos {
-
-	// 	}
-
 	result, err := h.brokerInstance.RunUseCases(
 		ctx,
 		[]broker.UseCase{h.uploadActivityPhotosUC},
 		map[string]interface{}{
 			"user_id":     1,
-			"request":     &photos,
+			"photos":     &photos,
 			"activity_id": id,
 		},
 	)
