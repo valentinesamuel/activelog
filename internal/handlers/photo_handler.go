@@ -32,13 +32,18 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
+		logger.Error().Err(err).Msg("❌ Failed to upload activity photo")
 		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
 		return
 	}
 
+	contentType := r.Header.Get("Content-Type")
+	logger.Info().Str("content_type", contentType).Msg("📤 Received upload request")
+
 	err = r.ParseMultipartForm(50 << 20)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid files")
+		logger.Error().Err(err).Str("content_type", contentType).Msg("❌ Failed to parse multipart form")
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
