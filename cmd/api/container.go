@@ -2,25 +2,29 @@ package main
 
 import (
 	activityUsecases "github.com/valentinesamuel/activelog/internal/application/activity/usecases"
-	"github.com/valentinesamuel/activelog/internal/application/broker"
 	photoUsecases "github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases"
+	"github.com/valentinesamuel/activelog/internal/application/broker"
 	statsUsecases "github.com/valentinesamuel/activelog/internal/application/stats/usecases"
 	tagUsecases "github.com/valentinesamuel/activelog/internal/application/tag/usecases"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/handlers"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
+	"github.com/valentinesamuel/activelog/internal/storage"
 	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 // setupContainer creates and configures the DI container
 // All dependencies are registered here following Clean Architecture layering
-// Registration order: Core → Repositories → Services → Broker → UseCases → Handlers
+// Registration order: Core → Storage → Repositories → Services → Broker → UseCases → Handlers
 func setupContainer(db repository.DBConn) *container.Container {
 	c := container.New()
 
 	// Register core singletons (must be first)
 	registerCoreDependencies(c, db)
+
+	// Register storage provider (uses config globals)
+	storage.RegisterStorage(c)
 
 	// Register layers in dependency order
 	repository.RegisterRepositories(c) // Layer 1: Data access

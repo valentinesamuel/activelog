@@ -22,7 +22,9 @@
       "Bash(git commit:*)",
       "Bash(git restore:*)",
       "Bash(go clean:*)",
-      "Bash(./activelog)"
+      "Bash(./activelog)",
+      "Bash(go mod tidy:*)",
+      "Bash(pkill:*)"
     ]
   }
 }

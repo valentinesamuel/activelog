@@ -25,7 +25,6 @@ import (
 
 // Application holds all dependencies
 type Application struct {
-	Config          *config.Config
 	DB              repository.DBConn
 	DBCloser        interface{ Close() error } // For cleanup during shutdown
 	Container       *container.Container       // DI container
@@ -47,18 +46,17 @@ func main() {
 
 // run orchestrates the application startup and shutdown
 func run() error {
-	// Load configuration
-	cfg := config.Load()
+	// Load and validate configuration (loads .env file automatically)
+	config.MustLoad()
 
 	// Connect to database
-	db, err := database.Connect(cfg.DatabaseUrl)
+	db, err := database.Connect(config.Database.URL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Initialize application with dependencies
 	app := &Application{
-		Config:   cfg,
 		DB:       db,
 		DBCloser: db,
 	}
@@ -176,7 +174,7 @@ func (app *Application) registerUserRoutes(router *mux.Router) {
 // newServer creates and configures the HTTP server
 func (app *Application) newServer() *http.Server {
 	return &http.Server{
-		Addr:         ":" + app.Config.ServerPort,
+		Addr:         fmt.Sprintf(":%d", config.Common.Port),
 		Handler:      app.setupRoutes(),
 		ReadTimeout:  45 * time.Second,
 		WriteTimeout: 45 * time.Second,
@@ -193,7 +191,7 @@ func (app *Application) serve(server *http.Server) error {
 	// Start server in goroutine
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Printf("🚒 Server starting on port %s...\n", app.Config.ServerPort)
+		log.Printf("🚒 Server starting on port %d...\n", config.Common.Port)
 		serverErrors <- server.ListenAndServe()
 	}()
 

@@ -14,7 +14,6 @@ import (
 func AuthMiddleware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cfg := config.Load()
 		// Extract token from Authorization header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -28,7 +27,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		// Validate token
 		claims := &auth.Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
-			return []byte(cfg.JWTSecret), nil
+			return []byte(config.Common.Auth.JWTSecret), nil
 		})
 
 		if err != nil || !token.Valid {

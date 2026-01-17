@@ -14,8 +14,6 @@ type Claims struct {
 }
 
 func GenerateJwtToken(userID int, email string) (string, error) {
-	cfg := config.Load()
-
 	claims := Claims{
 		UserID: userID,
 		Email:  email,
@@ -26,9 +24,9 @@ func GenerateJwtToken(userID int, email string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(cfg.JWTSecret))
+	return token.SignedString([]byte(config.Common.Auth.JWTSecret))
 }
 
-func VerifyToken(token string){
-	
+func VerifyToken(token string) {
+
 }
