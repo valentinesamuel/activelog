@@ -16,7 +16,7 @@ import (
 )
 
 // ProviderName is the identifier for this storage provider
-const ProviderName = "s3"
+// const ProviderName = "s3"
 
 // Provider implements the StorageProvider interface for AWS S3
 type Provider struct {

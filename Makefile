@@ -36,6 +36,7 @@ migrate-create:
 	echo "   $$UP_FILE"; \
 	echo "   $$DOWN_FILE"
 
+
 ## migrate-version: Show current migration version
 migrate-version:
 	@migrate -path migrations -database "${DB_URL}" version

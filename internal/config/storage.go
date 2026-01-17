@@ -25,7 +25,7 @@ var Storage *StorageConfigType
 // loadStorage loads storage configuration from environment variables
 func loadStorage() *StorageConfigType {
 	return &StorageConfigType{
-		Provider: GetEnv("STORAGE_PROVIDER", "s3"),
+		Provider: GetEnv("STORAGE_PROVIDER", ""),
 		S3: S3ConfigType{
 			Bucket:          GetEnv("AWS_S3_BUCKET", ""),
 			Region:          GetEnv("AWS_REGION", "us-east-1"),

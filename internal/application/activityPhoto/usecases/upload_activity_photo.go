@@ -17,20 +17,20 @@ import (
 )
 
 type UploadActivityPhotoUseCase struct {
-	service  service.ActivityServiceInterface
-	repo     repository.ActivityRepositoryInterface
-	storager types.StorageProvider
+	service service.ActivityServiceInterface
+	repo    repository.ActivityRepositoryInterface
+	storage types.StorageProvider
 }
 
 func NewUploadActivityPhotoUseCase(
 	svc service.ActivityServiceInterface,
 	repo repository.ActivityRepositoryInterface,
-	storager types.StorageProvider,
+	storage types.StorageProvider,
 ) *UploadActivityPhotoUseCase {
 	return &UploadActivityPhotoUseCase{
-		service:  svc,
-		repo:     repo,
-		storager: storager,
+		service: svc,
+		repo:    repo,
+		storage: storage,
 	}
 }
 
@@ -56,7 +56,7 @@ func (uc *UploadActivityPhotoUseCase) Execute(
 	}
 
 	// Check if storage provider is available
-	if uc.storager == nil {
+	if uc.storage == nil {
 		return nil, fmt.Errorf("storage provider not configured")
 	}
 
@@ -105,7 +105,7 @@ func (uc *UploadActivityPhotoUseCase) uploadPhoto(
 	}
 
 	// Upload to storage
-	output, err := uc.storager.Upload(ctx, &types.UploadInput{
+	output, err := uc.storage.Upload(ctx, &types.UploadInput{
 		Key:         key,
 		Body:        file,
 		ContentType: contentType,
@@ -148,11 +148,11 @@ func (uc *UploadActivityPhotoUseCase) GetPresignedURL(
 	key string,
 	expiresIn time.Duration,
 ) (string, error) {
-	if uc.storager == nil {
+	if uc.storage == nil {
 		return "", fmt.Errorf("storage provider not configured")
 	}
 
-	return uc.storager.GetPresignedURL(ctx, &types.PresignedURLInput{
+	return uc.storage.GetPresignedURL(ctx, &types.PresignedURLInput{
 		Key:       key,
 		ExpiresIn: expiresIn,
 		Operation: types.PresignGet,
