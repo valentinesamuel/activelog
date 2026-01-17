@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	"github.com/valentinesamuel/activelog/internal/utils"
 	"github.com/valentinesamuel/activelog/pkg/logger"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
@@ -53,12 +55,33 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	allowedTypes := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/webp": true,
+	}
+	for _, photo := range photos {
+		file, err := photo.Open()
+		if err != nil {
+			continue
+		}
+
+		contentType, err := utils.DetectFileType(file)
+		file.Close()
+
+		if !allowedTypes[contentType] {
+			response.Error(w, http.StatusBadRequest, "Invalid file format")
+		}
+
+		fmt.Printf("File: %s, Type: %s\n", photo.Filename, contentType)
+	}
+
 	result, err := h.brokerInstance.RunUseCases(
 		ctx,
 		[]broker.UseCase{h.uploadActivityPhotosUC},
 		map[string]interface{}{
 			"user_id":     1,
-			"photos":     &photos,
+			"photos":      &photos,
 			"activity_id": id,
 		},
 	)

@@ -236,27 +236,27 @@ This month introduces file handling capabilities to your application. You'll lea
     4. Validate file count (reject if > 5 photos)
     5. For each file: open file, validate type/size, process (save temp or upload to S3)
     6. Return JSON response with uploaded file metadata (IDs, URLs, sizes)
-- [ ] Parse multipart form: `r.ParseMultipartForm(50 << 20)` (50MB limit)
-- [ ] Extract files from `r.MultipartForm.File["photos"]`
-- [ ] Validate file count (max 5 photos per activity)
-- [ ] Return file metadata in response
+- [X] Parse multipart form: `r.ParseMultipartForm(50 << 20)` (50MB limit)
+- [X] Extract files from `r.MultipartForm.File["photos"]`
+- [X] Validate file count (max 5 photos per activity)
+- [X] Return file metadata in response
 
 **Task 4: File Validation** (45 min)
-- [ ] Create `pkg/upload/validator.go`
-- [ ] Implement `ValidateFileType(contentType string) error`
+- [X] Create `pkg/upload/validator.go`
+- [X] Implement `ValidateFileType(contentType string) error`
   - **Logic:** Check if contentType is in allowed list (image/jpeg, image/png, image/webp). Return error if not. Also read first 512 bytes of file and use `http.DetectContentType()` to verify magic bytes match (prevents MIME type spoofing).
-- [ ] Check MIME type: accept image/jpeg, image/png, image/webp
-- [ ] Implement `ValidateFileSize(size int64) error` (max 10MB)
+- [X] Check MIME type: accept image/jpeg, image/png, image/webp
+- [X] Implement `ValidateFileSize(size int64) error` (max 10MB)
   - **Logic:** Check if size > 10*1024*1024 bytes. If yes, return error with message "file too large, maximum size is 10MB". If no, return nil.
-- [ ] Check magic bytes (not just extension) for security
-- [ ] Add tests for validation logic
+- [X] Check magic bytes (not just extension) for security
+- [X] Add tests for validation logic
 
 **Task 5: Temporary File Storage** (30 min)
-- [ ] Create temp directory for uploads: `/tmp/activelog-uploads`
-- [ ] Save uploaded files temporarily
-- [ ] Generate unique filenames with UUID
-- [ ] Implement cleanup of temp files after processing
-- [ ] Handle concurrent uploads safely
+- [X] Create temp directory for uploads: `/tmp/activelog-uploads`
+- [X] Save uploaded files temporarily
+- [X] Generate unique filenames with UUID
+- [X] Implement cleanup of temp files after processing
+- [X] Handle concurrent uploads safely
 
 **Task 6: Create Photo Repository** (45 min)
 - [ ] Create `internal/repository/photo_repository.go`
