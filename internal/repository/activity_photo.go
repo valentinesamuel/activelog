@@ -55,7 +55,7 @@ func (apr *ActivityPhotoRepository) Create(ctx context.Context, tx TxConn, activ
 
 func (apr *ActivityPhotoRepository) GetByActivityID(ctx context.Context, id int) ([]*models.ActivityPhoto, error) {
 	query := `
-		SELECT *
+		SELECT id, activity_id, s3_key, thumbnail_key, content_type, file_size, uploaded_at, created_at, updated_at
 		FROM activity_photos
 		WHERE activity_id = $1
 		ORDER BY uploaded_at DESC
@@ -75,10 +75,10 @@ func (apr *ActivityPhotoRepository) GetByActivityID(ctx context.Context, id int)
 		err := rows.Scan(
 			&activityPhoto.ID,
 			&activityPhoto.ActivityID,
-			&activityPhoto.ContentType,
-			&activityPhoto.FileSize,
 			&activityPhoto.S3Key,
 			&activityPhoto.ThumbnailKey,
+			&activityPhoto.ContentType,
+			&activityPhoto.FileSize,
 			&activityPhoto.UploadedAt,
 			&activityPhoto.CreatedAt,
 			&activityPhoto.UpdatedAt,
@@ -102,7 +102,7 @@ func (apr *ActivityPhotoRepository) GetByActivityID(ctx context.Context, id int)
 
 func (apr *ActivityPhotoRepository) GetByID(ctx context.Context, id int) (*models.ActivityPhoto, error) {
 	query := `
-		SELECT *
+		SELECT id, activity_id, s3_key, thumbnail_key, content_type, file_size, uploaded_at, created_at, updated_at
 		FROM activity_photos
 		WHERE id = $1
 	`
@@ -112,10 +112,10 @@ func (apr *ActivityPhotoRepository) GetByID(ctx context.Context, id int) (*model
 	err := apr.db.QueryRowContext(ctx, query, id).Scan(
 		&activityPhoto.ID,
 		&activityPhoto.ActivityID,
-		&activityPhoto.ContentType,
-		&activityPhoto.FileSize,
 		&activityPhoto.S3Key,
 		&activityPhoto.ThumbnailKey,
+		&activityPhoto.ContentType,
+		&activityPhoto.FileSize,
 		&activityPhoto.UploadedAt,
 		&activityPhoto.CreatedAt,
 		&activityPhoto.UpdatedAt,
