@@ -13,7 +13,7 @@ import (
 func RegisterActivityPhotoUseCases(c *container.Container) {
 	c.Register(UploadActivityPhotosUCKey, func(c *container.Container) (interface{}, error) {
 		svc := c.MustResolve(service.ActivityServiceKey).(service.ActivityServiceInterface)
-		repo := c.MustResolve(repository.ActivityRepoKey).(repository.ActivityRepositoryInterface)
+		repo := c.MustResolve(repository.ActivityPhotoRepoKey).(repository.ActivityPhotoRepositoryInterface)
 
 		// Storage provider may be nil if not configured - handle gracefully
 		var storageProvider types.StorageProvider
@@ -22,5 +22,12 @@ func RegisterActivityPhotoUseCases(c *container.Container) {
 		}
 
 		return NewUploadActivityPhotoUseCase(svc, repo, storageProvider), nil
+	})
+
+	c.Register(GetActivityPhotosUCKey, func(c *container.Container) (interface{}, error) {
+		svc := c.MustResolve(service.ActivityServiceKey).(service.ActivityServiceInterface)
+		repo := c.MustResolve(repository.ActivityPhotoRepoKey).(repository.ActivityPhotoRepositoryInterface)
+
+		return NewGetActivityPhotoUseCase(svc, repo), nil
 	})
 }

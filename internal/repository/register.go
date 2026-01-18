@@ -35,6 +35,20 @@ func RegisterRepositories(c *container.Container) {
 		return activityRepo, nil
 	})
 
+		c.Register(ActivityPhotoRepoKey, func(c *container.Container) (interface{}, error) {
+		db := c.MustResolve(CoreDBKey).(DBConn)
+		activityRepo := c.MustResolve(ActivityRepoKey).(*ActivityRepository)
+		manager := c.MustResolve(CoreRegistryManagerKey).(*query.RegistryManager)
+
+		// Create repository with manager support (v3.0)
+		activityPhotoRepo := NewActivityPhotoRepository(db, activityRepo)
+
+		// Register this repository's registry with the manager for deep nesting
+		manager.RegisterTable("activity_photos", activityPhotoRepo.GetRegistry())
+
+		return activityPhotoRepo, nil
+	})
+
 	// User repository
 	c.Register(UserRepoKey, func(c *container.Container) (interface{}, error) {
 		db := c.MustResolve(CoreDBKey).(DBConn)

@@ -25,7 +25,8 @@
       "Bash(./activelog)",
       "Bash(go mod tidy:*)",
       "Bash(pkill:*)",
-      "Bash(aws:*)"
+      "Bash(aws:*)",
+      "Bash(air -v:*)"
     ]
   }
 }

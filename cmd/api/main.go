@@ -141,6 +141,7 @@ func (app *Application) registerActivityRoutes(router *mux.Router) {
 	router.HandleFunc("/activities/{id}", app.ActivityHandler.UpdateActivity).Methods("PATCH")
 	router.HandleFunc("/activities/{id}", app.ActivityHandler.DeleteActivity).Methods("DELETE")
 	router.HandleFunc("/activities/{id}/photos", app.photoHandler.Upload).Methods("POST")
+	router.HandleFunc("/activities/{id}/photos", app.photoHandler.GetActivityPhoto).Methods("GET")
 }
 
 // registerStatsRoutes registers statistics and analytics routes

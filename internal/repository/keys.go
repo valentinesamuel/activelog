@@ -4,6 +4,7 @@ package repository
 const (
 	TagRepoKey      = "tagRepo"
 	ActivityRepoKey = "activityRepo"
+	ActivityPhotoRepoKey = "activityPhotoRepo"
 	UserRepoKey     = "userRepo"
 	StatsRepoKey    = "statsRepo"
 )

@@ -2,8 +2,8 @@ package handlers
 
 import (
 	activityUsecases "github.com/valentinesamuel/activelog/internal/application/activity/usecases"
-	"github.com/valentinesamuel/activelog/internal/application/broker"
 	photoUsecases "github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases"
+	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
@@ -56,11 +56,12 @@ func RegisterHandlers(c *container.Container) {
 	// Activity photo handler
 	c.Register(ActivityPhotoHandlerKey, func(c *container.Container) (interface{}, error) {
 		brokerInstance := c.MustResolve(broker.BrokerKey).(*broker.Broker)
-		repo := c.MustResolve(repository.ActivityRepoKey).(repository.ActivityRepositoryInterface)
+		repo := c.MustResolve(repository.ActivityPhotoRepoKey).(repository.ActivityPhotoRepositoryInterface)
 
 		// Resolve use case using exported key
-		uploadUC := c.MustResolve(photoUsecases.UploadActivityPhotosUCKey).(broker.UseCase)
+		uploadActivityPhotoUC := c.MustResolve(photoUsecases.UploadActivityPhotosUCKey).(broker.UseCase)
+		getActivityPhotoUC := c.MustResolve(photoUsecases.GetActivityPhotosUCKey).(broker.UseCase)
 
-		return NewActivityPhotoHandler(brokerInstance, repo, uploadUC), nil
+		return NewActivityPhotoHandler(brokerInstance, repo, uploadActivityPhotoUC, getActivityPhotoUC), nil
 	})
 }

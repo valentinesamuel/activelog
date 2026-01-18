@@ -16,15 +16,17 @@ import (
 
 type ActivityPhotoHandler struct {
 	brokerInstance         *broker.Broker
-	repo                   repository.ActivityRepositoryInterface
+	repo                   repository.ActivityPhotoRepositoryInterface
 	uploadActivityPhotosUC broker.UseCase
+	getActivityPhotosUC    broker.UseCase
 }
 
-func NewActivityPhotoHandler(brokerInstance *broker.Broker, repo repository.ActivityRepositoryInterface, uploadActivityPhotosUC broker.UseCase) *ActivityPhotoHandler {
+func NewActivityPhotoHandler(brokerInstance *broker.Broker, repo repository.ActivityPhotoRepositoryInterface, uploadActivityPhotosUC, getActivityPhotosUC broker.UseCase) *ActivityPhotoHandler {
 	return &ActivityPhotoHandler{
 		brokerInstance:         brokerInstance,
 		repo:                   repo,
 		uploadActivityPhotosUC: uploadActivityPhotosUC,
+		getActivityPhotosUC:    getActivityPhotosUC,
 	}
 }
 
@@ -95,5 +97,35 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	activityPhotos := result["activityPhotos"]
 	log.Info().Interface("activityId", result["activity_id"]).Msg("✅ Activity PhotosCreated")
 	response.SendJSON(w, http.StatusCreated, activityPhotos)
+
+}
+
+func (h *ActivityPhotoHandler) GetActivityPhoto(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		logger.Error().Err(err).Msg("❌ Failed to upload activity photo")
+		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
+		return
+	}
+
+	result, err := h.brokerInstance.RunUseCases(
+		ctx,
+		[]broker.UseCase{h.getActivityPhotosUC},
+		map[string]interface{}{
+			"activityId": id,
+		},
+	)
+
+	if err != nil {
+		logger.Error().Err(err).Msg("❌ Failed to get activity photos")
+		response.Error(w, http.StatusInternalServerError, "Failed to get activity photos")
+		return
+	}
+
+	log.Info().Interface("activityId", result["activity_id"]).Msg("✅ Activity Photos retrieved")
+	response.SendJSON(w, http.StatusCreated, result)
 
 }

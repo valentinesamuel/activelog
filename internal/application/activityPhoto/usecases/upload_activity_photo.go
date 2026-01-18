@@ -18,13 +18,13 @@ import (
 
 type UploadActivityPhotoUseCase struct {
 	service service.ActivityServiceInterface
-	repo    repository.ActivityRepositoryInterface
+	repo    repository.ActivityPhotoRepositoryInterface
 	storage types.StorageProvider
 }
 
 func NewUploadActivityPhotoUseCase(
 	svc service.ActivityServiceInterface,
-	repo repository.ActivityRepositoryInterface,
+	repo repository.ActivityPhotoRepositoryInterface,
 	storage types.StorageProvider,
 ) *UploadActivityPhotoUseCase {
 	return &UploadActivityPhotoUseCase{
@@ -63,7 +63,7 @@ func (uc *UploadActivityPhotoUseCase) Execute(
 	// Upload each photo
 	uploadedPhotos := make([]models.ActivityPhoto, 0, len(photos))
 	for _, photo := range photos {
-		activityPhoto, err := uc.uploadPhoto(ctx, activityID, photo)
+		activityPhoto, err := uc.uploadPhoto(ctx, activityID, photo, tx)
 		if err != nil {
 			// If any upload fails, we should handle cleanup
 			// For now, return error with partial uploads info
@@ -89,6 +89,7 @@ func (uc *UploadActivityPhotoUseCase) uploadPhoto(
 	ctx context.Context,
 	activityID int,
 	fileHeader *multipart.FileHeader,
+	tx *sql.Tx,
 ) (*models.ActivityPhoto, error) {
 	// Open the file
 	file, err := fileHeader.Open()
@@ -128,11 +129,16 @@ func (uc *UploadActivityPhotoUseCase) uploadPhoto(
 		UploadedAt:  output.UploadedAt,
 	}
 
+	dbError := uc.repo.Create(ctx, tx, activityPhoto)
+
+	if dbError != nil {
+		return nil, dbError
+	}
+
 	return activityPhoto, nil
 }
 
 // generateStorageKey creates a unique key for storing the photo
-// Format: activities/{activityID}/photos/{uuid}{extension}
 func (uc *UploadActivityPhotoUseCase) generateStorageKey(activityID int, filename string) string {
 	ext := strings.ToLower(filepath.Ext(filename))
 	if ext == "" {

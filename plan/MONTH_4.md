@@ -259,14 +259,14 @@ This month introduces file handling capabilities to your application. You'll lea
 - [X] Handle concurrent uploads safely
 
 **Task 6: Create Photo Repository** (45 min)
-- [ ] Create `internal/repository/photo_repository.go`
-- [ ] Implement `Create(ctx, photo) error`
+- [X] Create `internal/repository/photo_repository.go`
+- [X] Implement `Create(ctx, photo) error`
   - **Logic:** INSERT photo into activity_photos table with activity_id, s3_key, thumbnail_key, content_type, file_size. Use RETURNING clause to get generated ID and timestamps. Update photo struct with returned values.
-- [ ] Implement `GetByActivityID(ctx, activityID) ([]*Photo, error)`
+- [X] Implement `GetByActivityID(ctx, activityID) ([]*Photo, error)`
   - **Logic:** SELECT * FROM activity_photos WHERE activity_id = $1 ORDER BY uploaded_at DESC. Scan all rows into Photo slice. Return empty slice if no photos (not an error).
-- [ ] Implement `GetByID(ctx, id) (*Photo, error)`
+- [X] Implement `GetByID(ctx, id) (*Photo, error)`
   - **Logic:** SELECT * FROM activity_photos WHERE id = $1. Scan into Photo struct. Return sql.ErrNoRows if photo doesn't exist.
-- [ ] Implement `Delete(ctx, id) error`
+- [X] Implement `Delete(ctx, id) error`
   - **Logic:** DELETE FROM activity_photos WHERE id = $1. Check rows affected - if 0, return error "photo not found". This only deletes DB record, caller must delete S3 files separately.
 - [ ] Write tests for repository methods
 
@@ -332,45 +332,45 @@ pkg/
 ### 📋 Implementation Tasks
 
 **Task 1: Set Up AWS Account and S3 Bucket** (30 min)
-- [ ] Create/log into AWS account
-- [ ] Create S3 bucket: `activelog-uploads-[your-name]`
-- [ ] Set bucket to private (block all public access)
-- [ ] Create folder structure: `activities/{activity_id}/`
-- [ ] Note bucket name and region for config
+- [X] Create/log into AWS account
+- [X] Create S3 bucket: `activelog-uploads-[your-name]`
+- [X] Set bucket to private (block all public access)
+- [X] Create folder structure: `activities/{activity_id}/`
+- [X] Note bucket name and region for config
 
 **Task 2: Create IAM User and Permissions** (20 min)
-- [ ] Go to IAM console
-- [ ] Create new user: `activelog-api`
-- [ ] Create policy with S3 permissions (PutObject, GetObject, DeleteObject)
-- [ ] Attach policy to user
-- [ ] Generate access keys (Access Key ID + Secret)
-- [ ] **IMPORTANT**: Save keys securely, never commit to git
+- [X] Go to IAM console
+- [X] Create new user: `activelog-api`
+- [X] Create policy with S3 permissions (PutObject, GetObject, DeleteObject)
+- [X] Attach policy to user
+- [X] Generate access keys (Access Key ID + Secret)
+- [X] **IMPORTANT**: Save keys securely, never commit to git
 
 **Task 3: Configure AWS Credentials** (15 min)
-- [ ] Install AWS SDK: `go get github.com/aws/aws-sdk-go-v2/config`
-- [ ] Install S3 client: `go get github.com/aws/aws-sdk-go-v2/service/s3`
-- [ ] Add to `.env` file:
+- [X] Install AWS SDK: `go get github.com/aws/aws-sdk-go-v2/config`
+- [X] Install S3 client: `go get github.com/aws/aws-sdk-go-v2/service/s3`
+- [X] Add to `.env` file:
   ```
   AWS_ACCESS_KEY_ID=your_access_key
   AWS_SECRET_ACCESS_KEY=your_secret_key
   AWS_REGION=us-east-1
   AWS_S3_BUCKET=activelog-uploads-yourname
   ```
-- [ ] Add `.env` to `.gitignore` if not already
+- [X] Add `.env` to `.gitignore` if not already
 
 **Task 4: Implement S3 Client** (60 min)
-- [ ] Create `pkg/storage/s3_client.go`
-- [ ] Implement `NewS3Client(bucket, region) (*S3Client, error)`
+- [X] Create `pkg/storage/s3_client.go`
+- [X] Implement `NewS3Client(bucket, region) (*S3Client, error)`
   - **Logic:** Load AWS config using `config.LoadDefaultConfig(ctx)` which reads credentials from env vars or ~/.aws/credentials. Create S3 client from config with specified region. Return S3Client struct containing bucket name and S3 service client.
-- [ ] Load AWS credentials from environment
-- [ ] Implement `Upload(ctx, key, file, contentType) error`
+- [X] Load AWS credentials from environment
+- [X] Implement `Upload(ctx, key, file, contentType) error`
   - **Logic:** Use `s3.PutObjectInput` with Bucket, Key, Body (file reader), ContentType. Call `s3Client.PutObject(ctx, input)`. Check for errors. Key is full path like "activities/123/uuid.jpg". File must be io.Reader. Return wrapped error on failure.
-- [ ] Implement `Delete(ctx, key) error`
+- [X] Implement `Delete(ctx, key) error`
   - **Logic:** Use `s3.DeleteObjectInput` with Bucket and Key. Call `s3Client.DeleteObject(ctx, input)`. Note: DeleteObject succeeds even if key doesn't exist (idempotent). Return wrapped error on failure.
-- [ ] Handle AWS errors and wrap with context
+- [X] Handle AWS errors and wrap with context
 
 **Task 5: Implement Presigned URLs** (45 min)
-- [ ] Add `GetPresignedURL(ctx, key, duration) (string, error)` to S3Client
+- [X] Add `GetPresignedURL(ctx, key, duration) (string, error)` to S3Client
   - **Logic:**
     1. Create presign client with `s3.NewPresignClient(s3Client)`
     2. Build GetObjectInput with Bucket and Key
@@ -378,19 +378,18 @@ pkg/
     4. Returns signed URL string that allows temporary public access to private S3 object
     5. URL expires after specified duration (typically 1 hour)
     - **Why:** S3 bucket is private, so direct links don't work. Presigned URLs grant temporary access without making bucket public.
-- [ ] Use `s3.NewPresignClient()` for presigning
-- [ ] Set expiration to 1 hour for view URLs
-- [ ] Test presigned URL generation
-- [ ] Verify URLs work in browser
+- [X] Use `s3.NewPresignClient()` for presigning
+- [X] Set expiration to 1 hour for view URLs
+- [X] Test presigned URL generation
+- [X] Verify URLs work in browser
 
 **Task 6: Update Photo Handler to Use S3** (90 min)
-- [ ] Modify `Upload` handler to upload to S3 instead of temp storage
-- [ ] Generate S3 key: `activities/{activityID}/{uuid}.jpg`
-- [ ] Upload file to S3
-- [ ] Store S3 key in database (not local path)
-- [ ] Implement rollback: delete from S3 if database insert fails
-- [ ] Update temp file cleanup logic
-
+- [X] Modify `Upload` handler to upload to S3 instead of temp storage
+- [X] Generate S3 key: `activities/{activityID}/{uuid}.jpg`
+- [X] Upload file to S3
+- [X] Store S3 key in database (not local path)
+- [X] Implement rollback: delete from S3 if database insert fails
+- [X] Update temp file cleanup logic
 **Task 7: Implement Download/View Endpoints** (45 min)
 - [ ] Add `GET /api/v1/activities/:id/photos/:photoId` handler
 - [ ] Fetch photo record from database
