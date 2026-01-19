@@ -1,12 +1,12 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/valentinesamuel/activelog/internal/config"
+	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
 	"github.com/valentinesamuel/activelog/pkg/auth"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
@@ -35,8 +35,13 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Store user ID in context
-		ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
+		// Store user in context
+		// ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
+		requestUser := &requestcontext.User{
+			Id:    claims.UserID,
+			Email: claims.Email,
+		}
+		ctx := requestcontext.NewContext(r.Context(), requestUser)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

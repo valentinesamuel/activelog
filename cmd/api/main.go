@@ -104,10 +104,10 @@ func (app *Application) setupRoutes() http.Handler {
 	// API v1 routes
 	api := router.PathPrefix("/api/v1").Subrouter()
 
-	// Auth routes
+	// Auth routes (public - no auth required)
 	app.registerAuthRoutes(api)
 
-	// Activity routes
+	// Activity routes (protected)
 	app.registerActivityRoutes(api)
 
 	// Stats routes
@@ -127,21 +127,25 @@ func (app *Application) handleRoot(w http.ResponseWriter, r *http.Request) {
 
 // registerAuthRoutes registers authentication routes
 func (app *Application) registerAuthRoutes(router *mux.Router) {
-	router.HandleFunc("/auth/register", app.UserHandler.CreateUser).Methods("POST")
-	router.HandleFunc("/auth/login", app.UserHandler.LoginUser).Methods("POST")
+	authRouter := router.PathPrefix("/auth").Subrouter()
+
+	authRouter.HandleFunc("/register", app.UserHandler.CreateUser).Methods("POST")
+	authRouter.HandleFunc("/login", app.UserHandler.LoginUser).Methods("POST")
 }
 
 // registerActivityRoutes registers activity CRUD routes
 func (app *Application) registerActivityRoutes(router *mux.Router) {
-	// router.Use(middleware.AuthMiddleware) // TODO: Enable when auth is ready
-	router.HandleFunc("/activities", app.ActivityHandler.ListActivities).Methods("GET")
-	router.HandleFunc("/activities", app.ActivityHandler.CreateActivity).Methods("POST")
-	router.HandleFunc("/activities/stats", app.ActivityHandler.GetStats).Methods("GET")
-	router.HandleFunc("/activities/{id}", app.ActivityHandler.GetActivity).Methods("GET")
-	router.HandleFunc("/activities/{id}", app.ActivityHandler.UpdateActivity).Methods("PATCH")
-	router.HandleFunc("/activities/{id}", app.ActivityHandler.DeleteActivity).Methods("DELETE")
-	router.HandleFunc("/activities/{id}/photos", app.photoHandler.Upload).Methods("POST")
-	router.HandleFunc("/activities/{id}/photos", app.photoHandler.GetActivityPhoto).Methods("GET")
+	activityRouter := router.PathPrefix("/activities").Subrouter()
+	activityRouter.Use(middleware.AuthMiddleware)
+
+	activityRouter.HandleFunc("", app.ActivityHandler.ListActivities).Methods("GET")
+	activityRouter.HandleFunc("", app.ActivityHandler.CreateActivity).Methods("POST")
+	activityRouter.HandleFunc("/stats", app.ActivityHandler.GetStats).Methods("GET")
+	activityRouter.HandleFunc("/{id}", app.ActivityHandler.GetActivity).Methods("GET")
+	activityRouter.HandleFunc("/{id}", app.ActivityHandler.UpdateActivity).Methods("PATCH")
+	activityRouter.HandleFunc("/{id}", app.ActivityHandler.DeleteActivity).Methods("DELETE")
+	activityRouter.HandleFunc("/{id}/photos", app.photoHandler.Upload).Methods("POST")
+	activityRouter.HandleFunc("/{id}/photos", app.photoHandler.GetActivityPhoto).Methods("GET")
 }
 
 // registerStatsRoutes registers statistics and analytics routes

@@ -12,6 +12,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
 	"github.com/valentinesamuel/activelog/internal/validator"
 	appErrors "github.com/valentinesamuel/activelog/pkg/errors"
 	"github.com/valentinesamuel/activelog/pkg/query"
@@ -154,8 +155,14 @@ func (h *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 //   - /activities?filter[tags]=cardio&search[title]=morning&order[created_at]=DESC
 //   - /activities?filter[activity_type]=[running,cycling]&limit=50
 func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request) {
-	UserID := 1 // TODO: Get from auth context
 	ctx := r.Context()
+	requestUser, ok := requestcontext.FromContext(ctx)
+
+	if !ok {
+		log.Error().Msg("❌ Failed to get user from context")
+		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
+		return
+	}
 
 	// Parse query parameters into QueryOptions
 	queryOpts, err := query.ParseQueryParams(r.URL.Query())
@@ -240,7 +247,7 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 		ctx,
 		[]broker.UseCase{h.listActivitiesUC},
 		map[string]interface{}{
-			"user_id":       UserID,
+			"user_id":       requestUser.Id,
 			"query_options": queryOpts, // NEW: Pass QueryOptions instead of legacy filters
 		},
 	)

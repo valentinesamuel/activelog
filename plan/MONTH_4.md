@@ -391,12 +391,12 @@ pkg/
 - [X] Implement rollback: delete from S3 if database insert fails
 - [X] Update temp file cleanup logic
 **Task 7: Implement Download/View Endpoints** (45 min)
-- [ ] Add `GET /api/v1/activities/:id/photos/:photoId` handler
-- [ ] Fetch photo record from database
-- [ ] Verify user owns the activity (authorization)
-- [ ] Generate presigned URL for the S3 object
-- [ ] Redirect to presigned URL or return URL in JSON
-- [ ] Test in browser
+- [X] Add `GET /api/v1/activities/:id/photos/:photoId` handler
+- [X] Fetch photo record from database
+- [X] Verify user owns the activity (authorization)
+- [X] Generate presigned URL for the S3 object
+- [X] Redirect to presigned URL or return URL in JSON
+- [X] Test in browser
 
 ### 📦 Files You'll Create/Modify
 
@@ -435,13 +435,13 @@ internal/
 
 ### ✅ Definition of Done
 
-- [ ] S3 bucket created and configured
-- [ ] IAM user with proper permissions
-- [ ] Files upload successfully to S3
-- [ ] Can generate presigned URLs that work
-- [ ] S3 objects deleted if database insert fails
-- [ ] No AWS credentials in git repository
-- [ ] All tests passing with S3 integration
+- [X] S3 bucket created and configured
+- [X] IAM user with proper permissions
+- [X] Files upload successfully to S3
+- [X] Can generate presigned URLs that work
+- [X] S3 objects deleted if database insert fails
+- [X] No AWS credentials in git repository
+- [X] All tests passing with S3 integration
 
 ---
 
