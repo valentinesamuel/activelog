@@ -25,7 +25,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 		// Validate token
-		claims := &auth.Claims{}
+		claims := &auth.CustomClaims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
 			return []byte(config.Common.Auth.JWTSecret), nil
 		})
@@ -35,8 +35,6 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Store user in context
-		// ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
 		requestUser := &requestcontext.User{
 			Id:    claims.UserID,
 			Email: claims.Email,

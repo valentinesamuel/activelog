@@ -63,7 +63,7 @@ func NewActivityHandler(
 // Similar to kuja_user_ms: shopSignin method (line 316-336)
 func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
+	requestUser, _ := requestcontext.FromContext(ctx)
 	var req models.CreateActivityRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -89,7 +89,7 @@ func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 		ctx,
 		[]broker.UseCase{h.createActivityUC},
 		map[string]interface{}{
-			"user_id": 1, // TODO: Get from auth context
+			"user_id": requestUser.Id,
 			"request": &req,
 		},
 	)
@@ -272,6 +272,8 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 // Similar to kuja_user_ms: resetShopPassword method (line 373-380)
 func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestUser, _ := requestcontext.FromContext(ctx)
+
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -302,7 +304,7 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 		ctx,
 		[]broker.UseCase{h.updateActivityUC},
 		map[string]interface{}{
-			"user_id":     1, // TODO: Get from auth context
+			"user_id":     requestUser.Id,
 			"activity_id": id,
 			"request":     &req,
 		},
@@ -322,6 +324,9 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 // Similar to kuja_user_ms: logout method (line 413-434)
 func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	requestUser, _ := requestcontext.FromContext(ctx)
+
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -329,7 +334,7 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	userID := 1 // TODO: Get from auth context
+	userID := requestUser.Id
 
 	// Execute use case through broker
 	_, err = h.broker.RunUseCases(
@@ -353,11 +358,11 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 // GetStats fetches activity statistics using broker pattern
 func (h *ActivityHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := 1 // TODO: Get from auth context
+	requestUser, _ := requestcontext.FromContext(ctx)
 
 	// Parse query parameters
 	input := map[string]interface{}{
-		"user_id": userID,
+		"user_id": requestUser.Id,
 	}
 
 	if startStr := r.URL.Query().Get("startDate"); startStr != "" {

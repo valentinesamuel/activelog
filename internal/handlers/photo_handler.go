@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
 	"github.com/valentinesamuel/activelog/internal/utils"
 	"github.com/valentinesamuel/activelog/pkg/logger"
 	"github.com/valentinesamuel/activelog/pkg/response"
@@ -32,6 +33,7 @@ func NewActivityPhotoHandler(brokerInstance *broker.Broker, repo repository.Acti
 
 func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestUser, _ := requestcontext.FromContext(ctx)
 
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
@@ -82,7 +84,7 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		ctx,
 		[]broker.UseCase{h.uploadActivityPhotosUC},
 		map[string]interface{}{
-			"user_id":     1,
+			"user_id":     requestUser.Id,
 			"photos":      &photos,
 			"activity_id": id,
 		},
