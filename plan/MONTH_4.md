@@ -271,11 +271,11 @@ This month introduces file handling capabilities to your application. You'll lea
 - [ ] Write tests for repository methods
 
 **Task 7: Wire Up Routes and Test** (30 min)
-- [ ] Add route: `POST /api/v1/activities/:id/photos`
-- [ ] Add auth middleware to protect upload endpoint
-- [ ] Test upload with Postman/curl
-- [ ] Verify files saved to temp directory
-- [ ] Verify database records created
+- [X] Add route: `POST /api/v1/activities/:id/photos`
+- [X] Add auth middleware to protect upload endpoint
+- [X] Test upload with Postman/curl
+- [X] Verify files saved to temp directory
+- [X] Verify database records created
 
 ### 📦 Files You'll Create/Modify
 
@@ -318,12 +318,12 @@ pkg/
 
 ### ✅ Definition of Done
 
-- [ ] Can upload multiple photos (up to 5) per activity
-- [ ] Only valid image types accepted (jpg, png, webp)
-- [ ] Files larger than 10MB rejected
-- [ ] Database records created for uploads
-- [ ] Temp files cleaned up after processing
-- [ ] All tests passing
+- [X] Can upload multiple photos (up to 5) per activity
+- [X] Only valid image types accepted (jpg, png, webp)
+- [X] Files larger than 10MB rejected
+- [X] Database records created for uploads
+- [X] Temp files cleaned up after processing
+- [X] All tests passing
 
 ---
 
