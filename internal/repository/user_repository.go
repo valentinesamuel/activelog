@@ -42,14 +42,14 @@ func (ar *UserRepository) CreateUser(ctx context.Context, user *models.User) err
 func (ar *UserRepository) FindUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `
 		SELECT 
-		username, email, password_hash
+		id, username, email, password_hash
 		FROM users
 		WHERE email = $1
 	`
 
 	user := &models.User{}
 
-	err := ar.db.QueryRowContext(ctx, query, email).Scan(&user.Username, &user.Email, &user.PasswordHash)
+	err := ar.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash)
 
 	if err == sql.ErrNoRows {
 		return nil, errors.ErrNotFound
