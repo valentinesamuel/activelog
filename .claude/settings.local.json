@@ -26,7 +26,8 @@
       "Bash(go mod tidy:*)",
       "Bash(pkill:*)",
       "Bash(aws:*)",
-      "Bash(air -v:*)"
+      "Bash(air -v:*)",
+      "Bash(swag init:*)"
     ]
   }
 }

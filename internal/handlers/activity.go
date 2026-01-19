@@ -60,7 +60,18 @@ func NewActivityHandler(
 }
 
 // CreateActivity handles activity creation using broker pattern
-// Similar to kuja_user_ms: shopSignin method (line 316-336)
+// @Summary Create a new activity
+// @Description Creates a new activity for the authenticated user
+// @Tags Activities
+// @Accept json
+// @Produce json
+// @Param request body models.CreateActivityRequest true "Activity creation request"
+// @Success 201 {object} models.Activity "Created activity"
+// @Failure 400 {object} map[string]interface{} "Validation error"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/activities [post]
 func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestUser, _ := requestcontext.FromContext(ctx)
@@ -107,6 +118,18 @@ func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 }
 
 // GetActivity fetches a single activity using broker pattern
+// @Summary Get an activity by ID
+// @Description Returns a single activity by its ID
+// @Tags Activities
+// @Produce json
+// @Param id path int true "Activity ID"
+// @Success 200 {object} models.Activity "Activity found"
+// @Failure 400 {object} map[string]string "Invalid activity ID"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Activity not found"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/activities/{id} [get]
 func (h *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -142,18 +165,24 @@ func (h *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListActivities fetches activities using dynamic filtering with QueryOptions
-// Supports flexible filtering, searching, sorting, and pagination via URL parameters:
-//   - filter[column]=value - Filter by exact match (e.g., filter[activity_type]=running)
-//   - filter[tags]=value - Filter by tag name (automatically JOINs tags table)
-//   - search[column]=value - Case-insensitive search (e.g., search[title]=morning)
-//   - order[column]=ASC|DESC - Sort results (e.g., order[created_at]=DESC)
-//   - page=N - Page number (default: 1)
-//   - limit=N - Items per page (default: 10, max: 100)
-//
-// Example URLs:
-//   - /activities?filter[activity_type]=running&page=1&limit=20
-//   - /activities?filter[tags]=cardio&search[title]=morning&order[created_at]=DESC
-//   - /activities?filter[activity_type]=[running,cycling]&limit=50
+// @Summary List activities
+// @Description Returns a paginated list of activities for the authenticated user with filtering, searching, and sorting
+// @Tags Activities
+// @Produce json
+// @Param filter[activity_type] query string false "Filter by activity type"
+// @Param filter[tags.name] query string false "Filter by tag name"
+// @Param search[title] query string false "Search in title (case-insensitive)"
+// @Param search[description] query string false "Search in description (case-insensitive)"
+// @Param order[created_at] query string false "Sort by created_at (ASC or DESC)"
+// @Param order[activity_date] query string false "Sort by activity_date (ASC or DESC)"
+// @Param page query int false "Page number (default: 1)"
+// @Param limit query int false "Items per page (default: 10, max: 100)"
+// @Success 200 {object} map[string]interface{} "Paginated activities with metadata"
+// @Failure 400 {object} map[string]string "Invalid query parameters"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/activities [get]
 func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestUser, ok := requestcontext.FromContext(ctx)
@@ -269,7 +298,19 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 }
 
 // UpdateActivity handles activity updates using broker pattern
-// Similar to kuja_user_ms: resetShopPassword method (line 373-380)
+// @Summary Update an activity
+// @Description Updates an existing activity by ID (partial update supported)
+// @Tags Activities
+// @Accept json
+// @Produce json
+// @Param id path int true "Activity ID"
+// @Param request body models.UpdateActivityRequest true "Activity update request"
+// @Success 200 {object} models.Activity "Updated activity"
+// @Failure 400 {object} map[string]interface{} "Validation error"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/activities/{id} [patch]
 func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestUser, _ := requestcontext.FromContext(ctx)
@@ -321,7 +362,16 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 }
 
 // DeleteActivity handles activity deletion using broker pattern
-// Similar to kuja_user_ms: logout method (line 413-434)
+// @Summary Delete an activity
+// @Description Deletes an activity by ID
+// @Tags Activities
+// @Param id path int true "Activity ID"
+// @Success 204 "Activity deleted successfully"
+// @Failure 400 {object} map[string]string "Invalid activity ID"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 404 {object} map[string]string "Activity not found"
+// @Security BearerAuth
+// @Router /api/v1/activities/{id} [delete]
 func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -356,6 +406,17 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 }
 
 // GetStats fetches activity statistics using broker pattern
+// @Summary Get activity statistics
+// @Description Returns aggregated statistics for the authenticated user's activities
+// @Tags Activities
+// @Produce json
+// @Param startDate query string false "Start date filter (RFC3339 format)"
+// @Param endDate query string false "End date filter (RFC3339 format)"
+// @Success 200 {object} map[string]interface{} "Activity statistics"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Security BearerAuth
+// @Router /api/v1/activities/stats [get]
 func (h *ActivityHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestUser, _ := requestcontext.FromContext(ctx)

@@ -1,0 +1,405 @@
+basePath: /api/v1
+definitions:
+  models.Activity:
+    properties:
+      activityDate:
+        type: string
+      activityType:
+        type: string
+      caloriesBurned:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      distanceKm:
+        type: number
+      durationMinutes:
+        type: integer
+      id:
+        type: integer
+      notes:
+        type: string
+      tags:
+        items:
+          $ref: '#/definitions/models.Tag'
+        type: array
+      title:
+        type: string
+      updated_at:
+        type: string
+      userId:
+        type: integer
+    type: object
+  models.CreateActivityRequest:
+    properties:
+      activityDate:
+        type: string
+      activityType:
+        maxLength: 50
+        minLength: 2
+        type: string
+      caloriesBurned:
+        minimum: 0
+        type: integer
+      description:
+        maxLength: 1000
+        type: string
+      distanceKm:
+        minimum: 0
+        type: number
+      durationMinutes:
+        maximum: 1440
+        minimum: 1
+        type: integer
+      notes:
+        maxLength: 2000
+        type: string
+      title:
+        maxLength: 255
+        type: string
+    required:
+    - activityDate
+    - activityType
+    - description
+    - distanceKm
+    - durationMinutes
+    - title
+    type: object
+  models.Tag:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.UpdateActivityRequest:
+    properties:
+      activityDate:
+        type: string
+      activityType:
+        maxLength: 50
+        minLength: 2
+        type: string
+      caloriesBurned:
+        minimum: 0
+        type: integer
+      description:
+        maxLength: 1000
+        type: string
+      distanceKm:
+        minimum: 0
+        type: number
+      durationMinutes:
+        maximum: 1440
+        minimum: 1
+        type: integer
+      notes:
+        maxLength: 2000
+        type: string
+      title:
+        maxLength: 255
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Activity tracking REST API for logging and analyzing physical activities
+  title: ActiveLog API
+  version: "1.0"
+paths:
+  /api/v1/activities:
+    get:
+      description: Returns a paginated list of activities for the authenticated user
+        with filtering, searching, and sorting
+      parameters:
+      - description: Filter by activity type
+        in: query
+        name: filter[activity_type]
+        type: string
+      - description: Filter by tag name
+        in: query
+        name: filter[tags.name]
+        type: string
+      - description: Search in title (case-insensitive)
+        in: query
+        name: search[title]
+        type: string
+      - description: Search in description (case-insensitive)
+        in: query
+        name: search[description]
+        type: string
+      - description: Sort by created_at (ASC or DESC)
+        in: query
+        name: order[created_at]
+        type: string
+      - description: Sort by activity_date (ASC or DESC)
+        in: query
+        name: order[activity_date]
+        type: string
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated activities with metadata
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid query parameters
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List activities
+      tags:
+      - Activities
+    post:
+      consumes:
+      - application/json
+      description: Creates a new activity for the authenticated user
+      parameters:
+      - description: Activity creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateActivityRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created activity
+          schema:
+            $ref: '#/definitions/models.Activity'
+        "400":
+          description: Validation error
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a new activity
+      tags:
+      - Activities
+  /api/v1/activities/{id}:
+    delete:
+      description: Deletes an activity by ID
+      parameters:
+      - description: Activity ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: Activity deleted successfully
+        "400":
+          description: Invalid activity ID
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Activity not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete an activity
+      tags:
+      - Activities
+    get:
+      description: Returns a single activity by its ID
+      parameters:
+      - description: Activity ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Activity found
+          schema:
+            $ref: '#/definitions/models.Activity'
+        "400":
+          description: Invalid activity ID
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Activity not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get an activity by ID
+      tags:
+      - Activities
+    patch:
+      consumes:
+      - application/json
+      description: Updates an existing activity by ID (partial update supported)
+      parameters:
+      - description: Activity ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Activity update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateActivityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated activity
+          schema:
+            $ref: '#/definitions/models.Activity'
+        "400":
+          description: Validation error
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update an activity
+      tags:
+      - Activities
+  /api/v1/activities/stats:
+    get:
+      description: Returns aggregated statistics for the authenticated user's activities
+      parameters:
+      - description: Start date filter (RFC3339 format)
+        in: query
+        name: startDate
+        type: string
+      - description: End date filter (RFC3339 format)
+        in: query
+        name: endDate
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Activity statistics
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get activity statistics
+      tags:
+      - Activities
+  /health:
+    get:
+      description: Returns the health status of the API service
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service is healthy
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - Health
+securityDefinitions:
+  BearerAuth:
+    description: 'Enter your bearer token in the format: Bearer {token}'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

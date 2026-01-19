@@ -14,6 +14,8 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/gorilla/mux"
+	httpSwagger "github.com/swaggo/http-swagger"
+	_ "github.com/valentinesamuel/activelog/docs"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/container"
@@ -22,6 +24,15 @@ import (
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
+
+// @title ActiveLog API
+// @version 1.0
+// @description Activity tracking REST API for logging and analyzing physical activities
+// @host localhost:8080
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter your bearer token in the format: Bearer {token}
 
 // Application holds all dependencies
 type Application struct {
@@ -103,6 +114,8 @@ func (app *Application) setupRoutes() http.Handler {
 
 	// API v1 routes
 	api := router.PathPrefix("/api/v1").Subrouter()
+
+	router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
 
 	// Auth routes (public - no auth required)
 	app.registerAuthRoutes(api)

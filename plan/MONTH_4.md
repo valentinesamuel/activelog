@@ -487,7 +487,7 @@ internal/
 - [ ] Add general API info in `cmd/api/main.go`:
   ```go
   // @title ActiveLog API
-  // @version 1.0
+    // @version 1.0
   // @description Activity tracking API
   // @host localhost:8080
   // @BasePath /api/v1
