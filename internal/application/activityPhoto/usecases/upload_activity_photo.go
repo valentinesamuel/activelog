@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
 	"github.com/valentinesamuel/activelog/internal/storage/types"
+	"github.com/valentinesamuel/activelog/pkg/imageutil"
 )
 
 type UploadActivityPhotoUseCase struct {
@@ -98,16 +100,30 @@ func (uc *UploadActivityPhotoUseCase) uploadPhoto(
 	}
 	defer file.Close()
 
+	// Decode image
+	imgFile, err := imageutil.DecodeImage(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	// Generate and encode thumbnail
+	thumbImage := imageutil.GenerateThumbnail(imgFile)
+	thumbBytes, err := imageutil.ConvertToJPEG(thumbImage, "jpeg")
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert thumbnail to JPEG: %w", err)
+	}
+
 	// Generate unique storage key
-	key := uc.generateStorageKey(activityID, fileHeader.Filename)
+	thumbKey := uc.generateStorageKey(activityID, fileHeader.Filename+"thumb")
+	mainKey := uc.generateStorageKey(activityID, fileHeader.Filename)
 	contentType := fileHeader.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	// Upload to storage
+	// Upload main image to storage
 	output, err := uc.storage.Upload(ctx, &types.UploadInput{
-		Key:         key,
+		Key:         mainKey,
 		Body:        file,
 		ContentType: contentType,
 		Size:        fileHeader.Size,
@@ -120,13 +136,30 @@ func (uc *UploadActivityPhotoUseCase) uploadPhoto(
 		return nil, fmt.Errorf("failed to upload to storage: %w", err)
 	}
 
+	// Upload thumbnail to storage
+	thumbOutput, err := uc.storage.Upload(ctx, &types.UploadInput{
+		Key:         thumbKey,
+		Body:        bytes.NewReader(thumbBytes),
+		ContentType: "image/jpeg",
+		Size:        int64(len(thumbBytes)),
+		Metadata: map[string]string{
+			"activity_id":       fmt.Sprintf("%d", activityID),
+			"original_filename": fileHeader.Filename,
+			"type":              "thumbnail",
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload thumbnail to storage: %w", err)
+	}
+
 	// Create activity photo record
 	activityPhoto := &models.ActivityPhoto{
-		ActivityID:  activityID,
-		S3Key:       output.Key,
-		ContentType: contentType,
-		FileSize:    fileHeader.Size,
-		UploadedAt:  output.UploadedAt,
+		ActivityID:   activityID,
+		S3Key:        output.Key,
+		ThumbnailKey: thumbOutput.Key,
+		ContentType:  contentType,
+		FileSize:     fileHeader.Size,
+		UploadedAt:   output.UploadedAt,
 	}
 
 	dbError := uc.repo.Create(ctx, tx, activityPhoto)

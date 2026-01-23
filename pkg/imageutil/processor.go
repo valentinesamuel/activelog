@@ -1,7 +1,14 @@
 package imageutil
 
 import (
+	"bytes"
+	"fmt"
 	"image"
+	"image/jpeg"
+	"image/png"
+	"mime/multipart"
+
+	"github.com/disintegration/imaging"
 )
 
 // **Task 1: Install Image Processing Library** (10 min)
@@ -33,21 +40,45 @@ import (
 // - [ ] Store both S3 keys in database
 // - [ ] Implement cleanup on failure (delete both from S3)
 
-func ResizeImage(img image.Image, maxWidth, maxHeight int64) image.Image {
+func ResizeImage(img image.Image, maxWidth, maxHeight int) image.Image {
+	dstImageFit := imaging.Fit(img, maxWidth, maxHeight, imaging.Lanczos)
 
-	return nil
+	return dstImageFit
 }
 
-func ConvertToJPEG(img image.Image, quality int) ([]byte, error) {
-	// dstImageFit := imaging.Fit(img, 800, 600, imaging.Lanczos)
-	return nil, nil
+func ConvertToJPEG(img image.Image, format string) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := jpeg.Encode(buf, img, &jpeg.Options{Quality: 85})
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
-func EncodeImage(img, format string) ([]byte, error) {
-	return nil, nil
+func DecodeImage(file multipart.File) (image.Image, error) {
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to decode image: %w", err)
+	}
+
+	return img, nil
+}
+
+func EncodeImage(img image.Image, format string) ([]byte, error) {
+	switch format {
+	case "jpg", "jpeg":
+		bufferBytes, err := ConvertToJPEG(img, "jpeg")
+		return bufferBytes, err
+	case "png":
+		buf := new(bytes.Buffer)
+		err := png.Encode(buf, img)
+		return buf.Bytes(), err
+	default:
+		return nil, fmt.Errorf("unsupported format")
+	}
 
 }
 
 func GenerateThumbnail(img image.Image) image.Image {
-	return nil
+	return ResizeImage(img, 300, 300)
 }
