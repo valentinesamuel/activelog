@@ -34,15 +34,3 @@ func LoadWithValidation() error {
 
 	return nil
 }
-
-// Load loads configuration without validation
-// Prefer using MustLoad() or LoadWithValidation() for new code
-func Load() {
-	// Load .env file if it exists
-	_ = godotenv.Load()
-
-	// Load all config modules without validation
-	Common = loadCommon()
-	Database = loadDatabase()
-	Storage = loadStorage()
-}

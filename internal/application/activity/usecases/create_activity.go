@@ -14,7 +14,7 @@ import (
 // Has access to both service (for business logic) and repository (for simple operations)
 // The use case decides which one to use based on the operation's needs
 type CreateActivityUseCase struct {
-	service service.ActivityServiceInterface      // For operations requiring business logic
+	service service.ActivityServiceInterface       // For operations requiring business logic
 	repo    repository.ActivityRepositoryInterface // For simple operations or when service not needed
 }
 
@@ -31,7 +31,6 @@ func NewCreateActivityUseCase(
 }
 
 // RequiresTransaction indicates this use case needs a transaction
-// Write operations (CREATE) must run within a transaction for data integrity
 func (uc *CreateActivityUseCase) RequiresTransaction() bool {
 	return true
 }
@@ -54,7 +53,7 @@ func (uc *CreateActivityUseCase) Execute(
 		return nil, fmt.Errorf("user_id is required")
 	}
 
-	// DECISION: Use service for create operations because we need business logic validation
+	// DECISION: Use service to create operations because we need business logic validation
 	// - Validates date not in future
 	// - Validates duration is reasonable
 	// - Validates distance is positive
