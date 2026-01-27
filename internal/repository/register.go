@@ -35,7 +35,7 @@ func RegisterRepositories(c *container.Container) {
 		return activityRepo, nil
 	})
 
-		c.Register(ActivityPhotoRepoKey, func(c *container.Container) (interface{}, error) {
+	c.Register(ActivityPhotoRepoKey, func(c *container.Container) (interface{}, error) {
 		db := c.MustResolve(CoreDBKey).(DBConn)
 		activityRepo := c.MustResolve(ActivityRepoKey).(*ActivityRepository)
 		manager := c.MustResolve(CoreRegistryManagerKey).(*query.RegistryManager)

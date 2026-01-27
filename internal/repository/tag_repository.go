@@ -136,20 +136,21 @@ func (tr *TagRepository) scanTag(rows *sql.Rows) (*models.Tag, error) {
 // This method leverages the generic FindAndPaginate function for flexible, type-safe queries.
 //
 // Example usage in handler:
-//   opts := &query.QueryOptions{
-//       Page: 1,
-//       Limit: 20,
-//       Filter: map[string]interface{}{
-//           "name": "cardio",
-//       },
-//       Search: map[string]interface{}{
-//           "name": "run",
-//       },
-//       Order: map[string]string{
-//           "name": "ASC",
-//       },
-//   }
-//   result, err := repo.ListTagsWithQuery(ctx, opts)
+//
+//	opts := &query.QueryOptions{
+//	    Page: 1,
+//	    Limit: 20,
+//	    Filter: map[string]interface{}{
+//	        "name": "cardio",
+//	    },
+//	    Search: map[string]interface{}{
+//	        "name": "run",
+//	    },
+//	    Order: map[string]string{
+//	        "name": "ASC",
+//	    },
+//	}
+//	result, err := repo.ListTagsWithQuery(ctx, opts)
 func (tr *TagRepository) ListTagsWithQuery(
 	ctx context.Context,
 	opts *query.QueryOptions,

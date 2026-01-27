@@ -43,7 +43,7 @@ func TestQueryBuilder_ApplyFilters(t *testing.T) {
 		{
 			name: "multiple filters",
 			filters: map[string]interface{}{
-				"status": "active",
+				"status":  "active",
 				"user_id": 123,
 			},
 			expectedSQL:    "WHERE", // Both conditions present

@@ -14,7 +14,7 @@ import (
 // Has access to both service (for business logic) and repository (for simple operations)
 // The use case decides which one to use based on the operation's needs
 type UpdateActivityUseCase struct {
-	service service.ActivityServiceInterface      // For operations requiring business logic
+	service service.ActivityServiceInterface       // For operations requiring business logic
 	repo    repository.ActivityRepositoryInterface // For simple operations or when service not needed
 }
 

@@ -175,7 +175,6 @@ func (ar *ActivityRepository) ListByUser(ctx context.Context, UserID int) ([]*mo
 	return activities, nil
 }
 
-
 func (ar *ActivityRepository) Count(userID int) (int, error) {
 	var count int
 	query := "SELECT COUNT(*) FROM activities WHERE user_id = $1"
@@ -405,24 +404,25 @@ func (ar *ActivityRepository) scanActivity(rows *sql.Rows) (*models.Activity, er
 //   - order[tags.name]=ASC → Automatically JOINs and orders by tag name
 //
 // Example usage in handler:
-//   opts := &query.QueryOptions{
-//       Page: 1,
-//       Limit: 20,
-//       Filter: map[string]interface{}{
-//           "activity_type": "running",
-//           "user_id": 123,
-//           "tags.name": "cardio",  // Natural column name - auto-JOINs!
-//       },
-//       Search: map[string]interface{}{
-//           "title": "morning",
-//           "tags.name": "run",     // Auto-JOINs for search too!
-//       },
-//       Order: map[string]string{
-//           "created_at": "DESC",
-//           "tags.name": "ASC",     // Auto-JOINs for ordering!
-//       },
-//   }
-//   result, err := repo.ListActivitiesWithQuery(ctx, opts)
+//
+//	opts := &query.QueryOptions{
+//	    Page: 1,
+//	    Limit: 20,
+//	    Filter: map[string]interface{}{
+//	        "activity_type": "running",
+//	        "user_id": 123,
+//	        "tags.name": "cardio",  // Natural column name - auto-JOINs!
+//	    },
+//	    Search: map[string]interface{}{
+//	        "title": "morning",
+//	        "tags.name": "run",     // Auto-JOINs for search too!
+//	    },
+//	    Order: map[string]string{
+//	        "created_at": "DESC",
+//	        "tags.name": "ASC",     // Auto-JOINs for ordering!
+//	    },
+//	}
+//	result, err := repo.ListActivitiesWithQuery(ctx, opts)
 func (ar *ActivityRepository) ListActivitiesWithQuery(
 	ctx context.Context,
 	opts *query.QueryOptions,

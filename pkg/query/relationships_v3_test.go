@@ -326,9 +326,9 @@ func TestRelationshipRegistry_MixedFeatures_v3(t *testing.T) {
 	// Query combining features
 	opts := &query.QueryOptions{
 		Filter: map[string]interface{}{
-			"parent.author":       "john",
-			"commentable_type":    "Post",
-			"commentable.title":   "Hello",
+			"parent.author":     "john",
+			"commentable_type":  "Post",
+			"commentable.title": "Hello",
 		},
 	}
 

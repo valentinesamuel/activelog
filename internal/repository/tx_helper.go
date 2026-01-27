@@ -4,21 +4,22 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/valentinesamuel/activelog/internal/database"
+	"github.com/valentinesamuel/activelog/pkg/database"
 )
 
 // WithTransaction is a helper function to execute multiple repository operations in a transaction
 // Usage:
-//   err := repository.WithTransaction(ctx, db, func(tx TxConn) error {
-//       // All operations here use the same transaction
-//       if err := repo.CreateWithTx(ctx, tx, activity); err != nil {
-//           return err
-//       }
-//       if err := repo.UpdateWithTx(ctx, tx, otherActivity); err != nil {
-//           return err
-//       }
-//       return nil
-//   })
+//
+//	err := repository.WithTransaction(ctx, db, func(tx TxConn) error {
+//	    // All operations here use the same transaction
+//	    if err := repo.CreateWithTx(ctx, tx, activity); err != nil {
+//	        return err
+//	    }
+//	    if err := repo.UpdateWithTx(ctx, tx, otherActivity); err != nil {
+//	        return err
+//	    }
+//	    return nil
+//	})
 func WithTransaction(ctx context.Context, db DBConn, fn func(tx TxConn) error) error {
 	// Type assert to LoggingDB to get transaction support
 	loggingDB, ok := db.(*database.LoggingDB)

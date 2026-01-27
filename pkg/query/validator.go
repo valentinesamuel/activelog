@@ -50,8 +50,8 @@ func StrictEqualityOnly() []string {
 
 // ValidateFilterConditions validates operator-based filter conditions.
 // Checks that:
-//   1. The column is in the allowed filters whitelist
-//   2. The operator is valid for that specific column
+//  1. The column is in the allowed filters whitelist
+//  2. The operator is valid for that specific column
 //
 // Example usage in handler:
 //
@@ -209,12 +209,12 @@ func contains(slice []string, item string) bool {
 // ValidateWithConfig validates query options using a validation configuration.
 // This is a more structured approach for complex validation rules.
 type ValidationConfig struct {
-	AllowedFilters      []string
-	AllowedSearch       []string
-	AllowedOrder        []string
-	OperatorWhitelists  OperatorWhitelist // NEW in v1.1.0 - per-column operator restrictions
-	MaxPageSize         int
-	RequireUserScope    bool // Whether user_id must be in filters (for multi-tenancy)
+	AllowedFilters     []string
+	AllowedSearch      []string
+	AllowedOrder       []string
+	OperatorWhitelists OperatorWhitelist // NEW in v1.1.0 - per-column operator restrictions
+	MaxPageSize        int
+	RequireUserScope   bool // Whether user_id must be in filters (for multi-tenancy)
 }
 
 // DefaultValidationConfig returns a validation config with sensible defaults.

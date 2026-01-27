@@ -7,7 +7,7 @@ type key int
 var userKey key
 
 type User struct {
-	Id    int `json:"user_id"`
+	Id    int    `json:"user_id"`
 	Email string `json:"email"`
 }
 

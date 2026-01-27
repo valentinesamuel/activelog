@@ -60,8 +60,8 @@ func SetupTestDB(t testing.TB) (*database.LoggingDB, func()) {
 	}
 
 	// Configure connection pool for test workloads (especially benchmarks)
-	rawDB.SetMaxOpenConns(25)        // Allow up to 25 concurrent connections
-	rawDB.SetMaxIdleConns(25)         // Keep 25 idle connections ready
+	rawDB.SetMaxOpenConns(25)                 // Allow up to 25 concurrent connections
+	rawDB.SetMaxIdleConns(25)                 // Keep 25 idle connections ready
 	rawDB.SetConnMaxLifetime(5 * time.Minute) // Connections live for 5 minutes max
 
 	// 4. Run migrations

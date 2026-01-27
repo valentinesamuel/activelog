@@ -236,13 +236,13 @@ func TestRelationshipRegistry_ValidateColumn(t *testing.T) {
 		column      string
 		shouldError bool
 	}{
-		{"activity_type", false},  // In whitelist
-		{"distance_km", false},    // In whitelist
-		{"tags.name", false},      // Valid relationship
-		{"tags.id", false},        // Valid relationship
-		{"user.username", true},   // Unknown relationship
-		{"password_hash", true},   // Not in whitelist
-		{"unknown.column", true},  // Unknown relationship
+		{"activity_type", false}, // In whitelist
+		{"distance_km", false},   // In whitelist
+		{"tags.name", false},     // Valid relationship
+		{"tags.id", false},       // Valid relationship
+		{"user.username", true},  // Unknown relationship
+		{"password_hash", true},  // Not in whitelist
+		{"unknown.column", true}, // Unknown relationship
 	}
 
 	for _, tc := range testCases {

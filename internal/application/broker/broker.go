@@ -22,11 +22,12 @@ type UseCase interface {
 // This optimizes read-heavy operations which don't need transaction overhead
 //
 // Example usage:
-//   type CreateActivityUseCase struct { ... }
-//   func (uc *CreateActivityUseCase) RequiresTransaction() bool { return true }  // Write operation
 //
-//   type GetActivityUseCase struct { ... }
-//   // No RequiresTransaction() method = non-transactional (read operation)
+//	type CreateActivityUseCase struct { ... }
+//	func (uc *CreateActivityUseCase) RequiresTransaction() bool { return true }  // Write operation
+//
+//	type GetActivityUseCase struct { ... }
+//	// No RequiresTransaction() method = non-transactional (read operation)
 type TransactionalUseCase interface {
 	RequiresTransaction() bool
 }

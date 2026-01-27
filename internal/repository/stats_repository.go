@@ -20,11 +20,11 @@ type WeeklyStats struct {
 }
 
 type UserActivitySummary struct {
-	Username       string `json:"username"`
-	ActivityCount  int    `json:"activityCount"`
-	UniqueTagCount int    `json:"uniqueTagCount"`
-	ActivityLevel  string `json:"activityLevel,omitempty"` // Computed by service layer
-	TotalActivities int   `json:"totalActivities"`         // Alias for ActivityCount
+	Username        string `json:"username"`
+	ActivityCount   int    `json:"activityCount"`
+	UniqueTagCount  int    `json:"uniqueTagCount"`
+	ActivityLevel   string `json:"activityLevel,omitempty"` // Computed by service layer
+	TotalActivities int    `json:"totalActivities"`         // Alias for ActivityCount
 }
 
 type TagUsage struct {

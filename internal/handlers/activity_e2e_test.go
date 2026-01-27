@@ -798,12 +798,12 @@ func setupOperatorTestData(t *testing.T, activityRepo *repository.ActivityReposi
 		distance     float64
 		daysAgo      int
 	}{
-		{"running", "Recent Morning Run", 30, 5.0, 1},    // 1 day ago
-		{"running", "Last Week Run", 45, 7.5, 7},         // 7 days ago
-		{"cycling", "Bike Commute", 60, 12.0, 3},         // 3 days ago
-		{"swimming", "Pool Workout", 40, 2.0, 10},        // 10 days ago
-		{"running", "Long Distance Run", 90, 20.0, 14},   // 14 days ago
-		{"yoga", "Morning Yoga", 30, 0.0, 2},             // 2 days ago
+		{"running", "Recent Morning Run", 30, 5.0, 1},  // 1 day ago
+		{"running", "Last Week Run", 45, 7.5, 7},       // 7 days ago
+		{"cycling", "Bike Commute", 60, 12.0, 3},       // 3 days ago
+		{"swimming", "Pool Workout", 40, 2.0, 10},      // 10 days ago
+		{"running", "Long Distance Run", 90, 20.0, 14}, // 14 days ago
+		{"yoga", "Morning Yoga", 30, 0.0, 2},           // 2 days ago
 	}
 
 	for _, act := range activities {

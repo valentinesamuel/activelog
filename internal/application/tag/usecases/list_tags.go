@@ -35,22 +35,23 @@ func NewListTagsUseCase(repo repository.TagRepositoryInterface) *ListTagsUseCase
 //   - result (*query.PaginatedResult) - Contains tags data and pagination metadata
 //
 // Example usage:
-//   input := map[string]interface{}{
-//       "query_options": &query.QueryOptions{
-//           Page:   1,
-//           Limit:  20,
-//           Filter: map[string]interface{}{
-//               "name": "cardio",
-//           },
-//           Search: map[string]interface{}{
-//               "name": "run",
-//           },
-//           Order: map[string]string{
-//               "name": "ASC",
-//           },
-//       },
-//   }
-//   result, err := listTagsUC.Execute(ctx, nil, input)
+//
+//	input := map[string]interface{}{
+//	    "query_options": &query.QueryOptions{
+//	        Page:   1,
+//	        Limit:  20,
+//	        Filter: map[string]interface{}{
+//	            "name": "cardio",
+//	        },
+//	        Search: map[string]interface{}{
+//	            "name": "run",
+//	        },
+//	        Order: map[string]string{
+//	            "name": "ASC",
+//	        },
+//	    },
+//	}
+//	result, err := listTagsUC.Execute(ctx, nil, input)
 func (uc *ListTagsUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx, // Will be nil for non-transactional use cases

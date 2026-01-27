@@ -14,7 +14,7 @@ import (
 // This is a read-only operation and does NOT require a transaction
 // Has access to both service and repository - decides which to use
 type GetActivityStatsUseCase struct {
-	service service.StatsServiceInterface         // For operations requiring enrichment (activity level, insights)
+	service service.StatsServiceInterface          // For operations requiring enrichment (activity level, insights)
 	repo    repository.ActivityRepositoryInterface // For simple statistical queries
 }
 

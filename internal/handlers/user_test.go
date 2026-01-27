@@ -90,7 +90,7 @@ func TestRegistration(t *testing.T) {
 
 			// --- A. Prepare the Request Body ---
 			payload := map[string]string{
-				"email": tt.email,
+				"email":    tt.email,
 				"username": tt.username,
 				"password": tt.password,
 			}

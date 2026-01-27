@@ -13,7 +13,7 @@ import (
 // This is a read-only operation and does NOT require a transaction
 // Has access to both service and repository - decides which to use
 type GetActivityUseCase struct {
-	service service.ActivityServiceInterface      // For operations requiring business logic (can be nil for simple reads)
+	service service.ActivityServiceInterface       // For operations requiring business logic (can be nil for simple reads)
 	repo    repository.ActivityRepositoryInterface // For simple read operations
 }
 

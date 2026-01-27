@@ -15,11 +15,11 @@ import (
 
 // Mock use case for testing
 type mockUseCase struct {
-	name              string
-	output            map[string]interface{}
-	err               error
-	requiresTx        bool // Whether this mock requires a transaction
-	executeFn         func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error)
+	name       string
+	output     map[string]interface{}
+	err        error
+	requiresTx bool // Whether this mock requires a transaction
+	executeFn  func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error)
 }
 
 func (m *mockUseCase) Execute(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error) {

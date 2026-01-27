@@ -12,6 +12,8 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/valentinesamuel/activelog/pkg/cache"
+	"github.com/valentinesamuel/activelog/pkg/database"
 
 	"github.com/gorilla/mux"
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -19,7 +21,6 @@ import (
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/container"
-	"github.com/valentinesamuel/activelog/internal/database"
 	"github.com/valentinesamuel/activelog/internal/handlers"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
@@ -45,6 +46,7 @@ type Application struct {
 	UserHandler     *handlers.UserHandler
 	StatsHandler    *handlers.StatsHandler
 	photoHandler    *handlers.ActivityPhotoHandler
+	Cache           *cache.RedisClient
 }
 
 func main() {
@@ -66,10 +68,16 @@ func run() error {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	redis, err := cache.Connect()
+	if err != nil {
+		return fmt.Errorf("failed to connect to Redis: %w", err)
+	}
+
 	// Initialize application with dependencies
 	app := &Application{
 		DB:       db,
 		DBCloser: db,
+		Cache:    redis,
 	}
 
 	// Setup repositories and handlers
