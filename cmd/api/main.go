@@ -12,7 +12,6 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/valentinesamuel/activelog/pkg/cache"
 	"github.com/valentinesamuel/activelog/pkg/database"
 
 	"github.com/gorilla/mux"
@@ -46,7 +45,6 @@ type Application struct {
 	UserHandler     *handlers.UserHandler
 	StatsHandler    *handlers.StatsHandler
 	photoHandler    *handlers.ActivityPhotoHandler
-	Cache           *cache.RedisClient
 }
 
 func main() {
@@ -68,16 +66,15 @@ func run() error {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	redis, err := cache.Connect()
-	if err != nil {
-		return fmt.Errorf("failed to connect to Redis: %w", err)
-	}
+	//redis, err := cache.Connect()
+	//if err != nil {
+	//	return fmt.Errorf("failed to connect to Redis: %w", err)
+	//}
 
 	// Initialize application with dependencies
 	app := &Application{
 		DB:       db,
 		DBCloser: db,
-		Cache:    redis,
 	}
 
 	// Setup repositories and handlers

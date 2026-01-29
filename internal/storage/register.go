@@ -26,7 +26,7 @@ func createProvider() types.StorageProvider {
 			log.Printf("Warning: Failed to initialize S3 provider: %v. Storage operations will fail.", err)
 			return nil
 		}
-		log.Printf("Storage provider initialized: S3 (bucket: %s)", config.Storage.S3.Bucket)
+		log.Printf("💾 Storage provider initialized: S3 (bucket: %s)", config.Storage.S3.Bucket)
 		return provider
 
 	case "local":

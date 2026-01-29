@@ -1,17 +1,26 @@
 package config
 
-type RedisConfig struct {
-	Address  string
-	DB       int
-	PASSWORD string
+type CacheConfigType struct {
+	Provider string
+	Redis    RedisConfigType
+	// Memcached MemcachedConfig
 }
 
-var Redis *RedisConfig
+type RedisConfigType struct {
+	Address  string
+	DB       int
+	Password string
+}
 
-func loadRedis() *RedisConfig {
-	return &RedisConfig{
-		Address:  GetEnv("REDIS_ADDRESS", "localhost"),
-		DB:       GetEnvInt("REDIS_DB", 0),
-		PASSWORD: GetEnv("REDIS_PASSWORD", ""),
+var Cache *CacheConfigType
+
+func loadCache() *CacheConfigType {
+	return &CacheConfigType{
+		Provider: GetEnv("CACHE_PROVIDER", "redis"),
+		Redis: RedisConfigType{
+			Address:  GetEnv("REDIS_ADDRESS", "localhost"),
+			DB:       GetEnvInt("REDIS_DB", 0),
+			Password: GetEnv("REDIS_PASSWORD", ""),
+		},
 	}
 }

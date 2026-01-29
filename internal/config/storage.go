@@ -5,7 +5,7 @@ type StorageConfigType struct {
 	Provider string
 	S3       S3ConfigType
 	// Add other providers as needed:
-	// Azure    AzureConfig
+	// Azure AzureConfig
 	// Supabase SupabaseConfig
 }
 

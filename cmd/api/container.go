@@ -6,6 +6,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	statsUsecases "github.com/valentinesamuel/activelog/internal/application/stats/usecases"
 	tagUsecases "github.com/valentinesamuel/activelog/internal/application/tag/usecases"
+	"github.com/valentinesamuel/activelog/internal/cache"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/handlers"
 	"github.com/valentinesamuel/activelog/internal/repository"
@@ -25,6 +26,11 @@ func setupContainer(db repository.DBConn) *container.Container {
 
 	// Register storage provider (uses config globals)
 	storage.RegisterStorage(c)
+	cache.RegisterCache(c)
+
+	// Eagerly resolve dependedncies
+	c.MustResolve(storage.StorageProviderKey)
+	c.MustResolve(cache.CacheProviderKey)
 
 	// Register layers in dependency order
 	repository.RegisterRepositories(c) // Layer 1: Data access

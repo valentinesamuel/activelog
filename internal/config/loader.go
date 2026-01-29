@@ -31,7 +31,7 @@ func LoadWithValidation() error {
 	Common = loadCommon()
 	Database = loadDatabase()
 	Storage = loadStorage()
-	Redis = loadRedis()
+	Cache = loadCache()
 
 	return nil
 }
