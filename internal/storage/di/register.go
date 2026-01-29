@@ -1,4 +1,4 @@
-package storage
+package di
 
 import (
 	"log"

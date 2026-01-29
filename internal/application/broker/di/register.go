@@ -1,8 +1,9 @@
-package broker
+package di
 
 import (
 	"database/sql"
 
+	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/container"
 )
 
@@ -14,6 +15,6 @@ const CoreRawDBKey = "rawDB"
 func RegisterBroker(c *container.Container) {
 	c.Register(BrokerKey, func(c *container.Container) (interface{}, error) {
 		rawDB := c.MustResolve(CoreRawDBKey).(*sql.DB)
-		return NewBroker(rawDB), nil
+		return broker.NewBroker(rawDB), nil
 	})
 }

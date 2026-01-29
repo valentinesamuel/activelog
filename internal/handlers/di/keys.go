@@ -1,4 +1,4 @@
-package handlers
+package di
 
 // Container registration keys for handlers
 const (

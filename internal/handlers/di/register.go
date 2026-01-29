@@ -1,11 +1,14 @@
-package handlers
+package di
 
 import (
-	activityUsecases "github.com/valentinesamuel/activelog/internal/application/activity/usecases"
-	photoUsecases "github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases"
+	activityUsecases "github.com/valentinesamuel/activelog/internal/application/activity/usecases/di"
+	photoUsecases "github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases/di"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
+	"github.com/valentinesamuel/activelog/internal/application/broker/di"
 	"github.com/valentinesamuel/activelog/internal/container"
+	"github.com/valentinesamuel/activelog/internal/handlers"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	di2 "github.com/valentinesamuel/activelog/internal/repository/di"
 )
 
 // RegisterHandlers registers all HTTP handler factories with the container
@@ -13,19 +16,19 @@ import (
 func RegisterHandlers(c *container.Container) {
 	// Health handler (no dependencies)
 	c.Register(HealthHandlerKey, func(c *container.Container) (interface{}, error) {
-		return NewHealthHandler(), nil
+		return handlers.NewHealthHandler(), nil
 	})
 
 	// User handler (legacy pattern for now)
 	c.Register(UserHandlerKey, func(c *container.Container) (interface{}, error) {
-		repo := c.MustResolve(repository.UserRepoKey).(*repository.UserRepository)
-		return NewUserHandler(repo), nil
+		repo := c.MustResolve(di2.UserRepoKey).(*repository.UserRepository)
+		return handlers.NewUserHandler(repo), nil
 	})
 
 	// Activity handler (broker pattern with all use cases)
 	c.Register(ActivityHandlerKey, func(c *container.Container) (interface{}, error) {
-		brokerInstance := c.MustResolve(broker.BrokerKey).(*broker.Broker)
-		repo := c.MustResolve(repository.ActivityRepoKey).(repository.ActivityRepositoryInterface)
+		brokerInstance := c.MustResolve(di.BrokerKey).(*broker.Broker)
+		repo := c.MustResolve(di2.ActivityRepoKey).(repository.ActivityRepositoryInterface)
 
 		// Resolve all use cases using their exported keys
 		createUC := c.MustResolve(activityUsecases.CreateActivityUCKey).(broker.UseCase)
@@ -35,7 +38,7 @@ func RegisterHandlers(c *container.Container) {
 		deleteUC := c.MustResolve(activityUsecases.DeleteActivityUCKey).(broker.UseCase)
 		getStatsUC := c.MustResolve(activityUsecases.GetActivityStatsUCKey).(broker.UseCase)
 
-		return NewActivityHandler(ActivityHandlerDeps{
+		return handlers.NewActivityHandler(handlers.ActivityHandlerDeps{
 			Broker:             brokerInstance,
 			Repo:               repo,
 			CreateActivityUC:   createUC,
@@ -49,19 +52,19 @@ func RegisterHandlers(c *container.Container) {
 
 	// Stats handler (legacy pattern for now - will migrate to V2 later)
 	c.Register(StatsHandlerKey, func(c *container.Container) (interface{}, error) {
-		repo := c.MustResolve(repository.StatsRepoKey).(repository.StatsRepositoryInterface)
-		return NewStatsHandler(repo), nil
+		repo := c.MustResolve(di2.StatsRepoKey).(repository.StatsRepositoryInterface)
+		return handlers.NewStatsHandler(repo), nil
 	})
 
 	// Activity photo handler
 	c.Register(ActivityPhotoHandlerKey, func(c *container.Container) (interface{}, error) {
-		brokerInstance := c.MustResolve(broker.BrokerKey).(*broker.Broker)
-		repo := c.MustResolve(repository.ActivityPhotoRepoKey).(repository.ActivityPhotoRepositoryInterface)
+		brokerInstance := c.MustResolve(di.BrokerKey).(*broker.Broker)
+		repo := c.MustResolve(di2.ActivityPhotoRepoKey).(repository.ActivityPhotoRepositoryInterface)
 
 		// Resolve use case using exported key
 		uploadActivityPhotoUC := c.MustResolve(photoUsecases.UploadActivityPhotosUCKey).(broker.UseCase)
 		getActivityPhotoUC := c.MustResolve(photoUsecases.GetActivityPhotosUCKey).(broker.UseCase)
 
-		return NewActivityPhotoHandler(brokerInstance, repo, uploadActivityPhotoUC, getActivityPhotoUC), nil
+		return handlers.NewActivityPhotoHandler(brokerInstance, repo, uploadActivityPhotoUC, getActivityPhotoUC), nil
 	})
 }

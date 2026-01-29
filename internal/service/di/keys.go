@@ -1,4 +1,4 @@
-package service
+package di
 
 // Container registration keys for services
 const (

@@ -1,4 +1,4 @@
-package cache
+package di
 
 // Container registration keys for cache
 const (

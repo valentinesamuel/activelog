@@ -1,4 +1,4 @@
-package usecases
+package di
 
 // Container registration keys for activity use cases
 const (

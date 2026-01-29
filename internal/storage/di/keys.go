@@ -1,4 +1,4 @@
-package storage
+package di
 
 // Container registration keys for storage
 const (

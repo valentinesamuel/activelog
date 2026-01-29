@@ -1,4 +1,4 @@
-package repository
+package di
 
 // Container registration keys for repositories
 const (
