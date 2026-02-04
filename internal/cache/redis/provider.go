@@ -51,3 +51,19 @@ func (rc *Provider) Del(key string) error {
 	}
 	return nil
 }
+
+func (rc *Provider) Increment(key string) (int64, error) {
+	newValue, err := rc.client.Incr(context.Background(), key).Result()
+	if err != nil {
+		return 0, err
+	}
+	return newValue, nil
+}
+
+func (rc *Provider) Expire(key string, ttl time.Duration) (bool, error) {
+	newValue, err := rc.client.ExpireNX(context.Background(), key, ttl).Result()
+	if err != nil {
+		return false, err
+	}
+	return newValue, nil
+}

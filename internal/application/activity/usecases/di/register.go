@@ -26,7 +26,11 @@ func RegisterActivityUseCases(c *container.Container) {
 	c.Register(UpdateActivityUCKey, func(c *container.Container) (interface{}, error) {
 		svc := c.MustResolve(serviceDI.ActivityServiceKey).(service.ActivityServiceInterface)
 		repo := c.MustResolve(repoDI.ActivityRepoKey).(repository.ActivityRepositoryInterface)
-		return usecases.NewUpdateActivityUseCase(svc, repo), nil
+		var cacheProvider types.CacheProvider
+		if resolved := c.MustResolve(cacheDI.CacheProviderKey); resolved != nil {
+			cacheProvider = resolved.(types.CacheProvider)
+		}
+		return usecases.NewUpdateActivityUseCase(svc, repo, cacheProvider), nil
 	})
 
 	c.Register(DeleteActivityUCKey, func(c *container.Container) (interface{}, error) {

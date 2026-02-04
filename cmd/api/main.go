@@ -18,6 +18,9 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/valentinesamuel/activelog/docs"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
+	"github.com/valentinesamuel/activelog/internal/application/broker/di"
+	cacheDI "github.com/valentinesamuel/activelog/internal/cache/di"
+	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/handlers"
@@ -40,6 +43,7 @@ type Application struct {
 	DBCloser        interface{ Close() error } // For cleanup during shutdown
 	Container       *container.Container       // DI container
 	Broker          *broker.Broker             // Use case orchestrator
+	RateLimiter     *middleware.RateLimiter    // Rate limiting middleware
 	HealthHandler   *handlers.HealthHandler
 	ActivityHandler *handlers.ActivityHandler
 	UserHandler     *handlers.UserHandler
@@ -94,7 +98,11 @@ func (app *Application) setupDependencies() {
 	app.Container = setupContainer(app.DB)
 
 	// Resolve core dependencies from container
-	app.Broker = app.Container.MustResolve("broker").(*broker.Broker)
+	app.Broker = app.Container.MustResolve(di.BrokerKey).(*broker.Broker)
+
+	// Setup rate limiter with cache from container
+	cache := app.Container.MustResolve(cacheDI.CacheProviderKey).(cacheTypes.CacheProvider)
+	app.RateLimiter = middleware.NewRateLimiter(cache, 2, time.Minute) // 100 requests per minute
 
 	// Resolve handlers from container
 	app.HealthHandler = app.Container.MustResolve("healthHandler").(*handlers.HealthHandler)
@@ -112,6 +120,7 @@ func (app *Application) setupRoutes() http.Handler {
 	router.Use(middleware.LoggingMiddleware)
 	router.Use(middleware.CORS)
 	router.Use(middleware.SecurityHeaders)
+	router.Use(app.RateLimiter.Middleware)
 
 	// Health and root endpoints
 	router.Handle("/health", app.HealthHandler).Methods("GET")

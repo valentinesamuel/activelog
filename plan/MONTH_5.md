@@ -820,7 +820,6 @@ router.Use(rateLimiter.Middleware)
 
 ---
 
-## Monitoring
 
 ### Prometheus Metrics
 ```go
