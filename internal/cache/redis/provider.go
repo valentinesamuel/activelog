@@ -43,3 +43,11 @@ func (rc *Provider) Set(key string, value string, ttl time.Duration) error {
 	}
 	return nil
 }
+
+func (rc *Provider) Del(key string) error {
+	err := rc.client.Del(context.Background(), key).Err()
+	if err != nil {
+		return err
+	}
+	return nil
+}
