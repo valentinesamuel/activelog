@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/valentinesamuel/activelog/internal/config"
@@ -22,7 +23,6 @@ func Connect() (*Provider, error) {
 	_, err := client.Ping(context.Background()).Result()
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect to redis: %v", err))
-		return nil, err
 	}
 
 	return &Provider{client: client}, nil
@@ -36,8 +36,8 @@ func (rc *Provider) Get(key string) (string, error) {
 	return value, nil
 }
 
-func (rc *Provider) Set(key string, value string) error {
-	err := rc.client.Set(context.Background(), key, value, 0).Err()
+func (rc *Provider) Set(key string, value string, ttl time.Duration) error {
+	err := rc.client.Set(context.Background(), key, value, ttl).Err()
 	if err != nil {
 		return err
 	}

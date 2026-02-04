@@ -288,6 +288,14 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Set cache status headers
+	if result.Cache.Hit {
+		w.Header().Set("X-Cache-Status", "HIT")
+	} else {
+		w.Header().Set("X-Cache-Status", "MISS")
+		w.Header().Set("X-Cache-TTL", strconv.Itoa(int(result.Cache.TTL.Seconds())))
+	}
+
 	// Return standardized response with pagination metadata
 	response.SendJSON(w, http.StatusOK, map[string]interface{}{
 		"data": result.Result.Data,
