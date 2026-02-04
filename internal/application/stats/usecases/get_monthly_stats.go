@@ -8,6 +8,16 @@ import (
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
 
+// GetMonthlyStatsInput defines the typed input for GetMonthlyStatsUseCase
+type GetMonthlyStatsInput struct {
+	UserID int
+}
+
+// GetMonthlyStatsOutput defines the typed output for GetMonthlyStatsUseCase
+type GetMonthlyStatsOutput struct {
+	MonthlyStats *repository.MonthlyStats
+}
+
 // GetMonthlyStatsUseCase handles fetching monthly statistics (last 30 days)
 // This is a read-only operation and does NOT require a transaction
 type GetMonthlyStatsUseCase struct {
@@ -19,29 +29,21 @@ func NewGetMonthlyStatsUseCase(repo repository.StatsRepositoryInterface) *GetMon
 	return &GetMonthlyStatsUseCase{repo: repo}
 }
 
-// No RequiresTransaction() method = defaults to non-transactional
-// Read operations don't need transaction overhead for performance
+// RequiresTransaction returns false - read operations don't need transactions
+func (uc *GetMonthlyStatsUseCase) RequiresTransaction() bool {
+	return false
+}
 
-// Execute retrieves monthly statistics
+// Execute retrieves monthly statistics (typed version)
 func (uc *GetMonthlyStatsUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx, // Will be nil for non-transactional use cases
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Extract user ID (required)
-	userID, ok := input["user_id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("user_id is required")
-	}
-
-	// Fetch monthly stats
-	stats, err := uc.repo.GetMonthlyStats(ctx, userID)
+	input GetMonthlyStatsInput,
+) (GetMonthlyStatsOutput, error) {
+	stats, err := uc.repo.GetMonthlyStats(ctx, input.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get monthly stats: %w", err)
+		return GetMonthlyStatsOutput{}, fmt.Errorf("failed to get monthly stats: %w", err)
 	}
 
-	// Return result
-	return map[string]interface{}{
-		"monthly_stats": stats,
-	}, nil
+	return GetMonthlyStatsOutput{MonthlyStats: stats}, nil
 }

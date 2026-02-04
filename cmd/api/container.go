@@ -6,13 +6,13 @@ import (
 	"github.com/valentinesamuel/activelog/internal/application/broker/di"
 	statsUsecases "github.com/valentinesamuel/activelog/internal/application/stats/usecases/di"
 	tagUsecases "github.com/valentinesamuel/activelog/internal/application/tag/usecases/di"
-	di2 "github.com/valentinesamuel/activelog/internal/cache/di"
+	cacheRegister "github.com/valentinesamuel/activelog/internal/cache/di"
 	"github.com/valentinesamuel/activelog/internal/container"
-	di3 "github.com/valentinesamuel/activelog/internal/handlers/di"
+	handlerRegister "github.com/valentinesamuel/activelog/internal/handlers/di"
 	"github.com/valentinesamuel/activelog/internal/repository"
-	di4 "github.com/valentinesamuel/activelog/internal/repository/di"
-	di5 "github.com/valentinesamuel/activelog/internal/service/di"
-	di6 "github.com/valentinesamuel/activelog/internal/storage/di"
+	repositoryRegister "github.com/valentinesamuel/activelog/internal/repository/di"
+	serviceRegister "github.com/valentinesamuel/activelog/internal/service/di"
+	storageRegister "github.com/valentinesamuel/activelog/internal/storage/di"
 	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
@@ -26,17 +26,17 @@ func setupContainer(db repository.DBConn) *container.Container {
 	registerCoreDependencies(c, db)
 
 	// Register storage provider (uses config globals)
-	di6.RegisterStorage(c)
-	di2.RegisterCache(c)
+	storageRegister.RegisterStorage(c)
+	cacheRegister.RegisterCache(c)
 
 	// Eagerly resolve dependedncies
-	c.MustResolve(di6.StorageProviderKey)
-	c.MustResolve(di2.CacheProviderKey)
+	c.MustResolve(storageRegister.StorageProviderKey)
+	c.MustResolve(cacheRegister.CacheProviderKey)
 
 	// Register layers in dependency order
-	di4.RegisterRepositories(c) // Layer 1: Data access
-	di5.RegisterServices(c)     // Layer 2: Business logic
-	di.RegisterBroker(c)        // Layer 3: Use case orchestration
+	repositoryRegister.RegisterRepositories(c) // Layer 1: Data access
+	serviceRegister.RegisterServices(c)        // Layer 2: Business logic
+	di.RegisterBroker(c)                       // Layer 3: Use case orchestration
 
 	// Register use cases by domain
 	activityUsecases.RegisterActivityUseCases(c)
@@ -45,7 +45,7 @@ func setupContainer(db repository.DBConn) *container.Container {
 	photoUsecases.RegisterActivityPhotoUseCases(c)
 
 	// Register handlers (depends on everything above)
-	di3.RegisterHandlers(c)
+	handlerRegister.RegisterHandlers(c)
 
 	return c
 }
@@ -53,9 +53,9 @@ func setupContainer(db repository.DBConn) *container.Container {
 // registerCoreDependencies registers core singletons like database connection
 // These must be registered before any other dependencies
 func registerCoreDependencies(c *container.Container, db repository.DBConn) {
-	c.RegisterSingleton(di4.CoreDBKey, db)
+	c.RegisterSingleton(repositoryRegister.CoreDBKey, db)
 	c.RegisterSingleton(di.CoreRawDBKey, db.GetRawDB())
-	c.RegisterSingleton(di4.CoreRegistryManagerKey, setupRegistryManager())
+	c.RegisterSingleton(repositoryRegister.CoreRegistryManagerKey, setupRegistryManager())
 }
 
 // setupRegistryManager creates and configures the global RegistryManager (v3.0)

@@ -34,4 +34,4 @@ go.work.sum
 # .idea/
 # .vscode/
 
-cmd/api/**debug
+cmd/api/*__debug

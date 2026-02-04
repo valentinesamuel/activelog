@@ -18,12 +18,28 @@ import (
 	"github.com/valentinesamuel/activelog/pkg/imageutil"
 )
 
+// UploadActivityPhotoInput defines the typed input for UploadActivityPhotoUseCase
+type UploadActivityPhotoInput struct {
+	UserID     int
+	ActivityID int
+	Photos     []*multipart.FileHeader
+}
+
+// UploadActivityPhotoOutput defines the typed output for UploadActivityPhotoUseCase
+type UploadActivityPhotoOutput struct {
+	ActivityPhotos []models.ActivityPhoto
+	ActivityID     int
+	Count          int
+}
+
+// UploadActivityPhotoUseCase handles photo uploads for activities
 type UploadActivityPhotoUseCase struct {
 	service service.ActivityServiceInterface
 	repo    repository.ActivityPhotoRepositoryInterface
 	storage types.StorageProvider
 }
 
+// NewUploadActivityPhotoUseCase creates a new instance
 func NewUploadActivityPhotoUseCase(
 	svc service.ActivityServiceInterface,
 	repo repository.ActivityPhotoRepositoryInterface,
@@ -36,53 +52,42 @@ func NewUploadActivityPhotoUseCase(
 	}
 }
 
+// RequiresTransaction returns true - write operations need transactions
 func (uc *UploadActivityPhotoUseCase) RequiresTransaction() bool {
 	return true
 }
 
+// Execute uploads photos for an activity (typed version)
 func (uc *UploadActivityPhotoUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx,
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Photos come as *[]*multipart.FileHeader from the handler
-	photosPtr, ok := input["photos"].(*[]*multipart.FileHeader)
-	if !ok {
-		return nil, fmt.Errorf("invalid photos format: expected *[]*multipart.FileHeader")
-	}
-	photos := *photosPtr
-
-	activityID, ok := input["activity_id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("invalid activity_id format")
-	}
-
+	input UploadActivityPhotoInput,
+) (UploadActivityPhotoOutput, error) {
 	// Check if storage provider is available
 	if uc.storage == nil {
-		return nil, fmt.Errorf("storage provider not configured")
+		return UploadActivityPhotoOutput{}, fmt.Errorf("storage provider not configured")
 	}
 
 	// Upload each photo
-	uploadedPhotos := make([]models.ActivityPhoto, 0, len(photos))
-	for _, photo := range photos {
-		activityPhoto, err := uc.uploadPhoto(ctx, activityID, photo, tx)
+	uploadedPhotos := make([]models.ActivityPhoto, 0, len(input.Photos))
+	for _, photo := range input.Photos {
+		activityPhoto, err := uc.uploadPhoto(ctx, input.ActivityID, photo, tx)
 		if err != nil {
 			// If any upload fails, we should handle cleanup
 			// For now, return error with partial uploads info
-			return map[string]interface{}{
-				"activityPhotos": uploadedPhotos,
-				"activity_id":    activityID,
-				"count":          len(uploadedPhotos),
-				"error":          err.Error(),
+			return UploadActivityPhotoOutput{
+				ActivityPhotos: uploadedPhotos,
+				ActivityID:     input.ActivityID,
+				Count:          len(uploadedPhotos),
 			}, fmt.Errorf("failed to upload photo %s: %w", photo.Filename, err)
 		}
 		uploadedPhotos = append(uploadedPhotos, *activityPhoto)
 	}
 
-	return map[string]interface{}{
-		"activityPhotos": uploadedPhotos,
-		"activity_id":    activityID,
-		"count":          len(uploadedPhotos),
+	return UploadActivityPhotoOutput{
+		ActivityPhotos: uploadedPhotos,
+		ActivityID:     input.ActivityID,
+		Count:          len(uploadedPhotos),
 	}, nil
 }
 

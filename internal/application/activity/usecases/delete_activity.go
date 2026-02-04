@@ -9,6 +9,18 @@ import (
 	"github.com/valentinesamuel/activelog/internal/service"
 )
 
+// DeleteActivityInput defines the typed input for DeleteActivityUseCase
+type DeleteActivityInput struct {
+	UserID     int
+	ActivityID int
+}
+
+// DeleteActivityOutput defines the typed output for DeleteActivityUseCase
+type DeleteActivityOutput struct {
+	Deleted    bool
+	ActivityID int
+}
+
 // DeleteActivityUseCase handles activity deletion
 // Has access to both service (for business logic) and repository (for simple operations)
 // The use case decides which one to use based on the operation's needs
@@ -35,40 +47,25 @@ func (uc *DeleteActivityUseCase) RequiresTransaction() bool {
 	return true
 }
 
-// Execute deletes an activity
+// Execute deletes an activity (typed version)
 // Decision: Use service for business logic checks, repo is available if needed
 func (uc *DeleteActivityUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx,
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Extract input
-	activityID, ok := input["activity_id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("activity_id is required")
-	}
-
-	userID, ok := input["user_id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("user_id is required")
-	}
-
+	input DeleteActivityInput,
+) (DeleteActivityOutput, error) {
 	// DECISION: Use service for delete operations because we need:
 	// - Ownership verification
 	// - Business policy checks (e.g., preventing deletion of old activities)
 	// - Cascade deletion handling
 	// Alternative: Could use repo directly for simple hard deletes without checks
-	err := uc.service.DeleteActivity(ctx, tx, userID, activityID)
+	err := uc.service.DeleteActivity(ctx, tx, input.UserID, input.ActivityID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to delete activity: %w", err)
+		return DeleteActivityOutput{}, fmt.Errorf("failed to delete activity: %w", err)
 	}
 
-	// Example of using both: Could use repo to verify deletion or clean up related data
-	// remainingCount, _ := uc.repo.Count(userID)
-
-	// Return result
-	return map[string]interface{}{
-		"deleted":     true,
-		"activity_id": activityID,
+	return DeleteActivityOutput{
+		Deleted:    true,
+		ActivityID: input.ActivityID,
 	}, nil
 }

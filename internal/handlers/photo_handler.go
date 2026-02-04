@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
+	"github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
@@ -18,11 +19,16 @@ import (
 type ActivityPhotoHandler struct {
 	brokerInstance         *broker.Broker
 	repo                   repository.ActivityPhotoRepositoryInterface
-	uploadActivityPhotosUC broker.UseCase
-	getActivityPhotosUC    broker.UseCase
+	uploadActivityPhotosUC *usecases.UploadActivityPhotoUseCase
+	getActivityPhotosUC    *usecases.GetActivityPhotoUseCase
 }
 
-func NewActivityPhotoHandler(brokerInstance *broker.Broker, repo repository.ActivityPhotoRepositoryInterface, uploadActivityPhotosUC, getActivityPhotosUC broker.UseCase) *ActivityPhotoHandler {
+func NewActivityPhotoHandler(
+	brokerInstance *broker.Broker,
+	repo repository.ActivityPhotoRepositoryInterface,
+	uploadActivityPhotosUC *usecases.UploadActivityPhotoUseCase,
+	getActivityPhotosUC *usecases.GetActivityPhotoUseCase,
+) *ActivityPhotoHandler {
 	return &ActivityPhotoHandler{
 		brokerInstance:         brokerInstance,
 		repo:                   repo,
@@ -38,17 +44,17 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		logger.Error().Err(err).Msg("❌ Failed to upload activity photo")
+		logger.Error().Err(err).Msg("Failed to upload activity photo")
 		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
 		return
 	}
 
 	contentType := r.Header.Get("Content-Type")
-	logger.Info().Str("content_type", contentType).Msg("📤 Received upload request")
+	logger.Info().Str("content_type", contentType).Msg("Received upload request")
 
 	err = r.ParseMultipartForm(50 << 20)
 	if err != nil {
-		logger.Error().Err(err).Str("content_type", contentType).Msg("❌ Failed to parse multipart form")
+		logger.Error().Err(err).Str("content_type", contentType).Msg("Failed to parse multipart form")
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -75,31 +81,32 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 		if !allowedTypes[contentType] {
 			response.Error(w, http.StatusBadRequest, "Invalid file format")
+			return
 		}
 
 		fmt.Printf("File: %s, Type: %s\n", photo.Filename, contentType)
 	}
 
-	result, err := h.brokerInstance.RunUseCases(
+	// Execute typed use case through broker
+	result, err := broker.RunUseCase(
+		h.brokerInstance,
 		ctx,
-		[]broker.UseCase{h.uploadActivityPhotosUC},
-		map[string]interface{}{
-			"user_id":     requestUser.Id,
-			"photos":      &photos,
-			"activity_id": id,
+		h.uploadActivityPhotosUC,
+		usecases.UploadActivityPhotoInput{
+			UserID:     requestUser.Id,
+			ActivityID: id,
+			Photos:     photos,
 		},
 	)
 
 	if err != nil {
-		logger.Error().Err(err).Msg("❌ Failed to upload activity photo")
+		logger.Error().Err(err).Msg("Failed to upload activity photo")
 		response.Error(w, http.StatusInternalServerError, "Failed to upload activity photo")
 		return
 	}
-	// Extract activity from result
-	activityPhotos := result["activityPhotos"]
-	log.Info().Interface("activityId", result["activity_id"]).Msg("✅ Activity PhotosCreated")
-	response.SendJSON(w, http.StatusCreated, activityPhotos)
 
+	log.Info().Int("activityId", result.ActivityID).Msg("Activity Photos Created")
+	response.SendJSON(w, http.StatusCreated, result.ActivityPhotos)
 }
 
 func (h *ActivityPhotoHandler) GetActivityPhoto(w http.ResponseWriter, r *http.Request) {
@@ -108,26 +115,27 @@ func (h *ActivityPhotoHandler) GetActivityPhoto(w http.ResponseWriter, r *http.R
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		logger.Error().Err(err).Msg("❌ Failed to upload activity photo")
+		logger.Error().Err(err).Msg("Failed to get activity photo")
 		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
 		return
 	}
 
-	result, err := h.brokerInstance.RunUseCases(
+	// Execute typed use case through broker
+	result, err := broker.RunUseCase(
+		h.brokerInstance,
 		ctx,
-		[]broker.UseCase{h.getActivityPhotosUC},
-		map[string]interface{}{
-			"activityId": id,
+		h.getActivityPhotosUC,
+		usecases.GetActivityPhotosInput{
+			ActivityID: id,
 		},
 	)
 
 	if err != nil {
-		logger.Error().Err(err).Msg("❌ Failed to get activity photos")
+		logger.Error().Err(err).Msg("Failed to get activity photos")
 		response.Error(w, http.StatusInternalServerError, "Failed to get activity photos")
 		return
 	}
 
-	log.Info().Interface("activityId", result["activity_id"]).Msg("✅ Activity Photos retrieved")
-	response.SendJSON(w, http.StatusCreated, result)
-
+	log.Info().Int("activityId", id).Int("count", len(result.Photos)).Msg("Activity Photos retrieved")
+	response.SendJSON(w, http.StatusOK, result.Photos)
 }

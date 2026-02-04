@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
+	"github.com/valentinesamuel/activelog/internal/application/activity/usecases"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
@@ -24,23 +25,23 @@ import (
 type ActivityHandler struct {
 	broker             *broker.Broker
 	repo               repository.ActivityRepositoryInterface
-	createActivityUC   broker.UseCase
-	getActivityUC      broker.UseCase
-	listActivitiesUC   broker.UseCase
-	updateActivityUC   broker.UseCase
-	deleteActivityUC   broker.UseCase
-	getActivityStatsUC broker.UseCase
+	createActivityUC   *usecases.CreateActivityUseCase
+	getActivityUC      *usecases.GetActivityUseCase
+	listActivitiesUC   *usecases.ListActivitiesUseCase
+	updateActivityUC   *usecases.UpdateActivityUseCase
+	deleteActivityUC   *usecases.DeleteActivityUseCase
+	getActivityStatsUC *usecases.GetActivityStatsUseCase
 }
 
 type ActivityHandlerDeps struct {
 	Broker             *broker.Broker
 	Repo               repository.ActivityRepositoryInterface
-	CreateActivityUC   broker.UseCase
-	GetActivityUC      broker.UseCase
-	ListActivitiesUC   broker.UseCase
-	UpdateActivityUC   broker.UseCase
-	DeleteActivityUC   broker.UseCase
-	GetActivityStatsUC broker.UseCase
+	CreateActivityUC   *usecases.CreateActivityUseCase
+	GetActivityUC      *usecases.GetActivityUseCase
+	ListActivitiesUC   *usecases.ListActivitiesUseCase
+	UpdateActivityUC   *usecases.UpdateActivityUseCase
+	DeleteActivityUC   *usecases.DeleteActivityUseCase
+	GetActivityStatsUC *usecases.GetActivityStatsUseCase
 }
 
 // NewActivityHandler creates a handler with broker pattern
@@ -95,26 +96,25 @@ func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Execute use case through broker
-	result, err := h.broker.RunUseCases(
+	// Execute typed use case through broker
+	result, err := broker.RunUseCase(
+		h.broker,
 		ctx,
-		[]broker.UseCase{h.createActivityUC},
-		map[string]interface{}{
-			"user_id": requestUser.Id,
-			"request": &req,
+		h.createActivityUC,
+		usecases.CreateActivityInput{
+			UserID:  requestUser.Id,
+			Request: &req,
 		},
 	)
 
 	if err != nil {
-		log.Error().Err(err).Msg("❌ Failed to create activity")
+		log.Error().Err(err).Msg("Failed to create activity")
 		response.Error(w, http.StatusInternalServerError, "Failed to create activity")
 		return
 	}
 
-	// Extract activity from result
-	activity := result["activity"]
-	log.Info().Interface("activityId", result["activity_id"]).Msg("✅ Activity Created")
-	response.SendJSON(w, http.StatusCreated, activity)
+	log.Info().Int64("activityId", result.ActivityID).Msg("Activity Created")
+	response.SendJSON(w, http.StatusCreated, result.Activity)
 }
 
 // GetActivity fetches a single activity using broker pattern
@@ -140,12 +140,13 @@ func (h *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Execute use case through broker (consistent with other operations)
-	result, err := h.broker.RunUseCases(
+	// Execute typed use case through broker
+	result, err := broker.RunUseCase(
+		h.broker,
 		ctx,
-		[]broker.UseCase{h.getActivityUC},
-		map[string]interface{}{
-			"activity_id": int64(id),
+		h.getActivityUC,
+		usecases.GetActivityInput{
+			ActivityID: int64(id),
 		},
 	)
 
@@ -160,8 +161,7 @@ func (h *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activity := result["activity"]
-	response.SendJSON(w, http.StatusOK, activity)
+	response.SendJSON(w, http.StatusOK, result.Activity)
 }
 
 // ListActivities fetches activities using dynamic filtering with QueryOptions
@@ -188,7 +188,7 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 	requestUser, ok := requestcontext.FromContext(ctx)
 
 	if !ok {
-		log.Error().Msg("❌ Failed to get user from context")
+		log.Error().Msg("Failed to get user from context")
 		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
 		return
 	}
@@ -259,41 +259,39 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 
 	// Validate query options against whitelists
 	if err := query.ValidateQueryOptions(queryOpts, allowedFilters, allowedSearch, allowedOrder); err != nil {
-		log.Warn().Err(err).Msg("❌ Invalid query parameters")
+		log.Warn().Err(err).Msg("Invalid query parameters")
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Validate operator-based filters (v1.1.0+)
 	if err := query.ValidateFilterConditions(queryOpts, allowedFilters, operatorWhitelists); err != nil {
-		log.Warn().Err(err).Msg("❌ Invalid filter operator")
+		log.Warn().Err(err).Msg("Invalid filter operator")
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// Execute use case through broker with QueryOptions
-	result, err := h.broker.RunUseCases(
+	// Execute typed use case through broker
+	result, err := broker.RunUseCase(
+		h.broker,
 		ctx,
-		[]broker.UseCase{h.listActivitiesUC},
-		map[string]interface{}{
-			"user_id":       requestUser.Id,
-			"query_options": queryOpts, // NEW: Pass QueryOptions instead of legacy filters
+		h.listActivitiesUC,
+		usecases.ListActivitiesInput{
+			UserID:       requestUser.Id,
+			QueryOptions: queryOpts,
 		},
 	)
 
 	if err != nil {
-		log.Error().Err(err).Msg("❌ Failed to list activities")
+		log.Error().Err(err).Msg("Failed to list activities")
 		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
 		return
 	}
 
-	// Extract paginated result
-	paginatedResult := result["result"].(*query.PaginatedResult)
-
 	// Return standardized response with pagination metadata
 	response.SendJSON(w, http.StatusOK, map[string]interface{}{
-		"data": paginatedResult.Data,
-		"meta": paginatedResult.Meta,
+		"data": result.Result.Data,
+		"meta": result.Result.Meta,
 	})
 }
 
@@ -340,14 +338,15 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Execute use case through broker
-	result, err := h.broker.RunUseCases(
+	// Execute typed use case through broker
+	result, err := broker.RunUseCase(
+		h.broker,
 		ctx,
-		[]broker.UseCase{h.updateActivityUC},
-		map[string]interface{}{
-			"user_id":     requestUser.Id,
-			"activity_id": id,
-			"request":     &req,
+		h.updateActivityUC,
+		usecases.UpdateActivityInput{
+			UserID:     requestUser.Id,
+			ActivityID: id,
+			Request:    &req,
 		},
 	)
 
@@ -357,8 +356,7 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	activity := result["activity"]
-	response.SendJSON(w, http.StatusOK, activity)
+	response.SendJSON(w, http.StatusOK, result.Activity)
 }
 
 // DeleteActivity handles activity deletion using broker pattern
@@ -384,15 +382,14 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	userID := requestUser.Id
-
-	// Execute use case through broker
-	_, err = h.broker.RunUseCases(
+	// Execute typed use case through broker
+	_, err = broker.RunUseCase(
+		h.broker,
 		ctx,
-		[]broker.UseCase{h.deleteActivityUC},
-		map[string]interface{}{
-			"user_id":     userID,
-			"activity_id": id,
+		h.deleteActivityUC,
+		usecases.DeleteActivityInput{
+			UserID:     requestUser.Id,
+			ActivityID: id,
 		},
 	)
 
@@ -422,36 +419,35 @@ func (h *ActivityHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	requestUser, _ := requestcontext.FromContext(ctx)
 
 	// Parse query parameters
-	input := map[string]interface{}{
-		"user_id": requestUser.Id,
+	input := usecases.GetActivityStatsInput{
+		UserID: requestUser.Id,
 	}
 
 	if startStr := r.URL.Query().Get("startDate"); startStr != "" {
 		if parsed, err := time.Parse(time.RFC3339, startStr); err == nil {
-			input["start_date"] = parsed
+			input.StartDate = &parsed
 		}
 	}
 
 	if endStr := r.URL.Query().Get("endDate"); endStr != "" {
 		if parsed, err := time.Parse(time.RFC3339, endStr); err == nil {
-			input["end_date"] = parsed
+			input.EndDate = &parsed
 		}
 	}
 
-	// Execute use case through broker
-	result, err := h.broker.RunUseCases(
+	// Execute typed use case through broker
+	result, err := broker.RunUseCase(
+		h.broker,
 		ctx,
-		[]broker.UseCase{h.getActivityStatsUC},
+		h.getActivityStatsUC,
 		input,
 	)
 
 	if err != nil {
-		log.Error().Err(err).Msg("❌ Failed to get stats")
+		log.Error().Err(err).Msg("Failed to get stats")
 		response.Error(w, http.StatusInternalServerError, "Failed to get statistics")
 		return
 	}
 
-	stats := result["stats"]
-
-	response.SendJSON(w, http.StatusOK, stats)
+	response.SendJSON(w, http.StatusOK, result.Stats)
 }

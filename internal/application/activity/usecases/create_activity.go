@@ -10,6 +10,18 @@ import (
 	"github.com/valentinesamuel/activelog/internal/service"
 )
 
+// CreateActivityInput defines the typed input for CreateActivityUseCase
+type CreateActivityInput struct {
+	UserID  int
+	Request *models.CreateActivityRequest
+}
+
+// CreateActivityOutput defines the typed output for CreateActivityUseCase
+type CreateActivityOutput struct {
+	Activity   *models.Activity
+	ActivityID int64
+}
+
 // CreateActivityUseCase handles activity creation
 // Has access to both service (for business logic) and repository (for simple operations)
 // The use case decides which one to use based on the operation's needs
@@ -35,22 +47,15 @@ func (uc *CreateActivityUseCase) RequiresTransaction() bool {
 	return true
 }
 
-// Execute creates a new activity
+// Execute creates a new activity (typed version)
 // Decision: Use service for business logic validation, repo is available if needed
 func (uc *CreateActivityUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx,
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Extract input
-	req, ok := input["request"].(*models.CreateActivityRequest)
-	if !ok {
-		return nil, fmt.Errorf("invalid request type")
-	}
-
-	userID, ok := input["user_id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("user_id is required")
+	input CreateActivityInput,
+) (CreateActivityOutput, error) {
+	if input.Request == nil {
+		return CreateActivityOutput{}, fmt.Errorf("request is required")
 	}
 
 	// DECISION: Use service to create operations because we need business logic validation
@@ -58,14 +63,13 @@ func (uc *CreateActivityUseCase) Execute(
 	// - Validates duration is reasonable
 	// - Validates distance is positive
 	// Alternative: Could use repo directly if we wanted to skip validation (not recommended for writes)
-	activity, err := uc.service.CreateActivity(ctx, tx, userID, req)
+	activity, err := uc.service.CreateActivity(ctx, tx, input.UserID, input.Request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create activity: %w", err)
+		return CreateActivityOutput{}, fmt.Errorf("failed to create activity: %w", err)
 	}
 
-	// Return result
-	return map[string]interface{}{
-		"activity":    activity,
-		"activity_id": activity.ID,
+	return CreateActivityOutput{
+		Activity:   activity,
+		ActivityID: activity.ID,
 	}, nil
 }

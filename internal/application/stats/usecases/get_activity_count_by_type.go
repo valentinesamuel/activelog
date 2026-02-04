@@ -8,6 +8,17 @@ import (
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
 
+// GetActivityCountByTypeInput defines the typed input for GetActivityCountByTypeUseCase
+type GetActivityCountByTypeInput struct {
+	UserID int
+}
+
+// GetActivityCountByTypeOutput defines the typed output for GetActivityCountByTypeUseCase
+type GetActivityCountByTypeOutput struct {
+	CountByType map[string]int
+	TotalCount  int
+}
+
 // GetActivityCountByTypeUseCase handles fetching activity count breakdown by type
 // This is a read-only operation and does NOT require a transaction
 type GetActivityCountByTypeUseCase struct {
@@ -19,25 +30,20 @@ func NewGetActivityCountByTypeUseCase(repo repository.StatsRepositoryInterface) 
 	return &GetActivityCountByTypeUseCase{repo: repo}
 }
 
-// No RequiresTransaction() method = defaults to non-transactional
-// Read operations don't need transaction overhead for performance
+// RequiresTransaction returns false - read operations don't need transactions
+func (uc *GetActivityCountByTypeUseCase) RequiresTransaction() bool {
+	return false
+}
 
-// Execute retrieves activity count by type
+// Execute retrieves activity count by type (typed version)
 func (uc *GetActivityCountByTypeUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx, // Will be nil for non-transactional use cases
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Extract user ID (required)
-	userID, ok := input["user_id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("user_id is required")
-	}
-
-	// Fetch activity count by type
-	countByType, err := uc.repo.GetActivityCountByType(ctx, userID)
+	input GetActivityCountByTypeInput,
+) (GetActivityCountByTypeOutput, error) {
+	countByType, err := uc.repo.GetActivityCountByType(ctx, input.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get activity count by type: %w", err)
+		return GetActivityCountByTypeOutput{}, fmt.Errorf("failed to get activity count by type: %w", err)
 	}
 
 	// Calculate total count
@@ -46,9 +52,8 @@ func (uc *GetActivityCountByTypeUseCase) Execute(
 		totalCount += count
 	}
 
-	// Return result
-	return map[string]interface{}{
-		"count_by_type": countByType,
-		"total_count":   totalCount,
+	return GetActivityCountByTypeOutput{
+		CountByType: countByType,
+		TotalCount:  totalCount,
 	}, nil
 }
