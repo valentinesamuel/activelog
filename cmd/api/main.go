@@ -12,6 +12,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valentinesamuel/activelog/pkg/database"
 
 	"github.com/gorilla/mux"
@@ -125,6 +126,8 @@ func (app *Application) setupRoutes() http.Handler {
 	// Health and root endpoints
 	router.Handle("/health", app.HealthHandler).Methods("GET")
 	router.HandleFunc("/", app.handleRoot).Methods("GET")
+
+	router.Handle("/metrics", promhttp.Handler())
 
 	// API v1 routes
 	api := router.PathPrefix("/api/v1").Subrouter()
