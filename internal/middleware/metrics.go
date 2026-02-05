@@ -27,14 +27,14 @@ var (
 		[]string{"method", "endpoint"},
 	)
 
-	_ = promauto.NewCounter(
+	CacheHitsTotal = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "cache_hits_total",
 			Help: "Total number of cache hits",
 		},
 	)
 
-	_ = promauto.NewCounter(
+	CacheMissesTotal = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "cache_misses_total",
 			Help: "Total number of cache misses",

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/valentinesamuel/activelog/internal/cache/types"
+	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
 	"github.com/valentinesamuel/activelog/pkg/query"
@@ -73,12 +74,14 @@ func (uc *ListActivitiesUseCase) Execute(
 		if cached, err := uc.cache.Get(cacheKey); err == nil && cached != "" {
 			var result query.PaginatedResult
 			if err := json.Unmarshal([]byte(cached), &result); err == nil {
+				middleware.CacheHitsTotal.Inc()
 				return ListActivitiesOutput{
 					Result: &result,
 					Cache:  CacheMeta{Hit: true},
 				}, nil
 			}
 		}
+		middleware.CacheMissesTotal.Inc()
 	}
 
 	// Cache miss - fetch from database
