@@ -1,0 +1,60 @@
+# Rate Limiting Configuration
+default:
+  limit: 100
+  window: 1m
+
+rules:
+  # Auth endpoints - strict (brute force protection)
+  - method: POST
+    path: /api/v1/auth/login
+    limit: 5
+    window: 1m
+
+  - method: POST
+    path: /api/v1/auth/register
+    limit: 3
+    window: 1m
+
+  # Read operations - lenient
+  - method: GET
+    path: /api/v1/activities
+    limit: 200
+    window: 1m
+
+  - method: GET
+    path: /api/v1/activities/*
+    limit: 200
+    window: 1m
+
+  - method: GET
+    path: /api/v1/stats/*
+    limit: 200
+    window: 1m
+
+  # Write operations - moderate
+  - method: POST
+    path: /api/v1/activities
+    limit: 50
+    window: 1m
+
+  - method: PATCH
+    path: /api/v1/activities/*
+    limit: 50
+    window: 1m
+
+  - method: DELETE
+    path: /api/v1/activities/*
+    limit: 20
+    window: 1m
+
+  # Photo uploads - strict (resource intensive)
+  - method: POST
+    path: /api/v1/activities/*/photos
+    limit: 10
+    window: 1m
+
+  # Any method fallback for specific paths
+  - method: "*"
+    path: /health
+    limit: 1000
+    window: 1m
