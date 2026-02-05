@@ -102,7 +102,7 @@ func (app *Application) setupDependencies() {
 
 	// Setup rate limiter with cache from container
 	cache := app.Container.MustResolve(cacheDI.CacheProviderKey).(cacheTypes.CacheProvider)
-	app.RateLimiter = middleware.NewRateLimiter(cache, 2, time.Minute) // 100 requests per minute
+	app.RateLimiter = middleware.NewRateLimiter(cache, config.RateLimit)
 
 	// Resolve handlers from container
 	app.HealthHandler = app.Container.MustResolve("healthHandler").(*handlers.HealthHandler)

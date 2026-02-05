@@ -32,6 +32,7 @@ func LoadWithValidation() error {
 	Database = loadDatabase()
 	Storage = loadStorage()
 	Cache = loadCache()
+	RateLimit = loadRateLimit()
 
 	return nil
 }
