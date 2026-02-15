@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hibiken/asynq"
+	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/queue/types"
 )
 
@@ -12,7 +13,10 @@ type Provider struct {
 }
 
 func New() (*Provider, error) {
-	client := asynq.NewClient(asynq.RedisClientOpt{Addr: "localhost:6379"})
+
+	address := config.GetEnv("REDIS_ADDRESS", "localhost")
+
+	client := asynq.NewClient(asynq.RedisClientOpt{Addr: address})
 	defer client.Close()
 
 	return &Provider{

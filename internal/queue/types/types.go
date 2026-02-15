@@ -10,6 +10,6 @@ type EmailTask struct {
 	Body    string
 }
 
-type QueueProviderKey interface {
+type QueueProvider interface {
 	Enqueue(ctx context.Context, input EmailTask) error
 }
