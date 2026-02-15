@@ -12,6 +12,163 @@ This month focuses on performance optimization through caching, rate limiting, a
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+**Note:** In Month 5, you're adding caching and rate limiting to existing endpoints. The request/response payloads remain the same, but behavior changes:
+- **Caching:** Responses will be served from Redis cache when available (faster response times)
+- **Rate Limiting:** Requests will be rejected if limits are exceeded
+
+### Existing Endpoints with Caching (Week 17-18)
+
+All existing endpoints from Months 1-4 now include caching where appropriate:
+- `GET /api/v1/activities` - Cached for 2 minutes per user
+- `GET /api/v1/activities/{id}` - Cached for 5 minutes
+- `GET /api/v1/users/me/stats/weekly` - Cached for 15 minutes
+- `GET /api/v1/users/me/stats/monthly` - Cached for 30 minutes
+
+**Response Headers (new):**
+```
+X-Cache-Status: HIT    (served from cache)
+X-Cache-Status: MISS   (fetched from database)
+X-Cache-TTL: 120       (seconds until cache expires)
+```
+
+### Cache Management Endpoints (Week 18)
+
+**Clear User Cache:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/cache/me`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "cache cleared successfully",
+    "keys_cleared": 15
+  }
+  ```
+
+**Clear Specific Activity Cache:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/cache/activities/{id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "activity cache cleared",
+    "cache_key": "activity:123"
+  }
+  ```
+
+### Rate Limiting Behavior (Week 19)
+
+**Rate Limit Headers (added to all responses):**
+```
+X-RateLimit-Limit: 100          (max requests per window)
+X-RateLimit-Remaining: 85       (requests left)
+X-RateLimit-Reset: 1705329600   (unix timestamp when limit resets)
+```
+
+**Rate Limit Exceeded Response (429 Too Many Requests):**
+- **HTTP Method:** `ANY`
+- **URL:** `(any endpoint)`
+- **Response:**
+  ```json
+  {
+    "error": "rate limit exceeded",
+    "message": "too many requests, please try again later",
+    "retry_after": 60,
+    "limit": 100,
+    "window": "1 minute"
+  }
+  ```
+  **Headers:**
+  ```
+  X-RateLimit-Limit: 100
+  X-RateLimit-Remaining: 0
+  X-RateLimit-Reset: 1705329600
+  Retry-After: 60
+  ```
+
+**Rate Limit Tiers:**
+- **Anonymous (no auth):** 20 requests/minute
+- **Authenticated user:** 100 requests/minute
+- **Premium user (future):** 500 requests/minute
+
+### Metrics Endpoint (Week 20)
+
+**Get Application Metrics:**
+- **HTTP Method:** `GET`
+- **URL:** `/metrics`
+- **Headers:** (none required - public endpoint)
+- **Success Response (200 OK):**
+  ```
+  # HELP http_requests_total Total number of HTTP requests
+  # TYPE http_requests_total counter
+  http_requests_total{method="GET",endpoint="/api/v1/activities",status="200"} 1543
+
+  # HELP http_request_duration_seconds HTTP request duration
+  # TYPE http_request_duration_seconds histogram
+  http_request_duration_seconds_bucket{endpoint="/api/v1/activities",le="0.1"} 1200
+  http_request_duration_seconds_bucket{endpoint="/api/v1/activities",le="0.5"} 1520
+
+  # HELP cache_hits_total Total number of cache hits
+  # TYPE cache_hits_total counter
+  cache_hits_total 8945
+
+  # HELP cache_misses_total Total number of cache misses
+  # TYPE cache_misses_total counter
+  cache_misses_total 2156
+  ```
+  **Format:** Prometheus exposition format
+
+**Health Check (enhanced):**
+- **HTTP Method:** `GET`
+- **URL:** `/health`
+- **Success Response (200 OK):**
+  ```json
+  {
+    "status": "healthy",
+    "timestamp": "2024-01-15T14:30:22Z",
+    "services": {
+      "database": {
+        "status": "up",
+        "latency_ms": 2.5
+      },
+      "redis": {
+        "status": "up",
+        "latency_ms": 0.8
+      }
+    },
+    "uptime_seconds": 86400
+  }
+  ```
+- **Degraded Response (200 OK):**
+  ```json
+  {
+    "status": "degraded",
+    "timestamp": "2024-01-15T14:30:22Z",
+    "services": {
+      "database": {
+        "status": "up",
+        "latency_ms": 2.5
+      },
+      "redis": {
+        "status": "down",
+        "error": "connection refused"
+      }
+    },
+    "uptime_seconds": 86400
+  }
+  ```
+
+---
+
 ## Learning Path
 
 ### Week 17: Redis Setup + Basic Caching
@@ -37,6 +194,396 @@ This month focuses on performance optimization through caching, rate limiting, a
 - Grafana dashboards
 - Request duration tracking
 - Error rate monitoring
+
+---
+
+# WEEKLY TASK BREAKDOWNS
+
+## Week 17: Redis Setup + Basic Caching
+
+### 📋 Implementation Tasks
+
+**Task 1: Install and Configure Redis** (30 min)
+- [X] Install Redis: `brew install redis` (Mac) or `apt-get install redis` (Linux)
+- [X] Start Redis server: `redis-server` or `brew services start redis`
+- [X] Test connection: `redis-cli ping` (should return PONG)
+- [X] Install Go Redis client: `go get github.com/redis/go-redis/v9`
+- [X] Configure Redis connection in application config
+
+**Task 2: Create Redis Client Wrapper** (45 min)
+- [ ] Create `pkg/cache/redis_client.go`
+- [ ] Implement `NewRedisClient(addr, password string) (*RedisClient, error)`
+  - **Logic:** Create `redis.Options` with addr and password. Call `redis.NewClient(opts)` to get client. Ping server with `client.Ping(ctx)` to verify connection. If ping fails, return error. If success, return RedisClient struct wrapping the client.
+- [ ] Add connection pooling configuration
+- [ ] Implement `Ping()` to test connection
+  - **Logic:** Call `client.Ping(ctx).Result()`. Returns "PONG" if Redis is up, error otherwise. Used for health checks.
+- [ ] Add graceful disconnect on shutdown
+- [ ] Test connection and basic operations
+
+**Task 3: Implement Cache-Aside Pattern** (90 min)
+- [ ] Create `internal/services/activity_service.go`
+- [ ] Implement `GetActivity(ctx, id)` with cache-aside pattern:
+  - **Logic:**
+    1. Build cache key: `activity:{id}`
+    2. Try `redis.Get(ctx, key)` to check cache
+    3. If cache HIT: unmarshal JSON string to Activity struct, return
+    4. If cache MISS (redis.Nil error): fetch from database using repository
+    5. If DB returns activity: marshal to JSON, store in Redis with `redis.Set(ctx, key, json, 5*time.Minute)`
+    6. Return activity from DB
+    7. If Redis errors (connection failed): log error, skip cache, fetch from DB (fail open - don't break app)
+    - **Why:** Cache-aside = application manages cache. Check cache first (fast), fall back to DB (slow), then populate cache for next request.
+  - Check cache first
+  - On cache miss, fetch from database
+  - Store in cache with TTL
+- [ ] Use `json.Marshal/Unmarshal` for cache serialization
+- [ ] Set TTL to 5 minutes
+- [ ] Handle cache errors gracefully (fail open)
+
+**Task 4: Cache Activity Listings** (60 min)
+- [ ] Implement `GetActivitiesByUser(ctx, userID)` with caching
+  - **Logic:** Same cache-aside pattern but key includes pagination: `activities:user:{userID}:page:{page}:limit:{limit}`. Marshal entire activity slice to JSON. Shorter TTL (2 min) since lists change often when user adds activities. Invalidate on create/update/delete.
+- [ ] Generate cache key: `activities:user:{userID}`
+- [ ] Cache paginated results separately
+- [ ] Set TTL to 2 minutes (changes frequently)
+- [ ] Test cache hit/miss scenarios
+
+**Task 5: Add Cache Metrics** (30 min)
+- [ ] Track cache hits and misses
+- [ ] Add counters to Prometheus metrics
+- [ ] Log cache performance
+- [ ] Create helper function `recordCacheHit()` and `recordCacheMiss()`
+
+**Task 6: Write Tests** (45 min)
+- [ ] Test cache hit scenario
+- [ ] Test cache miss scenario
+- [ ] Test cache error handling (Redis down)
+- [ ] Test TTL expiration
+- [ ] Mock Redis client for unit tests
+
+### 📦 Files You'll Create/Modify
+
+```
+pkg/
+└── cache/
+    ├── redis_client.go            [CREATE]
+    └── redis_client_test.go       [CREATE]
+
+internal/
+├── services/
+│   ├── activity_service.go        [CREATE]
+│   └── activity_service_test.go   [CREATE]
+└── config/
+    └── config.go                  [MODIFY - add Redis config]
+```
+
+### 🔄 Implementation Order
+
+1. **Setup**: Install Redis → Test manually → Install Go client
+2. **Client**: Redis wrapper → Connection pooling
+3. **Service**: Activity service with cache-aside pattern
+4. **Testing**: Unit tests with mocked Redis
+5. **Metrics**: Add cache performance tracking
+
+### ⚠️ Blockers to Watch For
+
+- **Redis not running**: Ensure `redis-server` is running before tests
+- **Serialization**: JSON marshaling can fail - handle errors
+- **TTL**: Too long = stale data, too short = cache thrashing
+- **Memory**: Monitor Redis memory usage (use `redis-cli info memory`)
+- **Fail open**: If Redis fails, still serve from database (don't break app)
+
+### ✅ Definition of Done
+
+- [ ] Redis installed and running locally
+- [ ] Can connect to Redis from Go application
+- [ ] Cache-aside pattern working for single activities
+- [ ] Activity listings cached with pagination
+- [ ] Cache metrics tracked (hits/misses)
+- [ ] All tests passing (cache hit, miss, error scenarios)
+
+---
+
+## Week 18: Cache Invalidation + Soft Deletes
+
+### 📋 Implementation Tasks
+
+**Task 1: Create Migration for Soft Deletes** (20 min)
+- [ ] Create migration `migrations/006_add_soft_deletes.up.sql`
+- [ ] Add `deleted_at TIMESTAMP NULL` to activities table
+- [ ] Add `deleted_at TIMESTAMP NULL` to users table
+- [ ] Create partial index: `WHERE deleted_at IS NULL` for performance
+- [ ] Run migration
+
+**Task 2: Implement Soft Delete in Repository** (60 min)
+- [ ] Update `ActivityRepository.Delete()` to soft delete
+- [ ] Set `deleted_at = NOW()` instead of actual DELETE
+- [ ] Check rows affected (return ErrNotFound if 0)
+- [ ] Update all query methods to exclude soft-deleted records
+- [ ] Add `WHERE deleted_at IS NULL` to all SELECT queries
+
+**Task 3: Implement Restore Functionality** (30 min)
+- [ ] Add `Restore(ctx, id) error` method to repository
+- [ ] Set `deleted_at = NULL` to restore
+- [ ] Add endpoint: `POST /api/v1/activities/:id/restore`
+- [ ] Protect with auth (only owner can restore)
+- [ ] Test restore flow
+
+**Task 4: Implement Cache Invalidation on Updates** (90 min)
+- [ ] Update `ActivityService.Update()` to invalidate cache
+- [ ] Delete cache key: `activity:{id}`
+- [ ] Delete user list cache: `activities:user:{userID}`
+- [ ] Test invalidation on update
+- [ ] Test invalidation on soft delete
+- [ ] Ensure database updated before cache deleted
+
+**Task 5: Implement Write-Through Caching** (60 min)
+- [ ] Update `CreateActivity` to write to cache immediately
+- [ ] Update database first, then cache
+- [ ] Handle cache write failures gracefully
+- [ ] Set same TTL as read operations
+- [ ] Compare write-through vs cache-aside performance
+
+**Task 6: Add Permanent Delete (Admin Only)** (45 min)
+- [ ] Add `PermanentDelete(ctx, id) error` method
+- [ ] Actually DELETE from database
+- [ ] Add admin authorization check
+- [ ] Cascade delete related records (photos, tags)
+- [ ] Log permanent deletes for audit
+
+### 📦 Files You'll Create/Modify
+
+```
+migrations/
+├── 006_add_soft_deletes.up.sql    [CREATE]
+└── 006_add_soft_deletes.down.sql  [CREATE]
+
+internal/
+├── repository/
+│   └── activity_repository.go     [MODIFY - soft deletes]
+├── services/
+│   └── activity_service.go        [MODIFY - cache invalidation]
+└── handlers/
+    └── activity_handler.go        [MODIFY - restore endpoint]
+```
+
+### 🔄 Implementation Order
+
+1. **Database**: Migration → Run migration
+2. **Repository**: Soft delete logic → Update queries
+3. **Service**: Cache invalidation on updates
+4. **Restore**: Restore functionality
+5. **Admin**: Permanent delete for admins
+
+### ⚠️ Blockers to Watch For
+
+- **Query updates**: ALL queries must exclude `deleted_at IS NOT NULL`
+- **Foreign keys**: Cascade deletes might interfere - test carefully
+- **Cache timing**: Invalidate cache AFTER database update succeeds
+- **Partial index**: Improves query performance on non-deleted records
+- **Restore race**: User could restore while admin permanently deletes
+
+### ✅ Definition of Done
+
+- [ ] Activities soft-deleted instead of hard-deleted
+- [ ] All queries exclude soft-deleted records
+- [ ] Can restore soft-deleted activities
+- [ ] Cache invalidated on update/delete
+- [ ] Write-through caching implemented
+- [ ] Permanent delete available for admins
+- [ ] All tests passing
+
+---
+
+## Week 19: Rate Limiting
+
+### 📋 Implementation Tasks
+
+**Task 1: Design Rate Limit Strategy** (20 min)
+- [ ] Decide on limits: 100 requests/minute per user (adjust as needed)
+- [ ] Anonymous users: 20 requests/minute per IP
+- [ ] Premium users: 500 requests/minute
+- [ ] Document rate limit strategy
+
+**Task 2: Implement Rate Limiter with Redis** (90 min)
+- [ ] Create `internal/middleware/rate_limiter.go`
+- [ ] Implement token bucket algorithm using Redis INCR
+- [ ] Use key format: `ratelimit:{userID}` or `ratelimit:ip:{IP}`
+- [ ] Set expiration with `EXPIRE` on first request
+- [ ] Return 429 Too Many Requests when limit exceeded
+- [ ] Add rate limit headers: X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After
+
+**Task 3: Create Rate Limit Middleware** (60 min)
+- [ ] Implement `RateLimiter.Middleware(next) http.Handler`
+- [ ] Extract user ID from context or IP from request
+- [ ] Check/increment counter in Redis
+- [ ] Add rate limit headers to all responses
+- [ ] Fail open if Redis unavailable (allow request)
+- [ ] Apply middleware to router
+
+**Task 4: Implement Per-Endpoint Rate Limits** (45 min)
+- [ ] Different limits for different endpoints:
+  - POST /activities: 10/minute
+  - GET /activities: 100/minute
+  - POST /auth/login: 5/minute
+- [ ] Use endpoint-specific keys: `ratelimit:{userID}:create_activity`
+- [ ] Test each endpoint's limit
+
+**Task 5: Add Rate Limit Bypass for Premium Users** (30 min)
+- [ ] Check user tier from database
+- [ ] Apply higher limits for premium users
+- [ ] Cache user tier in Redis (TTL: 1 hour)
+- [ ] Test different user tiers
+
+**Task 6: Monitor Rate Limit Violations** (30 min)
+- [ ] Log rate limit violations
+- [ ] Add Prometheus counter for rate limit hits
+- [ ] Alert on excessive violations (potential attack)
+- [ ] Create dashboard visualization
+
+### 📦 Files You'll Create/Modify
+
+```
+internal/
+├── middleware/
+│   ├── rate_limiter.go            [CREATE]
+│   └── rate_limiter_test.go       [CREATE]
+└── models/
+    └── user.go                    [MODIFY - add tier field]
+
+cmd/api/
+└── main.go                        [MODIFY - add rate limit middleware]
+```
+
+### 🔄 Implementation Order
+
+1. **Design**: Rate limit strategy and tiers
+2. **Implementation**: Rate limiter with Redis
+3. **Middleware**: HTTP middleware wrapper
+4. **Per-endpoint**: Different limits for different endpoints
+5. **Premium**: Tier-based limits
+6. **Monitoring**: Metrics and alerts
+
+### ⚠️ Blockers to Watch For
+
+- **Clock skew**: Redis EXPIRE is time-based - ensure clocks synced
+- **Distributed systems**: Multiple servers need shared Redis
+- **Fail open**: If Redis down, allow requests (or fail closed for security)
+- **Header typos**: Rate limit headers must match RFC standards
+- **IP spoofing**: Use X-Forwarded-For carefully (can be spoofed)
+
+### ✅ Definition of Done
+
+- [ ] Rate limiting working (100 req/min default)
+- [ ] Different limits for different endpoints
+- [ ] Premium users have higher limits
+- [ ] 429 status returned when limit exceeded
+- [ ] Rate limit headers in all responses
+- [ ] Metrics tracking violations
+- [ ] All tests passing
+
+---
+
+## Week 20: Performance Monitoring
+
+### 📋 Implementation Tasks
+
+**Task 1: Install Prometheus and Grafana** (30 min)
+- [ ] Create `docker-compose.yml` for Prometheus + Grafana
+- [ ] Create `prometheus.yml` config to scrape app metrics
+- [ ] Start containers: `docker-compose up -d`
+- [ ] Access Grafana: http://localhost:3000 (admin/admin)
+- [ ] Add Prometheus datasource in Grafana
+
+**Task 2: Implement Prometheus Metrics** (90 min)
+- [ ] Install client: `go get github.com/prometheus/client_golang/prometheus`
+- [ ] Create `internal/middleware/metrics.go`
+- [ ] Add HTTP request counter (method, endpoint, status code)
+- [ ] Add HTTP request duration histogram
+- [ ] Add cache hit/miss counters
+- [ ] Add database query duration histogram
+- [ ] Expose `/metrics` endpoint
+
+**Task 3: Create Metrics Middleware** (45 min)
+- [ ] Implement `MetricsMiddleware(next) http.Handler`
+- [ ] Wrap ResponseWriter to capture status code
+- [ ] Time request duration
+- [ ] Record metrics after request completes
+- [ ] Apply to all routes
+
+**Task 4: Add Custom Business Metrics** (60 min)
+- [ ] Activities created counter
+- [ ] Users registered counter
+- [ ] Photos uploaded counter (gauge)
+- [ ] Active WebSocket connections (gauge)
+- [ ] Background jobs processed counter
+
+**Task 5: Create Grafana Dashboards** (90 min)
+- [ ] Create dashboard for HTTP metrics:
+  - Request rate (req/sec)
+  - Response time (p50, p95, p99)
+  - Error rate (4xx, 5xx)
+- [ ] Create dashboard for caching:
+  - Cache hit ratio
+  - Cache size
+- [ ] Create dashboard for business metrics:
+  - Activities per hour
+  - Users registered per day
+- [ ] Export dashboards as JSON
+
+**Task 6: Set Up Alerts** (45 min)
+- [ ] Configure Prometheus alert rules
+- [ ] Alert on high error rate (>1% 5xx)
+- [ ] Alert on slow response time (p99 > 2s)
+- [ ] Alert on cache miss ratio (> 50%)
+- [ ] Test alerts trigger correctly
+
+### 📦 Files You'll Create/Modify
+
+```
+docker-compose.yml                 [CREATE]
+prometheus.yml                     [CREATE]
+grafana/
+└── dashboards/
+    ├── http_metrics.json          [CREATE]
+    ├── cache_metrics.json         [CREATE]
+    └── business_metrics.json      [CREATE]
+
+internal/
+├── middleware/
+│   ├── metrics.go                 [CREATE]
+│   └── metrics_test.go            [CREATE]
+└── monitoring/
+    └── metrics.go                 [CREATE - custom metrics]
+
+cmd/api/
+└── main.go                        [MODIFY - add /metrics endpoint]
+```
+
+### 🔄 Implementation Order
+
+1. **Setup**: Docker compose → Prometheus → Grafana
+2. **Metrics**: HTTP metrics → Custom metrics
+3. **Middleware**: Metrics middleware → Apply to routes
+4. **Dashboards**: Create visualizations in Grafana
+5. **Alerts**: Configure alert rules
+
+### ⚠️ Blockers to Watch For
+
+- **High cardinality**: Don't use user IDs in labels (too many unique values)
+- **Label limits**: Prometheus has label count limits
+- **Metric naming**: Follow Prometheus naming conventions (snake_case, _total suffix)
+- **Histogram buckets**: Configure appropriate buckets for your use case
+- **Dashboard overload**: Too many metrics = slow dashboards
+
+### ✅ Definition of Done
+
+- [ ] Prometheus scraping application metrics
+- [ ] Grafana dashboards showing HTTP metrics
+- [ ] Cache hit ratio visible in dashboard
+- [ ] Business metrics tracked
+- [ ] Alerts configured and tested
+- [ ] Can identify slow endpoints via metrics
+- [ ] All services running in Docker Compose
 
 ---
 
@@ -273,7 +820,6 @@ router.Use(rateLimiter.Middleware)
 
 ---
 
-## Monitoring
 
 ### Prometheus Metrics
 ```go

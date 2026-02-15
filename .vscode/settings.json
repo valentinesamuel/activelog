@@ -1,0 +1,84 @@
+{
+    // Go extension settings
+    "go.useLanguageServer": true,
+    "go.lintOnSave": "workspace",
+    "go.vetOnSave": "workspace",
+    "go.buildOnSave": "workspace",
+    "go.testOnSave": false,
+    "go.coverOnSave": false,
+
+    // Formatting
+    "go.formatTool": "gofmt",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+
+    // Linting
+    "go.lintTool": "golangci-lint",
+    "go.lintFlags": [
+        "--fast"
+    ],
+
+    // Testing
+    "go.testFlags": ["-v", "-race"],
+    "go.testTimeout": "30s",
+    "go.coverMode": "atomic",
+    "go.testEnvVars": {
+        "ENV": "test"
+    },
+
+    // Debugging
+    "go.delveConfig": {
+        "dlvLoadConfig": {
+            "followPointers": true,
+            "maxVariableRecurse": 1,
+            "maxStringLen": 120,
+            "maxArrayValues": 64,
+            "maxStructFields": -1
+        },
+        "apiVersion": 2,
+        "showGlobalVariables": false,
+        "showLog": true
+    },
+
+    // IntelliSense
+    "go.autocompleteUnimportedPackages": true,
+    "go.gocodeAutoBuild": true,
+
+    // Build tags
+    "go.buildTags": "",
+    "go.toolsEnvVars": {},
+
+    // Go tools installation
+    "go.toolsManagement.autoUpdate": true,
+
+    // Editor settings for Go
+    "[go]": {
+        "editor.insertSpaces": false,
+        "editor.tabSize": 4,
+        "editor.detectIndentation": false,
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    "[go.mod]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+
+    // File associations
+    "files.associations": {
+        "*.go": "go"
+    },
+
+    // Files to exclude from explorer
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "**/coverage.out": true
+    }
+}

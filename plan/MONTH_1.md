@@ -125,12 +125,17 @@ You should understand:
 ### Notes Section (write these down):
 ```
 Key differences from JavaScript I noticed:
-1. 
-2. 
+1. Everything must be done in a certain way
+2. Looks like C
 3. 
 
 Questions I have:
 1. 
+2. 
+
+
+Observations I made:
+1. You must use `var` outside a function, you can use `:=`
 2. 
 ```
 
@@ -154,7 +159,7 @@ go mod init github.com/yourusername/activelog
 **2. Create Project Structure (10 min)**
 ```bash
 # Create the directory structure
-mkdir -p cmd/api
+mkdir -p cmd/api 
 mkdir -p internal/handlers
 mkdir -p internal/models
 mkdir -p pkg/response
@@ -221,10 +226,15 @@ curl http://localhost:8080
 ### Notes Section:
 ```
 What worked:
-- 
+- http server
 
 What confused me:
-- 
+-  func(w http.ResponseWriter, r *http.Request){}
+
+Observation:
+- go.mod == package.json
+- func(w http.ResponseWriter, r *http.Request){} === app.get('/', (req, res) => { ... })
+- not to call the ListenAndServe inside the HandleFunc method if not, the server would start and close immediately
 
 Questions for Saturday:
 - 
@@ -637,16 +647,18 @@ curl -X POST http://localhost:8080/api/v1/activities
 ### Saturday Reflection (15 min):
 ```
 What I built today:
-- 
+- the reusable JSON sender
+- the activity route
 
 What made sense:
-- 
+- the handlers and route flow
 
 What's still confusing:
-- 
+- why the health handler needed to have a serve http but the activity handler did not need to have
+- the difference between Handle and HandleFunc
 
 How does this compare to Express/JavaScript?
-- 
+- the intention and logic is almost the same. Just a few differnces like Handle and HandleFunc
 ```
 
 ---
@@ -979,35 +991,36 @@ You went from "I only know main.go" to having a properly structured Go API with:
 **What felt easy?**
 ```
 Your answer:
-
+Understanding the router.HandleFunc("/path", handler).Methods("GET")
 ```
 
 **What felt hard?**
 ```
 Your answer:
-
+- Undersatnding interfaces
+- Understanding the difference between HandleFunc and Handle
 ```
 
 **What's still confusing?**
 ```
 Your answer:
-
+- Nothing for now
 ```
 
 **How confident do you feel (1-10)?**
 ```
-Your rating: __/10
+Your rating: 8/10
 
 Why this rating:
-
+Because after leanrning the differences between javascript and Go, i am now startig to see that they are doing the exact same thing but Javascript lets you do it and Go tells you how to do it
 ```
 
 **Ready for Week 2?**
 ```
 Yes / Need more practice
-
+Yes
 If more practice needed, what specifically:
-
+Nil
 ```
 
 ---
@@ -1237,10 +1250,10 @@ With proper configuration:
 ### Notes:
 ```
 How does this compare to JavaScript database libraries?
-- 
+- Normally, i would use typeorm but i think they do the same thing but JS is more accomodating and abstracts more stuff away from you. But as for connection pooling, i like that the settings are documented and described compared to typeorm
 
 Questions:
-- 
+- nil
 ```
 
 ---
@@ -1339,10 +1352,10 @@ migrate -path migrations -database "postgres://activelog_user:your_secure_passwo
 ### Notes:
 ```
 Why migrations instead of just CREATE TABLE in code?
-- 
+- for automatic creation
 
 What happens if I run the up migration twice?
-- 
+- nothing happens. they are atomic
 ```
 
 ---
@@ -1489,7 +1502,7 @@ Create(&activity)
 ### Notes:
 ```
 What clicked about pointers:
--
+- The key rules were all i needed to know as to when to use pointer and when not to
 
 What's still confusing:
 -
@@ -2332,24 +2345,25 @@ You connected a real database and implemented proper data persistence:
 **What made sense this week?**
 ```
 Your answer:
-
+- writing the app error handler
+- testing
 ```
 
 **What's still unclear?**
 ```
 Your answer:
-
+- when to use the likes of %v, %s, etc
 ```
 
 **How confident with databases in Go (1-10)?**
 ```
-Your rating: __/10
+Your rating: 5/10
 ```
 
 **Biggest challenge this week?**
 ```
 Your answer:
-
+Getting the test database migration to run
 ```
 
 ---
@@ -2506,7 +2520,7 @@ func FormatValidationErrors(err error) map[string]string {
 ### Notes:
 ```
 How is this different from JavaScript validation libraries?
-- 
+- A lot more painful work compared to class validator
 
 Questions:
 - 
@@ -3259,18 +3273,19 @@ git tag week-3
 **What felt natural this week?**
 ```
 Your answer:
-
+- the validation
 ```
 
 **What's still tricky?**
 ```
 Your answer:
-
+- the way time is being handled. It's more low-level in Go
 ```
 
 **Confidence level (1-10)?**
 ```
-Your rating: __/10
+Your rating: 8/10
+I might not be so familiar with every syntax but i am getting used to the low-levelness.
 ```
 
 ---
@@ -3344,7 +3359,7 @@ func (r *ActivityRepository) Update(id int, activity *models.Activity) error {
 	).Scan(&activity.UpdatedAt)
 
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("activity not found")
+		return fmt.Errorf("❌ Activity not found")
 	}
 
 	return err
@@ -3364,7 +3379,7 @@ func (r *ActivityRepository) Delete(id int, userID int) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("activity not found")
+		return fmt.Errorf("❌ Activity not found")
 	}
 
 	return nil

@@ -12,6 +12,369 @@ This is the final month of your Go learning journey! You'll integrate Stripe for
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+### Subscription Tiers
+
+**Free Tier:**
+- 50 activities per month
+- Basic analytics
+- 3 goals max
+- No photo uploads
+
+**Pro Tier ($9.99/month):**
+- Unlimited activities
+- Advanced analytics
+- Unlimited goals
+- 10 photos per activity
+- Export to CSV/PDF
+
+**Premium Tier ($19.99/month):**
+- Everything in Pro
+- Social features (friends, feed, likes, comments)
+- Priority support
+- Custom integrations
+- White-label reports
+
+### Stripe Payment Endpoints (Week 45)
+
+**Create Checkout Session:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/payments/checkout`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "plan": "pro",
+    "billing_period": "monthly",
+    "success_url": "https://activelog.com/success",
+    "cancel_url": "https://activelog.com/pricing"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "checkout_session_id": "cs_test_a1b2c3d4e5f6",
+    "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3d4e5f6#fidkdWxOYHwnPyd",
+    "expires_at": "2024-01-15T15:30:22Z"
+  }
+  ```
+  **Usage:** Redirect user to `checkout_url` to complete payment
+
+**Get Pricing Plans:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/payments/plans`
+- **Headers:** (none required - public endpoint)
+- **Success Response (200 OK):**
+  ```json
+  {
+    "plans": [
+      {
+        "id": "free",
+        "name": "Free",
+        "price_monthly": 0,
+        "price_yearly": 0,
+        "features": [
+          "50 activities per month",
+          "Basic analytics",
+          "3 goals max"
+        ],
+        "limits": {
+          "activities_per_month": 50,
+          "goals_max": 3,
+          "photos_per_activity": 0,
+          "social_features": false
+        }
+      },
+      {
+        "id": "pro",
+        "name": "Pro",
+        "price_monthly": 9.99,
+        "price_yearly": 99.99,
+        "stripe_price_id_monthly": "price_1ABC123",
+        "stripe_price_id_yearly": "price_1DEF456",
+        "features": [
+          "Unlimited activities",
+          "Advanced analytics",
+          "Unlimited goals",
+          "10 photos per activity",
+          "CSV/PDF exports"
+        ],
+        "limits": {
+          "activities_per_month": -1,
+          "goals_max": -1,
+          "photos_per_activity": 10,
+          "social_features": false
+        },
+        "popular": true
+      },
+      {
+        "id": "premium",
+        "name": "Premium",
+        "price_monthly": 19.99,
+        "price_yearly": 199.99,
+        "stripe_price_id_monthly": "price_1GHI789",
+        "stripe_price_id_yearly": "price_1JKL012",
+        "features": [
+          "Everything in Pro",
+          "Social features",
+          "Priority support",
+          "Custom integrations"
+        ],
+        "limits": {
+          "activities_per_month": -1,
+          "goals_max": -1,
+          "photos_per_activity": -1,
+          "social_features": true
+        }
+      }
+    ]
+  }
+  ```
+
+### Subscription Management Endpoints (Week 46)
+
+**Get Current Subscription:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/subscription`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "subscription": {
+      "id": "sub_1ABC123",
+      "plan": "pro",
+      "status": "active",
+      "current_period_start": "2024-01-01T00:00:00Z",
+      "current_period_end": "2024-02-01T00:00:00Z",
+      "cancel_at_period_end": false,
+      "billing_period": "monthly",
+      "amount": 9.99,
+      "currency": "usd"
+    },
+    "usage": {
+      "activities_this_month": 125,
+      "activities_limit": -1,
+      "goals_count": 5,
+      "goals_limit": -1,
+      "storage_used_mb": 245.5
+    },
+    "payment_method": {
+      "type": "card",
+      "last4": "4242",
+      "brand": "visa",
+      "exp_month": 12,
+      "exp_year": 2025
+    }
+  }
+  ```
+- **Free Tier Response:**
+  ```json
+  {
+    "subscription": {
+      "plan": "free",
+      "status": "active"
+    },
+    "usage": {
+      "activities_this_month": 35,
+      "activities_limit": 50,
+      "goals_count": 2,
+      "goals_limit": 3
+    }
+  }
+  ```
+
+**Upgrade/Downgrade Subscription:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/subscription/change`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "new_plan": "premium",
+    "billing_period": "yearly"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "subscription updated successfully",
+    "subscription": {
+      "id": "sub_1ABC123",
+      "plan": "premium",
+      "status": "active",
+      "billing_period": "yearly",
+      "amount": 199.99,
+      "proration_amount": 150.00,
+      "next_billing_date": "2025-01-01T00:00:00Z"
+    }
+  }
+  ```
+
+**Cancel Subscription:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/subscription/cancel`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body (optional):**
+  ```json
+  {
+    "cancel_immediately": false,
+    "feedback": "switching to another service"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "subscription will be cancelled at end of billing period",
+    "subscription": {
+      "status": "active",
+      "cancel_at_period_end": true,
+      "current_period_end": "2024-02-01T00:00:00Z"
+    }
+  }
+  ```
+
+**Reactivate Cancelled Subscription:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/subscription/reactivate`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "message": "subscription reactivated",
+    "subscription": {
+      "status": "active",
+      "cancel_at_period_end": false
+    }
+  }
+  ```
+
+**Get Billing Portal URL:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/payments/billing-portal`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "return_url": "https://activelog.com/settings/billing"
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "portal_url": "https://billing.stripe.com/session/abc123",
+    "expires_at": "2024-01-15T15:30:22Z"
+  }
+  ```
+  **Usage:** Redirect user to Stripe's billing portal to manage payment methods, invoices, etc.
+
+### Webhook Endpoints (Week 47)
+
+**Stripe Webhook Handler:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/webhooks/stripe`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Stripe-Signature: t=1234567890,v1=abc123def456...
+  ```
+- **Request Body (example - payment succeeded):**
+  ```json
+  {
+    "id": "evt_1ABC123",
+    "type": "invoice.payment_succeeded",
+    "data": {
+      "object": {
+        "id": "in_1ABC123",
+        "customer": "cus_ABC123",
+        "subscription": "sub_1ABC123",
+        "amount_paid": 999,
+        "status": "paid"
+      }
+    }
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "received": true
+  }
+  ```
+
+**Supported Webhook Events:**
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.payment_succeeded`
+- `invoice.payment_failed`
+- `checkout.session.completed`
+
+### Usage Limit Enforcement
+
+**Check Feature Access:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/subscription/can-use/{feature}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK) - Allowed:**
+  ```json
+  {
+    "allowed": true,
+    "feature": "social_features",
+    "current_plan": "premium"
+  }
+  ```
+- **Success Response (200 OK) - Blocked:**
+  ```json
+  {
+    "allowed": false,
+    "feature": "social_features",
+    "current_plan": "free",
+    "required_plan": "premium",
+    "upgrade_url": "/api/v1/payments/checkout"
+  }
+  ```
+
+**Usage Limit Error Response (429 Too Many Requests):**
+When user exceeds free tier limits:
+```json
+{
+  "error": "usage limit exceeded",
+  "message": "you have reached the 50 activities per month limit for the free plan",
+  "current_usage": 50,
+  "limit": 50,
+  "upgrade_required": true,
+  "recommended_plan": "pro",
+  "upgrade_url": "/api/v1/payments/checkout"
+}
+```
+
+---
+
 ## Learning Path
 
 ### Week 45: Stripe Integration Basics

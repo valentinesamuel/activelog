@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(psql:*)",
+      "Bash(go version:*)",
+      "Bash(go test:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(go build:*)",
+      "Bash(go run:*)",
+      "Bash(go get:*)",
+      "Bash(go install:*)",
+      "Bash(go generate:*)",
+      "Bash(make:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Bash(ls:*)",
+      "Bash(go tool cover:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git restore:*)",
+      "Bash(go clean:*)",
+      "Bash(./activelog)",
+      "Bash(go mod tidy:*)",
+      "Bash(pkill:*)",
+      "Bash(aws:*)",
+      "Bash(air -v:*)",
+      "Bash(swag init:*)"
+    ]
+  }
+}

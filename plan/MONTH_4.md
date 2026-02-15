@@ -12,6 +12,173 @@ This month introduces file handling capabilities to your application. You'll lea
 
 ---
 
+## API Endpoints Reference (for Postman Testing)
+
+### Photo Upload Endpoints
+
+**Upload Photos to Activity:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/photos`
+- **Headers:**
+  ```
+  Content-Type: multipart/form-data
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body (multipart/form-data):**
+  ```
+  Form field: "photos" (file, multiple allowed - max 5)
+  - photo1.jpg
+  - photo2.png
+  - photo3.webp
+  ```
+- **Postman Setup:**
+  - Select "Body" tab
+  - Choose "form-data"
+  - Add key: `photos`, Type: `File`
+  - Click "Select Files" and choose up to 5 images
+  - Can add multiple `photos` fields or use multi-select
+- **Success Response (201 Created):**
+  ```json
+  {
+    "photos": [
+      {
+        "id": 45,
+        "activity_id": 123,
+        "s3_key": "activities/123/uuid-photo1.jpg",
+        "thumbnail_key": "activities/123/thumb-uuid-photo1.jpg",
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo1.jpg",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo1.jpg",
+        "content_type": "image/jpeg",
+        "file_size": 2457600,
+        "uploaded_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "id": 46,
+        "activity_id": 123,
+        "s3_key": "activities/123/uuid-photo2.png",
+        "thumbnail_key": "activities/123/thumb-uuid-photo2.png",
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo2.png",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo2.png",
+        "content_type": "image/png",
+        "file_size": 1856432,
+        "uploaded_at": "2024-01-15T14:30:23Z"
+      }
+    ],
+    "uploaded_count": 2
+  }
+  ```
+- **Error Response (400 Bad Request - Too Many Files):**
+  ```json
+  {
+    "error": "validation error",
+    "message": "maximum 5 photos allowed per activity"
+  }
+  ```
+- **Error Response (400 Bad Request - Invalid File Type):**
+  ```json
+  {
+    "error": "validation error",
+    "message": "invalid file type, only JPEG, PNG, and WebP images are allowed"
+  }
+  ```
+- **Error Response (413 Payload Too Large):**
+  ```json
+  {
+    "error": "file too large",
+    "message": "file size exceeds maximum of 10MB"
+  }
+  ```
+
+**Get Photos for Activity:**
+- **HTTP Method:** `GET`
+- **URL:** `/api/v1/activities/{id}/photos`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "photos": [
+      {
+        "id": 45,
+        "activity_id": 123,
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo1.jpg",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo1.jpg",
+        "content_type": "image/jpeg",
+        "file_size": 2457600,
+        "uploaded_at": "2024-01-15T14:30:22Z"
+      },
+      {
+        "id": 46,
+        "activity_id": 123,
+        "url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo2.png",
+        "thumbnail_url": "https://bucket.s3.amazonaws.com/activities/123/thumb-uuid-photo2.png",
+        "content_type": "image/png",
+        "file_size": 1856432,
+        "uploaded_at": "2024-01-15T14:30:23Z"
+      }
+    ],
+    "total": 2
+  }
+  ```
+
+**Delete Photo:**
+- **HTTP Method:** `DELETE`
+- **URL:** `/api/v1/photos/{id}`
+- **Headers:**
+  ```
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Success Response (204 No Content):**
+  ```
+  (empty body)
+  ```
+- **Error Response (404 Not Found):**
+  ```json
+  {
+    "error": "not found",
+    "message": "photo not found"
+  }
+  ```
+- **Error Response (403 Forbidden):**
+  ```json
+  {
+    "error": "forbidden",
+    "message": "you can only delete photos from your own activities"
+  }
+  ```
+
+### S3 Signed URL Endpoint (Week 14)
+
+**Get Presigned Upload URL:**
+- **HTTP Method:** `POST`
+- **URL:** `/api/v1/activities/{id}/photos/upload-url`
+- **Headers:**
+  ```
+  Content-Type: application/json
+  Authorization: Bearer <your-jwt-token>
+  ```
+- **Request Body:**
+  ```json
+  {
+    "filename": "my-photo.jpg",
+    "content_type": "image/jpeg",
+    "file_size": 2457600
+  }
+  ```
+- **Success Response (200 OK):**
+  ```json
+  {
+    "upload_url": "https://bucket.s3.amazonaws.com/activities/123/uuid-photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...",
+    "s3_key": "activities/123/uuid-photo.jpg",
+    "expires_at": "2024-01-15T15:30:22Z"
+  }
+  ```
+  **Note:** Client uploads directly to this URL using PUT request, then confirms upload to your API
+
+---
+
 ## Learning Path
 
 ### Week 13: Local File Upload Basics
@@ -37,6 +204,482 @@ This month introduces file handling capabilities to your application. You'll lea
 - Delete files from S3
 - Cleanup orphaned files
 - Storage quota management
+
+---
+
+# WEEKLY TASK BREAKDOWNS
+
+## Week 13: Local File Upload Basics
+
+### 📋 Implementation Tasks
+
+**Task 1: Create Photo Model** (20 min)
+- [X] Create `internal/models/photo.go`
+- [X] Define Photo struct with fields: id, activity_id, s3_key, thumbnail_key, content_type, file_size, uploaded_at
+- [X] Add JSON tags for API responses
+- [X] Add validation tags for file size limits
+
+**Task 2: Create Database Migration for Photos** (15 min)
+- [X] Create migration `migrations/004_create_activity_photos.up.sql`
+- [X] Add activity_photos table with foreign key to activities
+- [X] Add ON DELETE CASCADE for cleanup
+- [X] Create index on activity_id
+- [X] Run migration
+
+**Task 3: Implement Multipart Form Handler** (60 min)
+- [X] Create `internal/handlers/photo_handler.go`
+- [X] Implement `Upload(w, r)` method
+  - **Logic:**
+    1. Extract activity ID from URL path parameters
+    2. Parse multipart form with `r.ParseMultipartForm(50 << 20)` - loads up to 50MB into memory
+    3. Get files from `r.MultipartForm.File["photos"]` - returns slice of file headers
+    4. Validate file count (reject if > 5 photos)
+    5. For each file: open file, validate type/size, process (save temp or upload to S3)
+    6. Return JSON response with uploaded file metadata (IDs, URLs, sizes)
+- [X] Parse multipart form: `r.ParseMultipartForm(50 << 20)` (50MB limit)
+- [X] Extract files from `r.MultipartForm.File["photos"]`
+- [X] Validate file count (max 5 photos per activity)
+- [X] Return file metadata in response
+
+**Task 4: File Validation** (45 min)
+- [X] Create `pkg/upload/validator.go`
+- [X] Implement `ValidateFileType(contentType string) error`
+  - **Logic:** Check if contentType is in allowed list (image/jpeg, image/png, image/webp). Return error if not. Also read first 512 bytes of file and use `http.DetectContentType()` to verify magic bytes match (prevents MIME type spoofing).
+- [X] Check MIME type: accept image/jpeg, image/png, image/webp
+- [X] Implement `ValidateFileSize(size int64) error` (max 10MB)
+  - **Logic:** Check if size > 10*1024*1024 bytes. If yes, return error with message "file too large, maximum size is 10MB". If no, return nil.
+- [X] Check magic bytes (not just extension) for security
+- [X] Add tests for validation logic
+
+**Task 5: Temporary File Storage** (30 min)
+- [X] Create temp directory for uploads: `/tmp/activelog-uploads`
+- [X] Save uploaded files temporarily
+- [X] Generate unique filenames with UUID
+- [X] Implement cleanup of temp files after processing
+- [X] Handle concurrent uploads safely
+
+**Task 6: Create Photo Repository** (45 min)
+- [X] Create `internal/repository/photo_repository.go`
+- [X] Implement `Create(ctx, photo) error`
+  - **Logic:** INSERT photo into activity_photos table with activity_id, s3_key, thumbnail_key, content_type, file_size. Use RETURNING clause to get generated ID and timestamps. Update photo struct with returned values.
+- [X] Implement `GetByActivityID(ctx, activityID) ([]*Photo, error)`
+  - **Logic:** SELECT * FROM activity_photos WHERE activity_id = $1 ORDER BY uploaded_at DESC. Scan all rows into Photo slice. Return empty slice if no photos (not an error).
+- [X] Implement `GetByID(ctx, id) (*Photo, error)`
+  - **Logic:** SELECT * FROM activity_photos WHERE id = $1. Scan into Photo struct. Return sql.ErrNoRows if photo doesn't exist.
+- [X] Implement `Delete(ctx, id) error`
+  - **Logic:** DELETE FROM activity_photos WHERE id = $1. Check rows affected - if 0, return error "photo not found". This only deletes DB record, caller must delete S3 files separately.
+- [ ] Write tests for repository methods
+
+**Task 7: Wire Up Routes and Test** (30 min)
+- [X] Add route: `POST /api/v1/activities/:id/photos`
+- [X] Add auth middleware to protect upload endpoint
+- [X] Test upload with Postman/curl
+- [X] Verify files saved to temp directory
+- [X] Verify database records created
+
+### 📦 Files You'll Create/Modify
+
+```
+migrations/
+├── 004_create_activity_photos.up.sql   [CREATE]
+└── 004_create_activity_photos.down.sql [CREATE]
+
+internal/
+├── models/
+│   └── photo.go                   [CREATE]
+├── repository/
+│   ├── photo_repository.go        [CREATE]
+│   └── photo_repository_test.go   [CREATE]
+├── handlers/
+│   ├── photo_handler.go           [CREATE]
+│   └── photo_handler_test.go      [CREATE]
+
+pkg/
+└── upload/
+    ├── validator.go               [CREATE]
+    └── validator_test.go          [CREATE]
+```
+
+### 🔄 Implementation Order
+
+1. **Database**: Migration → Photo model
+2. **Validation**: File validator utility
+3. **Repository**: Photo repository methods
+4. **Handler**: Upload handler with multipart parsing
+5. **Integration**: Wire routes → Manual testing
+
+### ⚠️ Blockers to Watch For
+
+- **Memory limits**: `ParseMultipartForm` loads into memory - use streaming for large files
+- **MIME type spoofing**: Check magic bytes, not just Content-Type header
+- **Temp file cleanup**: Always clean up temp files, even on error (use defer)
+- **Concurrent uploads**: Use unique filenames (UUID) to avoid conflicts
+- **File permissions**: Ensure temp directory has write permissions
+
+### ✅ Definition of Done
+
+- [X] Can upload multiple photos (up to 5) per activity
+- [X] Only valid image types accepted (jpg, png, webp)
+- [X] Files larger than 10MB rejected
+- [X] Database records created for uploads
+- [X] Temp files cleaned up after processing
+- [X] All tests passing
+
+---
+
+## Week 14: AWS S3 Integration
+
+### 📋 Implementation Tasks
+
+**Task 1: Set Up AWS Account and S3 Bucket** (30 min)
+- [X] Create/log into AWS account
+- [X] Create S3 bucket: `activelog-uploads-[your-name]`
+- [X] Set bucket to private (block all public access)
+- [X] Create folder structure: `activities/{activity_id}/`
+- [X] Note bucket name and region for config
+
+**Task 2: Create IAM User and Permissions** (20 min)
+- [X] Go to IAM console
+- [X] Create new user: `activelog-api`
+- [X] Create policy with S3 permissions (PutObject, GetObject, DeleteObject)
+- [X] Attach policy to user
+- [X] Generate access keys (Access Key ID + Secret)
+- [X] **IMPORTANT**: Save keys securely, never commit to git
+
+**Task 3: Configure AWS Credentials** (15 min)
+- [X] Install AWS SDK: `go get github.com/aws/aws-sdk-go-v2/config`
+- [X] Install S3 client: `go get github.com/aws/aws-sdk-go-v2/service/s3`
+- [X] Add to `.env` file:
+  ```
+  AWS_ACCESS_KEY_ID=your_access_key
+  AWS_SECRET_ACCESS_KEY=your_secret_key
+  AWS_REGION=us-east-1
+  AWS_S3_BUCKET=activelog-uploads-yourname
+  ```
+- [X] Add `.env` to `.gitignore` if not already
+
+**Task 4: Implement S3 Client** (60 min)
+- [X] Create `pkg/storage/s3_client.go`
+- [X] Implement `NewS3Client(bucket, region) (*S3Client, error)`
+  - **Logic:** Load AWS config using `config.LoadDefaultConfig(ctx)` which reads credentials from env vars or ~/.aws/credentials. Create S3 client from config with specified region. Return S3Client struct containing bucket name and S3 service client.
+- [X] Load AWS credentials from environment
+- [X] Implement `Upload(ctx, key, file, contentType) error`
+  - **Logic:** Use `s3.PutObjectInput` with Bucket, Key, Body (file reader), ContentType. Call `s3Client.PutObject(ctx, input)`. Check for errors. Key is full path like "activities/123/uuid.jpg". File must be io.Reader. Return wrapped error on failure.
+- [X] Implement `Delete(ctx, key) error`
+  - **Logic:** Use `s3.DeleteObjectInput` with Bucket and Key. Call `s3Client.DeleteObject(ctx, input)`. Note: DeleteObject succeeds even if key doesn't exist (idempotent). Return wrapped error on failure.
+- [X] Handle AWS errors and wrap with context
+
+**Task 5: Implement Presigned URLs** (45 min)
+- [X] Add `GetPresignedURL(ctx, key, duration) (string, error)` to S3Client
+  - **Logic:**
+    1. Create presign client with `s3.NewPresignClient(s3Client)`
+    2. Build GetObjectInput with Bucket and Key
+    3. Call `presignClient.PresignGetObject(ctx, input, func(opts *PresignOptions) { opts.Expires = duration })`
+    4. Returns signed URL string that allows temporary public access to private S3 object
+    5. URL expires after specified duration (typically 1 hour)
+    - **Why:** S3 bucket is private, so direct links don't work. Presigned URLs grant temporary access without making bucket public.
+- [X] Use `s3.NewPresignClient()` for presigning
+- [X] Set expiration to 1 hour for view URLs
+- [X] Test presigned URL generation
+- [X] Verify URLs work in browser
+
+**Task 6: Update Photo Handler to Use S3** (90 min)
+- [X] Modify `Upload` handler to upload to S3 instead of temp storage
+- [X] Generate S3 key: `activities/{activityID}/{uuid}.jpg`
+- [X] Upload file to S3
+- [X] Store S3 key in database (not local path)
+- [X] Implement rollback: delete from S3 if database insert fails
+- [X] Update temp file cleanup logic
+**Task 7: Implement Download/View Endpoints** (45 min)
+- [X] Add `GET /api/v1/activities/:id/photos/:photoId` handler
+- [X] Fetch photo record from database
+- [X] Verify user owns the activity (authorization)
+- [X] Generate presigned URL for the S3 object
+- [X] Redirect to presigned URL or return URL in JSON
+- [X] Test in browser
+
+### 📦 Files You'll Create/Modify
+
+```
+pkg/
+└── storage/
+    ├── s3_client.go               [CREATE]
+    └── s3_client_test.go          [CREATE]
+
+internal/
+├── handlers/
+│   └── photo_handler.go           [MODIFY - use S3]
+└── config/
+    └── config.go                  [MODIFY - add AWS config]
+
+.env                               [MODIFY - add AWS creds]
+.gitignore                         [MODIFY - ensure .env ignored]
+```
+
+### 🔄 Implementation Order
+
+1. **AWS Setup**: Create bucket → IAM user → Get credentials
+2. **Configuration**: Add env vars → Load in config
+3. **S3 Client**: Implement upload/delete/presign methods
+4. **Integration**: Update handler to use S3
+5. **Testing**: Upload → Verify in S3 console → Test presigned URLs
+
+### ⚠️ Blockers to Watch For
+
+- **Credentials in code**: NEVER hardcode AWS keys - always use env vars
+- **Bucket naming**: Must be globally unique, lowercase, no underscores
+- **Permissions**: IAM policy must allow s3:PutObject, s3:GetObject, s3:DeleteObject
+- **Region mismatch**: Client region must match bucket region
+- **Presigned URL expiration**: URLs expire - don't store them, generate on-demand
+- **Error handling**: AWS errors can be cryptic - log full error details
+
+### ✅ Definition of Done
+
+- [X] S3 bucket created and configured
+- [X] IAM user with proper permissions
+- [X] Files upload successfully to S3
+- [X] Can generate presigned URLs that work
+- [X] S3 objects deleted if database insert fails
+- [X] No AWS credentials in git repository
+- [X] All tests passing with S3 integration
+
+---
+
+## Week 15: Image Processing + OpenAPI/Swagger Docs
+
+### 📋 Implementation Tasks
+
+**Task 1: Install Image Processing Library** (10 min)
+- [X] Install imaging library: `go get github.com/disintegration/imaging`
+- [X] Or alternative: `go get github.com/nfnt/resize`
+- [X] Test import in a simple file
+
+**Task 2: Implement Image Resizing** (60 min)
+- [X] Create `pkg/imageutil/processor.go`
+- [X] Implement `ResizeImage(img image.Image, maxWidth, maxHeight) image.Image`
+- [X] Use `imaging.Fit()` to maintain aspect ratio
+- [X] Implement `GenerateThumbnail(img image.Image) image.Image` (300x300)
+- [X] Handle different image formats (JPEG, PNG, WebP)
+- [X] Add tests with sample images
+
+**Task 3: Implement Image Format Conversion** (30 min)
+- [X] Add `ConvertToJPEG(img image.Image, quality int) ([]byte, error)`
+- [X] Use `jpeg.Encode()` with quality setting
+- [X] Implement `EncodeImage(img, format) ([]byte, error)` for flexibility
+- [X] Test conversion maintains image quality
+
+**Task 4: Update Upload Handler with Image Processing** (90 min)
+- [X] Modify `Upload` handler to decode uploaded images
+- [X] Resize main image (max 1920x1080)
+- [X] Generate thumbnail (300x300)
+- [X] Upload both versions to S3:
+  - Main: `activities/{id}/{uuid}.jpg`
+  - Thumb: `activities/{id}/thumb_{uuid}.jpg`
+- [X] Store both S3 keys in database
+- [X] Implement cleanup on failure (delete both from S3)
+
+**Task 5: Install Swagger Tools** (15 min)
+- [X] Install swag CLI: `go install github.com/swaggo/swag/cmd/swag@latest`
+- [X] Install http-swagger: `go get github.com/swaggo/http-swagger`
+- [X] Verify installation: `swag --version`
+
+**Task 6: Add Swagger Annotations** (120 min)
+- [ ] Add general API info in `cmd/api/main.go`:
+  ```go
+  // @title ActiveLog API
+    // @version 1.0
+  // @description Activity tracking API
+  // @host localhost:8080
+  // @BasePath /api/v1
+  ```
+- [ ] Document auth handlers (Register, Login)
+- [ ] Document activity handlers (Create, List, Get, Update, Delete)
+- [ ] Document photo handlers (Upload, List, Get, Delete)
+- [ ] Add request/response examples
+- [ ] Add authorization requirements
+
+**Task 7: Generate and Serve Swagger UI** (30 min)
+- [ ] Run `swag init -g cmd/api/main.go`
+- [ ] Verify `docs/` folder created
+- [ ] Add swagger route in main.go:
+  ```go
+  import httpSwagger "github.com/swaggo/http-swagger"
+  router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
+  ```
+- [ ] Start server and visit `http://localhost:8080/swagger/index.html`
+- [ ] Test API endpoints directly from Swagger UI
+
+### 📦 Files You'll Create/Modify
+
+```
+pkg/
+└── imageutil/
+    ├── processor.go               [CREATE]
+    └── processor_test.go          [CREATE]
+
+internal/
+├── handlers/
+│   ├── photo_handler.go           [MODIFY - add image processing]
+│   ├── auth_handler.go            [MODIFY - add swagger comments]
+│   ├── activity_handler.go        [MODIFY - add swagger comments]
+│   └── stats_handler.go           [MODIFY - add swagger comments]
+
+cmd/api/
+└── main.go                        [MODIFY - add swagger route & general info]
+
+docs/                              [GENERATED]
+├── docs.go
+├── swagger.json
+└── swagger.yaml
+```
+
+### 🔄 Implementation Order
+
+1. **Image processing**: Install library → Implement resize/thumbnail → Tests
+2. **Handler update**: Integrate processing into upload flow
+3. **Swagger setup**: Install tools
+4. **Documentation**: Add annotations to all handlers
+5. **Generation**: Run swag init → Serve UI → Test
+
+### ⚠️ Blockers to Watch For
+
+- **Image memory**: Large images consume lots of memory - resize ASAP
+- **Format support**: Not all formats supported equally (stick to JPG/PNG)
+- **JPEG quality**: Balance file size vs quality (85-95 is good range)
+- **Swagger regeneration**: Must run `swag init` after changing annotations
+- **Swagger imports**: Generated docs must be imported in main.go
+- **S3 cleanup**: If thumbnail upload fails, delete main image too
+
+### ✅ Definition of Done
+
+- [ ] Images resized to max 1920x1080 before S3 upload
+- [ ] Thumbnails generated (300x300) for all photos
+- [ ] Both versions stored in S3 with separate keys
+- [ ] Swagger UI accessible at /swagger/
+- [ ] All API endpoints documented in Swagger
+- [ ] Can test endpoints directly from Swagger UI
+- [ ] All tests passing
+
+---
+
+## Week 16: File Management + Cleanup
+
+### 📋 Implementation Tasks
+
+**Task 1: Implement List Photos Endpoint** (30 min)
+- [ ] Add `ListPhotos(w, r)` handler
+- [ ] Get activity_id from URL params
+- [ ] Verify user owns the activity
+- [ ] Fetch photos from repository
+- [ ] Generate presigned URLs for each photo
+- [ ] Return photos with URLs in JSON response
+
+**Task 2: Implement Delete Photo Endpoint** (60 min)
+- [ ] Add `DeletePhoto(w, r)` handler
+- [ ] Get photo_id from URL params
+- [ ] Fetch photo record from database
+- [ ] Verify user owns the photo's activity (authorization)
+- [ ] Delete main image from S3
+- [ ] Delete thumbnail from S3
+- [ ] Delete database record
+- [ ] Handle errors (S3 delete failed, DB delete failed)
+- [ ] Return 204 No Content on success
+
+**Task 3: Implement Orphaned File Cleanup** (90 min)
+- [ ] Create `internal/services/cleanup_service.go`
+- [ ] Implement `FindOrphanedPhotos(ctx) ([]*Photo, error)`
+  - Find photos in DB where activity doesn't exist
+  - Or photos older than X days with no activity
+- [ ] Implement `CleanupOrphanedFiles(ctx) error`
+- [ ] Delete orphaned S3 objects
+- [ ] Delete orphaned database records
+- [ ] Log cleanup statistics
+
+**Task 4: Implement Storage Quota System** (120 min)
+- [ ] Add `storage_used` column to users table (migration)
+- [ ] Create `internal/middleware/quota.go`
+- [ ] Implement `CheckStorageQuota(next) http.Handler`
+- [ ] Calculate user's current storage usage
+- [ ] Compare against quota (e.g., 100MB for free tier)
+- [ ] Reject uploads if over quota (402 Payment Required)
+- [ ] Update storage_used when photos uploaded/deleted
+- [ ] Add endpoint: `GET /api/v1/users/me/storage` to show usage
+
+**Task 5: Implement Batch Delete** (45 min)
+- [ ] Add `DELETE /api/v1/users/me/photos` endpoint
+- [ ] Accept array of photo IDs in request body
+- [ ] Verify user owns all photos
+- [ ] Delete all photos in transaction
+- [ ] Delete all S3 objects
+- [ ] Update storage quota
+- [ ] Return count of deleted photos
+
+**Task 6: Add User Photos Endpoint** (30 min)
+- [ ] Add `GET /api/v1/users/me/photos` endpoint
+- [ ] List all photos for current user across all activities
+- [ ] Support pagination (limit, offset)
+- [ ] Generate presigned URLs
+- [ ] Return with activity context (activity type, date)
+
+**Task 7: Write Comprehensive Tests** (60 min)
+- [ ] Test upload with quota enforcement
+- [ ] Test delete removes both S3 objects
+- [ ] Test orphaned file cleanup
+- [ ] Test storage quota calculation
+- [ ] Test authorization (can't delete other user's photos)
+- [ ] Mock S3 client for unit tests
+
+### 📦 Files You'll Create/Modify
+
+```
+migrations/
+├── 005_add_storage_quota.up.sql   [CREATE]
+└── 005_add_storage_quota.down.sql [CREATE]
+
+internal/
+├── services/
+│   ├── cleanup_service.go         [CREATE]
+│   └── cleanup_service_test.go    [CREATE]
+├── middleware/
+│   ├── quota.go                   [CREATE]
+│   └── quota_test.go              [CREATE]
+├── handlers/
+│   └── photo_handler.go           [MODIFY - add list, delete, batch]
+└── repository/
+    └── photo_repository.go        [MODIFY - add orphan queries]
+
+cmd/api/
+└── main.go                        [MODIFY - add routes]
+```
+
+### 🔄 Implementation Order
+
+1. **Basic CRUD**: List → Delete endpoints
+2. **Cleanup**: Orphaned file detection → Cleanup service
+3. **Quota**: Database migration → Middleware → Update on upload/delete
+4. **Batch operations**: Batch delete endpoint
+5. **Testing**: Comprehensive tests for all scenarios
+
+### ⚠️ Blockers to Watch For
+
+- **Authorization**: Always verify user owns resources before delete
+- **S3 delete failures**: Might succeed in DB but fail in S3 - handle gracefully
+- **Transaction scope**: Quota updates should be in transaction with photo operations
+- **Orphan detection**: Be careful not to delete recently uploaded files
+- **Presigned URL generation**: Don't generate for every photo in large lists (slow)
+- **Cascade deletes**: When activity deleted, photos should auto-delete (ON DELETE CASCADE)
+
+### ✅ Definition of Done
+
+- [ ] Can list all photos for an activity
+- [ ] Can delete individual photos (S3 + database)
+- [ ] Can delete multiple photos at once
+- [ ] Orphaned files cleaned up automatically
+- [ ] Storage quota enforced on uploads
+- [ ] Users can see their storage usage
+- [ ] Can list all user's photos across activities
+- [ ] All authorization checks working
+- [ ] All tests passing
 
 ---
 
