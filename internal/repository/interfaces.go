@@ -67,3 +67,10 @@ type TagRepositoryInterface interface {
 	LinkActivityTag(ctx context.Context, tx TxConn, activityID int, tagID int) error
 	ListTagsWithQuery(ctx context.Context, opts *query.QueryOptions) (*query.PaginatedResult, error)
 }
+
+type ActivityPhotoRepositoryInterface interface {
+	Create(ctx context.Context, tx TxConn, activityPhoto *models.ActivityPhoto) error
+	GetByActivityID(ctx context.Context, id int) ([]*models.ActivityPhoto, error)
+	GetByID(ctx context.Context, id int) (*models.ActivityPhoto, error)
+	Delete(ctx context.Context, tx TxConn, id int, userID int) error
+}

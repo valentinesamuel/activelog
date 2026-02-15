@@ -7,15 +7,8 @@
             "request": "launch",
             "mode": "debug",
             "program": "${workspaceFolder}/cmd/api",
-            "env": {
-                "DB_HOST": "localhost",
-                "DB_PORT": "5432",
-                "DB_USER": "activelog",
-                "DB_PASSWORD": "activelog",
-                "DB_NAME": "activelog",
-                "API_PORT": "8080",
-                "ENV": "development"
-            },
+            "envFile": "${workspaceFolder}/.env",
+            "cwd": "${workspaceFolder}",
             "showLog": true,
             "trace": "verbose"
         },

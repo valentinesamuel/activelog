@@ -214,21 +214,21 @@ This month introduces file handling capabilities to your application. You'll lea
 ### 📋 Implementation Tasks
 
 **Task 1: Create Photo Model** (20 min)
-- [ ] Create `internal/models/photo.go`
-- [ ] Define Photo struct with fields: id, activity_id, s3_key, thumbnail_key, content_type, file_size, uploaded_at
-- [ ] Add JSON tags for API responses
-- [ ] Add validation tags for file size limits
+- [X] Create `internal/models/photo.go`
+- [X] Define Photo struct with fields: id, activity_id, s3_key, thumbnail_key, content_type, file_size, uploaded_at
+- [X] Add JSON tags for API responses
+- [X] Add validation tags for file size limits
 
 **Task 2: Create Database Migration for Photos** (15 min)
-- [ ] Create migration `migrations/004_create_activity_photos.up.sql`
-- [ ] Add activity_photos table with foreign key to activities
-- [ ] Add ON DELETE CASCADE for cleanup
-- [ ] Create index on activity_id
-- [ ] Run migration
+- [X] Create migration `migrations/004_create_activity_photos.up.sql`
+- [X] Add activity_photos table with foreign key to activities
+- [X] Add ON DELETE CASCADE for cleanup
+- [X] Create index on activity_id
+- [X] Run migration
 
 **Task 3: Implement Multipart Form Handler** (60 min)
-- [ ] Create `internal/handlers/photo_handler.go`
-- [ ] Implement `Upload(w, r)` method
+- [X] Create `internal/handlers/photo_handler.go`
+- [X] Implement `Upload(w, r)` method
   - **Logic:**
     1. Extract activity ID from URL path parameters
     2. Parse multipart form with `r.ParseMultipartForm(50 << 20)` - loads up to 50MB into memory
@@ -236,46 +236,46 @@ This month introduces file handling capabilities to your application. You'll lea
     4. Validate file count (reject if > 5 photos)
     5. For each file: open file, validate type/size, process (save temp or upload to S3)
     6. Return JSON response with uploaded file metadata (IDs, URLs, sizes)
-- [ ] Parse multipart form: `r.ParseMultipartForm(50 << 20)` (50MB limit)
-- [ ] Extract files from `r.MultipartForm.File["photos"]`
-- [ ] Validate file count (max 5 photos per activity)
-- [ ] Return file metadata in response
+- [X] Parse multipart form: `r.ParseMultipartForm(50 << 20)` (50MB limit)
+- [X] Extract files from `r.MultipartForm.File["photos"]`
+- [X] Validate file count (max 5 photos per activity)
+- [X] Return file metadata in response
 
 **Task 4: File Validation** (45 min)
-- [ ] Create `pkg/upload/validator.go`
-- [ ] Implement `ValidateFileType(contentType string) error`
+- [X] Create `pkg/upload/validator.go`
+- [X] Implement `ValidateFileType(contentType string) error`
   - **Logic:** Check if contentType is in allowed list (image/jpeg, image/png, image/webp). Return error if not. Also read first 512 bytes of file and use `http.DetectContentType()` to verify magic bytes match (prevents MIME type spoofing).
-- [ ] Check MIME type: accept image/jpeg, image/png, image/webp
-- [ ] Implement `ValidateFileSize(size int64) error` (max 10MB)
+- [X] Check MIME type: accept image/jpeg, image/png, image/webp
+- [X] Implement `ValidateFileSize(size int64) error` (max 10MB)
   - **Logic:** Check if size > 10*1024*1024 bytes. If yes, return error with message "file too large, maximum size is 10MB". If no, return nil.
-- [ ] Check magic bytes (not just extension) for security
-- [ ] Add tests for validation logic
+- [X] Check magic bytes (not just extension) for security
+- [X] Add tests for validation logic
 
 **Task 5: Temporary File Storage** (30 min)
-- [ ] Create temp directory for uploads: `/tmp/activelog-uploads`
-- [ ] Save uploaded files temporarily
-- [ ] Generate unique filenames with UUID
-- [ ] Implement cleanup of temp files after processing
-- [ ] Handle concurrent uploads safely
+- [X] Create temp directory for uploads: `/tmp/activelog-uploads`
+- [X] Save uploaded files temporarily
+- [X] Generate unique filenames with UUID
+- [X] Implement cleanup of temp files after processing
+- [X] Handle concurrent uploads safely
 
 **Task 6: Create Photo Repository** (45 min)
-- [ ] Create `internal/repository/photo_repository.go`
-- [ ] Implement `Create(ctx, photo) error`
+- [X] Create `internal/repository/photo_repository.go`
+- [X] Implement `Create(ctx, photo) error`
   - **Logic:** INSERT photo into activity_photos table with activity_id, s3_key, thumbnail_key, content_type, file_size. Use RETURNING clause to get generated ID and timestamps. Update photo struct with returned values.
-- [ ] Implement `GetByActivityID(ctx, activityID) ([]*Photo, error)`
+- [X] Implement `GetByActivityID(ctx, activityID) ([]*Photo, error)`
   - **Logic:** SELECT * FROM activity_photos WHERE activity_id = $1 ORDER BY uploaded_at DESC. Scan all rows into Photo slice. Return empty slice if no photos (not an error).
-- [ ] Implement `GetByID(ctx, id) (*Photo, error)`
+- [X] Implement `GetByID(ctx, id) (*Photo, error)`
   - **Logic:** SELECT * FROM activity_photos WHERE id = $1. Scan into Photo struct. Return sql.ErrNoRows if photo doesn't exist.
-- [ ] Implement `Delete(ctx, id) error`
+- [X] Implement `Delete(ctx, id) error`
   - **Logic:** DELETE FROM activity_photos WHERE id = $1. Check rows affected - if 0, return error "photo not found". This only deletes DB record, caller must delete S3 files separately.
 - [ ] Write tests for repository methods
 
 **Task 7: Wire Up Routes and Test** (30 min)
-- [ ] Add route: `POST /api/v1/activities/:id/photos`
-- [ ] Add auth middleware to protect upload endpoint
-- [ ] Test upload with Postman/curl
-- [ ] Verify files saved to temp directory
-- [ ] Verify database records created
+- [X] Add route: `POST /api/v1/activities/:id/photos`
+- [X] Add auth middleware to protect upload endpoint
+- [X] Test upload with Postman/curl
+- [X] Verify files saved to temp directory
+- [X] Verify database records created
 
 ### 📦 Files You'll Create/Modify
 
@@ -318,12 +318,12 @@ pkg/
 
 ### ✅ Definition of Done
 
-- [ ] Can upload multiple photos (up to 5) per activity
-- [ ] Only valid image types accepted (jpg, png, webp)
-- [ ] Files larger than 10MB rejected
-- [ ] Database records created for uploads
-- [ ] Temp files cleaned up after processing
-- [ ] All tests passing
+- [X] Can upload multiple photos (up to 5) per activity
+- [X] Only valid image types accepted (jpg, png, webp)
+- [X] Files larger than 10MB rejected
+- [X] Database records created for uploads
+- [X] Temp files cleaned up after processing
+- [X] All tests passing
 
 ---
 
@@ -332,45 +332,45 @@ pkg/
 ### 📋 Implementation Tasks
 
 **Task 1: Set Up AWS Account and S3 Bucket** (30 min)
-- [ ] Create/log into AWS account
-- [ ] Create S3 bucket: `activelog-uploads-[your-name]`
-- [ ] Set bucket to private (block all public access)
-- [ ] Create folder structure: `activities/{activity_id}/`
-- [ ] Note bucket name and region for config
+- [X] Create/log into AWS account
+- [X] Create S3 bucket: `activelog-uploads-[your-name]`
+- [X] Set bucket to private (block all public access)
+- [X] Create folder structure: `activities/{activity_id}/`
+- [X] Note bucket name and region for config
 
 **Task 2: Create IAM User and Permissions** (20 min)
-- [ ] Go to IAM console
-- [ ] Create new user: `activelog-api`
-- [ ] Create policy with S3 permissions (PutObject, GetObject, DeleteObject)
-- [ ] Attach policy to user
-- [ ] Generate access keys (Access Key ID + Secret)
-- [ ] **IMPORTANT**: Save keys securely, never commit to git
+- [X] Go to IAM console
+- [X] Create new user: `activelog-api`
+- [X] Create policy with S3 permissions (PutObject, GetObject, DeleteObject)
+- [X] Attach policy to user
+- [X] Generate access keys (Access Key ID + Secret)
+- [X] **IMPORTANT**: Save keys securely, never commit to git
 
 **Task 3: Configure AWS Credentials** (15 min)
-- [ ] Install AWS SDK: `go get github.com/aws/aws-sdk-go-v2/config`
-- [ ] Install S3 client: `go get github.com/aws/aws-sdk-go-v2/service/s3`
-- [ ] Add to `.env` file:
+- [X] Install AWS SDK: `go get github.com/aws/aws-sdk-go-v2/config`
+- [X] Install S3 client: `go get github.com/aws/aws-sdk-go-v2/service/s3`
+- [X] Add to `.env` file:
   ```
   AWS_ACCESS_KEY_ID=your_access_key
   AWS_SECRET_ACCESS_KEY=your_secret_key
   AWS_REGION=us-east-1
   AWS_S3_BUCKET=activelog-uploads-yourname
   ```
-- [ ] Add `.env` to `.gitignore` if not already
+- [X] Add `.env` to `.gitignore` if not already
 
 **Task 4: Implement S3 Client** (60 min)
-- [ ] Create `pkg/storage/s3_client.go`
-- [ ] Implement `NewS3Client(bucket, region) (*S3Client, error)`
+- [X] Create `pkg/storage/s3_client.go`
+- [X] Implement `NewS3Client(bucket, region) (*S3Client, error)`
   - **Logic:** Load AWS config using `config.LoadDefaultConfig(ctx)` which reads credentials from env vars or ~/.aws/credentials. Create S3 client from config with specified region. Return S3Client struct containing bucket name and S3 service client.
-- [ ] Load AWS credentials from environment
-- [ ] Implement `Upload(ctx, key, file, contentType) error`
+- [X] Load AWS credentials from environment
+- [X] Implement `Upload(ctx, key, file, contentType) error`
   - **Logic:** Use `s3.PutObjectInput` with Bucket, Key, Body (file reader), ContentType. Call `s3Client.PutObject(ctx, input)`. Check for errors. Key is full path like "activities/123/uuid.jpg". File must be io.Reader. Return wrapped error on failure.
-- [ ] Implement `Delete(ctx, key) error`
+- [X] Implement `Delete(ctx, key) error`
   - **Logic:** Use `s3.DeleteObjectInput` with Bucket and Key. Call `s3Client.DeleteObject(ctx, input)`. Note: DeleteObject succeeds even if key doesn't exist (idempotent). Return wrapped error on failure.
-- [ ] Handle AWS errors and wrap with context
+- [X] Handle AWS errors and wrap with context
 
 **Task 5: Implement Presigned URLs** (45 min)
-- [ ] Add `GetPresignedURL(ctx, key, duration) (string, error)` to S3Client
+- [X] Add `GetPresignedURL(ctx, key, duration) (string, error)` to S3Client
   - **Logic:**
     1. Create presign client with `s3.NewPresignClient(s3Client)`
     2. Build GetObjectInput with Bucket and Key
@@ -378,26 +378,25 @@ pkg/
     4. Returns signed URL string that allows temporary public access to private S3 object
     5. URL expires after specified duration (typically 1 hour)
     - **Why:** S3 bucket is private, so direct links don't work. Presigned URLs grant temporary access without making bucket public.
-- [ ] Use `s3.NewPresignClient()` for presigning
-- [ ] Set expiration to 1 hour for view URLs
-- [ ] Test presigned URL generation
-- [ ] Verify URLs work in browser
+- [X] Use `s3.NewPresignClient()` for presigning
+- [X] Set expiration to 1 hour for view URLs
+- [X] Test presigned URL generation
+- [X] Verify URLs work in browser
 
 **Task 6: Update Photo Handler to Use S3** (90 min)
-- [ ] Modify `Upload` handler to upload to S3 instead of temp storage
-- [ ] Generate S3 key: `activities/{activityID}/{uuid}.jpg`
-- [ ] Upload file to S3
-- [ ] Store S3 key in database (not local path)
-- [ ] Implement rollback: delete from S3 if database insert fails
-- [ ] Update temp file cleanup logic
-
+- [X] Modify `Upload` handler to upload to S3 instead of temp storage
+- [X] Generate S3 key: `activities/{activityID}/{uuid}.jpg`
+- [X] Upload file to S3
+- [X] Store S3 key in database (not local path)
+- [X] Implement rollback: delete from S3 if database insert fails
+- [X] Update temp file cleanup logic
 **Task 7: Implement Download/View Endpoints** (45 min)
-- [ ] Add `GET /api/v1/activities/:id/photos/:photoId` handler
-- [ ] Fetch photo record from database
-- [ ] Verify user owns the activity (authorization)
-- [ ] Generate presigned URL for the S3 object
-- [ ] Redirect to presigned URL or return URL in JSON
-- [ ] Test in browser
+- [X] Add `GET /api/v1/activities/:id/photos/:photoId` handler
+- [X] Fetch photo record from database
+- [X] Verify user owns the activity (authorization)
+- [X] Generate presigned URL for the S3 object
+- [X] Redirect to presigned URL or return URL in JSON
+- [X] Test in browser
 
 ### 📦 Files You'll Create/Modify
 
@@ -436,13 +435,13 @@ internal/
 
 ### ✅ Definition of Done
 
-- [ ] S3 bucket created and configured
-- [ ] IAM user with proper permissions
-- [ ] Files upload successfully to S3
-- [ ] Can generate presigned URLs that work
-- [ ] S3 objects deleted if database insert fails
-- [ ] No AWS credentials in git repository
-- [ ] All tests passing with S3 integration
+- [X] S3 bucket created and configured
+- [X] IAM user with proper permissions
+- [X] Files upload successfully to S3
+- [X] Can generate presigned URLs that work
+- [X] S3 objects deleted if database insert fails
+- [X] No AWS credentials in git repository
+- [X] All tests passing with S3 integration
 
 ---
 
@@ -451,44 +450,44 @@ internal/
 ### 📋 Implementation Tasks
 
 **Task 1: Install Image Processing Library** (10 min)
-- [ ] Install imaging library: `go get github.com/disintegration/imaging`
-- [ ] Or alternative: `go get github.com/nfnt/resize`
-- [ ] Test import in a simple file
+- [X] Install imaging library: `go get github.com/disintegration/imaging`
+- [X] Or alternative: `go get github.com/nfnt/resize`
+- [X] Test import in a simple file
 
 **Task 2: Implement Image Resizing** (60 min)
-- [ ] Create `pkg/imageutil/processor.go`
-- [ ] Implement `ResizeImage(img image.Image, maxWidth, maxHeight) image.Image`
-- [ ] Use `imaging.Fit()` to maintain aspect ratio
-- [ ] Implement `GenerateThumbnail(img image.Image) image.Image` (300x300)
-- [ ] Handle different image formats (JPEG, PNG, WebP)
-- [ ] Add tests with sample images
+- [X] Create `pkg/imageutil/processor.go`
+- [X] Implement `ResizeImage(img image.Image, maxWidth, maxHeight) image.Image`
+- [X] Use `imaging.Fit()` to maintain aspect ratio
+- [X] Implement `GenerateThumbnail(img image.Image) image.Image` (300x300)
+- [X] Handle different image formats (JPEG, PNG, WebP)
+- [X] Add tests with sample images
 
 **Task 3: Implement Image Format Conversion** (30 min)
-- [ ] Add `ConvertToJPEG(img image.Image, quality int) ([]byte, error)`
-- [ ] Use `jpeg.Encode()` with quality setting
-- [ ] Implement `EncodeImage(img, format) ([]byte, error)` for flexibility
-- [ ] Test conversion maintains image quality
+- [X] Add `ConvertToJPEG(img image.Image, quality int) ([]byte, error)`
+- [X] Use `jpeg.Encode()` with quality setting
+- [X] Implement `EncodeImage(img, format) ([]byte, error)` for flexibility
+- [X] Test conversion maintains image quality
 
 **Task 4: Update Upload Handler with Image Processing** (90 min)
-- [ ] Modify `Upload` handler to decode uploaded images
-- [ ] Resize main image (max 1920x1080)
-- [ ] Generate thumbnail (300x300)
-- [ ] Upload both versions to S3:
+- [X] Modify `Upload` handler to decode uploaded images
+- [X] Resize main image (max 1920x1080)
+- [X] Generate thumbnail (300x300)
+- [X] Upload both versions to S3:
   - Main: `activities/{id}/{uuid}.jpg`
   - Thumb: `activities/{id}/thumb_{uuid}.jpg`
-- [ ] Store both S3 keys in database
-- [ ] Implement cleanup on failure (delete both from S3)
+- [X] Store both S3 keys in database
+- [X] Implement cleanup on failure (delete both from S3)
 
 **Task 5: Install Swagger Tools** (15 min)
-- [ ] Install swag CLI: `go install github.com/swaggo/swag/cmd/swag@latest`
-- [ ] Install http-swagger: `go get github.com/swaggo/http-swagger`
-- [ ] Verify installation: `swag --version`
+- [X] Install swag CLI: `go install github.com/swaggo/swag/cmd/swag@latest`
+- [X] Install http-swagger: `go get github.com/swaggo/http-swagger`
+- [X] Verify installation: `swag --version`
 
 **Task 6: Add Swagger Annotations** (120 min)
 - [ ] Add general API info in `cmd/api/main.go`:
   ```go
   // @title ActiveLog API
-  // @version 1.0
+    // @version 1.0
   // @description Activity tracking API
   // @host localhost:8080
   // @BasePath /api/v1

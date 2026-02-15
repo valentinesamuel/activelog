@@ -9,6 +9,17 @@ import (
 	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
+// ListTagsInput defines the typed input for ListTagsUseCase
+type ListTagsInput struct {
+	QueryOptions *query.QueryOptions
+	UserID       int // Optional: for user-specific tags filtering
+}
+
+// ListTagsOutput defines the typed output for ListTagsUseCase
+type ListTagsOutput struct {
+	Result *query.PaginatedResult
+}
+
 // ListTagsUseCase handles fetching tags with dynamic filtering
 // This is a read-only operation and does NOT require a transaction
 type ListTagsUseCase struct {
@@ -22,66 +33,34 @@ func NewListTagsUseCase(repo repository.TagRepositoryInterface) *ListTagsUseCase
 	}
 }
 
-// No RequiresTransaction() method = defaults to non-transactional
-// Read operations don't need transaction overhead for performance
+// RequiresTransaction returns false - read operations don't need transactions
+func (uc *ListTagsUseCase) RequiresTransaction() bool {
+	return false
+}
 
-// Execute retrieves tags with dynamic filtering using QueryOptions
-//
-// Input parameters:
-//   - query_options (*query.QueryOptions) - REQUIRED: Contains filter, search, order, pagination options
-//   - user_id (int) - OPTIONAL: If provided, can be used to filter tags by user (if tags are user-specific)
-//
-// Returns:
-//   - result (*query.PaginatedResult) - Contains tags data and pagination metadata
-//
-// Example usage:
-//   input := map[string]interface{}{
-//       "query_options": &query.QueryOptions{
-//           Page:   1,
-//           Limit:  20,
-//           Filter: map[string]interface{}{
-//               "name": "cardio",
-//           },
-//           Search: map[string]interface{}{
-//               "name": "run",
-//           },
-//           Order: map[string]string{
-//               "name": "ASC",
-//           },
-//       },
-//   }
-//   result, err := listTagsUC.Execute(ctx, nil, input)
+// Execute retrieves tags with dynamic filtering using QueryOptions (typed version)
 func (uc *ListTagsUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx, // Will be nil for non-transactional use cases
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Extract QueryOptions (required)
-	queryOpts, exists := input["query_options"]
-	if !exists {
-		return nil, fmt.Errorf("query_options is required")
-	}
-
-	opts, ok := queryOpts.(*query.QueryOptions)
-	if !ok {
-		return nil, fmt.Errorf("invalid query_options type")
+	input ListTagsInput,
+) (ListTagsOutput, error) {
+	opts := input.QueryOptions
+	if opts == nil {
+		return ListTagsOutput{}, fmt.Errorf("query_options is required")
 	}
 
 	// Optional: Add user_id filter if tags are user-specific
 	// For now, tags are global, so we skip this
 	// If you want user-specific tags, uncomment:
-	// if userID, ok := input["user_id"].(int); ok {
-	//     opts.Filter["user_id"] = userID
+	// if input.UserID != 0 {
+	//     opts.Filter["user_id"] = input.UserID
 	// }
 
 	// Use dynamic filtering method
 	result, err := uc.repo.ListTagsWithQuery(ctx, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list tags: %w", err)
+		return ListTagsOutput{}, fmt.Errorf("failed to list tags: %w", err)
 	}
 
-	// Return paginated result
-	return map[string]interface{}{
-		"result": result,
-	}, nil
+	return ListTagsOutput{Result: result}, nil
 }

@@ -5,17 +5,12 @@ import (
 	"net/http"
 
 	"github.com/valentinesamuel/activelog/internal/repository"
+	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
 type StatsHandler struct {
 	repo repository.StatsRepositoryInterface
-}
-
-// getUserIDFromContext extracts the authenticated user ID from request context
-func getUserIDFromContext(r *http.Request) (int, bool) {
-	userID, ok := r.Context().Value("user_id").(int)
-	return userID, ok
 }
 
 func NewStatsHandler(repo repository.StatsRepositoryInterface) *StatsHandler {
@@ -25,11 +20,9 @@ func NewStatsHandler(repo repository.StatsRepositoryInterface) *StatsHandler {
 func (sh *StatsHandler) GetWeeklyStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := getUserIDFromContext(r)
-	if !ok {
-		response.Error(w, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
+	requestUser, _ := requestcontext.FromContext(ctx)
+
+	userID := requestUser.Id
 
 	weeklyStats, err := sh.repo.GetWeeklyStats(ctx, userID)
 	if err != nil {
@@ -42,14 +35,9 @@ func (sh *StatsHandler) GetWeeklyStats(w http.ResponseWriter, r *http.Request) {
 
 func (sh *StatsHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestUser, _ := requestcontext.FromContext(ctx)
 
-	userID, ok := getUserIDFromContext(r)
-	if !ok {
-		response.Error(w, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
-
-	monthlyStats, err := sh.repo.GetMonthlyStats(ctx, userID)
+	monthlyStats, err := sh.repo.GetMonthlyStats(ctx, requestUser.Id)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Error fetching monthly stats")
 		return
@@ -60,14 +48,9 @@ func (sh *StatsHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) 
 
 func (sh *StatsHandler) GetUserActivitySummary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestUser, _ := requestcontext.FromContext(ctx)
 
-	userID, ok := getUserIDFromContext(r)
-	if !ok {
-		response.Error(w, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
-
-	activitySummary, err := sh.repo.GetUserActivitySummary(ctx, userID)
+	activitySummary, err := sh.repo.GetUserActivitySummary(ctx, requestUser.Id)
 	if err != nil {
 		fmt.Println(err)
 		response.Error(w, http.StatusInternalServerError, "Error fetching user activity stats")
@@ -79,12 +62,7 @@ func (sh *StatsHandler) GetUserActivitySummary(w http.ResponseWriter, r *http.Re
 
 func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
-	userID, ok := getUserIDFromContext(r)
-	if !ok {
-		response.Error(w, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
+	requestUser, _ := requestcontext.FromContext(ctx)
 
 	limit := 10 // Default limit
 
@@ -96,7 +74,7 @@ func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	topTags, err := sh.repo.GetTopTagsByUser(ctx, userID, limit)
+	topTags, err := sh.repo.GetTopTagsByUser(ctx, requestUser.Id, limit)
 	if err != nil {
 		fmt.Println(err)
 		response.Error(w, http.StatusInternalServerError, "Error fetching top tags")
@@ -114,14 +92,9 @@ func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
 
 func (sh *StatsHandler) GetActivityCountByType(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	requestUser, _ := requestcontext.FromContext(ctx)
 
-	userID, ok := getUserIDFromContext(r)
-	if !ok {
-		response.Error(w, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
-
-	activityBreakdown, err := sh.repo.GetActivityCountByType(ctx, userID)
+	activityBreakdown, err := sh.repo.GetActivityCountByType(ctx, requestUser.Id)
 	if err != nil {
 		fmt.Println(err)
 		response.Error(w, http.StatusInternalServerError, "Error fetching activity breakdown")

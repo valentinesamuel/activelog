@@ -3,73 +3,109 @@ package usecases
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/valentinesamuel/activelog/internal/cache/types"
+	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
 	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
-// ListActivitiesUseCase handles fetching activities with filters
-// This is a read-only operation and does NOT require a transaction
-// Has access to both service and repository - decides which to use
-type ListActivitiesUseCase struct {
-	service service.ActivityServiceInterface      // For operations requiring business logic (can be nil for simple reads)
-	repo    repository.ActivityRepositoryInterface // For simple read operations
+type ListActivitiesInput struct {
+	UserID       int
+	QueryOptions *query.QueryOptions
 }
 
-// NewListActivitiesUseCase creates a new instance with both service and repository
-// For simple reads, service can be nil and use case will use repo directly
+// CacheMeta contains cache status information for HTTP headers
+type CacheMeta struct {
+	Hit bool          // true = served from cache, false = fetched from DB
+	TTL time.Duration // time until cache expires (only set on MISS)
+}
+
+type ListActivitiesOutput struct {
+	Result *query.PaginatedResult
+	Cache  CacheMeta
+}
+
+type ListActivitiesUseCase struct {
+	service service.ActivityServiceInterface
+	repo    repository.ActivityRepositoryInterface
+	cache   types.CacheProvider
+}
+
 func NewListActivitiesUseCase(
 	svc service.ActivityServiceInterface,
 	repo repository.ActivityRepositoryInterface,
+	cache types.CacheProvider,
 ) *ListActivitiesUseCase {
 	return &ListActivitiesUseCase{
 		service: svc,
 		repo:    repo,
+		cache:   cache,
 	}
 }
 
-// No RequiresTransaction() method = defaults to non-transactional
-// Read operations don't need transaction overhead for performance
+func (uc *ListActivitiesUseCase) RequiresTransaction() bool {
+	return false
+}
 
-// Execute retrieves activities with dynamic filtering using QueryOptions
-// This is the NEW approach that supports flexible filtering, searching, and sorting
-// Decision: Use repo directly for simple list operations (no business logic needed)
+const cacheTTL = 2 * time.Minute
+
 func (uc *ListActivitiesUseCase) Execute(
 	ctx context.Context,
-	tx *sql.Tx, // Will be nil for non-transactional use cases
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Extract user ID (required)
-	userID, ok := input["user_id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("user_id is required")
+	tx *sql.Tx, // unused for cached reads, required for broker interface
+	input ListActivitiesInput,
+) (ListActivitiesOutput, error) {
+	opts := input.QueryOptions
+	if opts == nil {
+		return ListActivitiesOutput{}, fmt.Errorf("query_options is required")
 	}
 
-	// Extract QueryOptions (required)
-	queryOpts, exists := input["query_options"]
-	if !exists {
-		return nil, fmt.Errorf("query_options is required")
+	opts.Filter["user_id"] = input.UserID
+
+	// Generate cache key based on user + query options
+	cacheKey := uc.generateCacheKey(input.UserID, opts)
+
+	// Try cache first
+	if uc.cache != nil {
+		if cached, err := uc.cache.Get(cacheKey); err == nil && cached != "" {
+			var result query.PaginatedResult
+			if err := json.Unmarshal([]byte(cached), &result); err == nil {
+				middleware.CacheHitsTotal.Inc()
+				return ListActivitiesOutput{
+					Result: &result,
+					Cache:  CacheMeta{Hit: true},
+				}, nil
+			}
+		}
+		middleware.CacheMissesTotal.Inc()
 	}
 
-	opts, ok := queryOpts.(*query.QueryOptions)
-	if !ok {
-		return nil, fmt.Errorf("invalid query_options type")
-	}
-
-	// SECURITY: Add user_id filter for multi-tenancy
-	// This ensures users can only see their own activities
-	opts.Filter["user_id"] = userID
-
-	// Use dynamic filtering with RelationshipRegistry v3.0
+	// Cache miss - fetch from database
 	result, err := uc.repo.ListActivitiesWithQuery(ctx, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list activities: %w", err)
+		return ListActivitiesOutput{}, fmt.Errorf("failed to list activities: %w", err)
 	}
 
-	// Return paginated result
-	return map[string]interface{}{
-		"result": result,
+	// Store in cache
+	if uc.cache != nil {
+		if jsonData, err := json.Marshal(result); err == nil {
+			_ = uc.cache.Set(cacheKey, string(jsonData), cacheTTL)
+		}
+	}
+
+	return ListActivitiesOutput{
+		Result: result,
+		Cache:  CacheMeta{Hit: false, TTL: cacheTTL},
 	}, nil
+}
+
+// generateCacheKey creates a unique cache key based on user and query options
+func (uc *ListActivitiesUseCase) generateCacheKey(userID int, opts *query.QueryOptions) string {
+	// Include query params in key to avoid serving wrong cached data
+	keyData, _ := json.Marshal(opts)
+	return fmt.Sprintf("activities:user:%d:query:%s", userID, string(keyData))
 }

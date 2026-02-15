@@ -85,7 +85,7 @@ func TestParseQueryParams(t *testing.T) {
 		{
 			name: "filter with boolean value",
 			input: url.Values{
-				"filter[is_active]": []string{"true"},
+				"filter[is_active]":  []string{"true"},
 				"filter[is_deleted]": []string{"false"},
 			},
 			expected: &QueryOptions{
@@ -159,8 +159,8 @@ func TestParseQueryParams(t *testing.T) {
 				"filterOr[status]": []string{"active"},
 			},
 			expected: &QueryOptions{
-				Page:  1,
-				Limit: 10,
+				Page:   1,
+				Limit:  10,
 				Filter: map[string]interface{}{},
 				FilterOr: map[string]interface{}{
 					"type":   "running",
@@ -212,13 +212,13 @@ func TestParseQueryParams(t *testing.T) {
 		{
 			name: "complex query with all parameter types",
 			input: url.Values{
-				"page":                  []string{"3"},
-				"limit":                 []string{"50"},
-				"filter[user_id]":       []string{"456"},
-				"filter[status]":        []string{"completed"},
-				"filterOr[type]":        []string{"running"},
-				"search[title]":         []string{"morning"},
-				"order[activity_date]":  []string{"DESC"},
+				"page":                 []string{"3"},
+				"limit":                []string{"50"},
+				"filter[user_id]":      []string{"456"},
+				"filter[status]":       []string{"completed"},
+				"filterOr[type]":       []string{"running"},
+				"search[title]":        []string{"morning"},
+				"order[activity_date]": []string{"DESC"},
 			},
 			expected: &QueryOptions{
 				Page:  3,

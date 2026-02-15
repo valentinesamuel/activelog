@@ -8,6 +8,16 @@ import (
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
 
+// GetWeeklyStatsInput defines the typed input for GetWeeklyStatsUseCase
+type GetWeeklyStatsInput struct {
+	UserID int
+}
+
+// GetWeeklyStatsOutput defines the typed output for GetWeeklyStatsUseCase
+type GetWeeklyStatsOutput struct {
+	WeeklyStats *repository.WeeklyStats
+}
+
 // GetWeeklyStatsUseCase handles fetching weekly statistics (last 7 days)
 // This is a read-only operation and does NOT require a transaction
 type GetWeeklyStatsUseCase struct {
@@ -19,29 +29,21 @@ func NewGetWeeklyStatsUseCase(repo repository.StatsRepositoryInterface) *GetWeek
 	return &GetWeeklyStatsUseCase{repo: repo}
 }
 
-// No RequiresTransaction() method = defaults to non-transactional
-// Read operations don't need transaction overhead for performance
+// RequiresTransaction returns false - read operations don't need transactions
+func (uc *GetWeeklyStatsUseCase) RequiresTransaction() bool {
+	return false
+}
 
-// Execute retrieves weekly statistics
+// Execute retrieves weekly statistics (typed version)
 func (uc *GetWeeklyStatsUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx, // Will be nil for non-transactional use cases
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Extract user ID (required)
-	userID, ok := input["user_id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("user_id is required")
-	}
-
-	// Fetch weekly stats
-	stats, err := uc.repo.GetWeeklyStats(ctx, userID)
+	input GetWeeklyStatsInput,
+) (GetWeeklyStatsOutput, error) {
+	stats, err := uc.repo.GetWeeklyStats(ctx, input.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get weekly stats: %w", err)
+		return GetWeeklyStatsOutput{}, fmt.Errorf("failed to get weekly stats: %w", err)
 	}
 
-	// Return result
-	return map[string]interface{}{
-		"weekly_stats": stats,
-	}, nil
+	return GetWeeklyStatsOutput{WeeklyStats: stats}, nil
 }

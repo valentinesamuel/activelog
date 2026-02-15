@@ -5,15 +5,26 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
 )
+
+// GetActivityInput defines the typed input for GetActivityUseCase
+type GetActivityInput struct {
+	ActivityID int64
+}
+
+// GetActivityOutput defines the typed output for GetActivityUseCase
+type GetActivityOutput struct {
+	Activity *models.Activity
+}
 
 // GetActivityUseCase handles fetching a single activity by ID
 // This is a read-only operation and does NOT require a transaction
 // Has access to both service and repository - decides which to use
 type GetActivityUseCase struct {
-	service service.ActivityServiceInterface      // For operations requiring business logic (can be nil for simple reads)
+	service service.ActivityServiceInterface       // For operations requiring business logic (can be nil for simple reads)
 	repo    repository.ActivityRepositoryInterface // For simple read operations
 }
 
@@ -29,31 +40,24 @@ func NewGetActivityUseCase(
 	}
 }
 
-// No RequiresTransaction() method = defaults to non-transactional
-// Read operations don't need transaction overhead for performance
+// RequiresTransaction returns false - read operations don't need transactions
+func (uc *GetActivityUseCase) RequiresTransaction() bool {
+	return false
+}
 
-// Execute retrieves a single activity
+// Execute retrieves a single activity (typed version)
 // Decision: Use repo directly for simple reads (no business logic needed)
 func (uc *GetActivityUseCase) Execute(
 	ctx context.Context,
 	tx *sql.Tx, // Will be nil for non-transactional use cases
-	input map[string]interface{},
-) (map[string]interface{}, error) {
-	// Extract input
-	activityID, ok := input["activity_id"].(int64)
-	if !ok {
-		return nil, fmt.Errorf("activity_id is required and must be int64")
-	}
-
+	input GetActivityInput,
+) (GetActivityOutput, error) {
 	// DECISION: Use repo directly for simple reads - no validation or business logic needed
 	// Alternative: Could use service if we needed permission checks or data enrichment
-	activity, err := uc.repo.GetByID(ctx, activityID)
+	activity, err := uc.repo.GetByID(ctx, input.ActivityID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get activity: %w", err)
+		return GetActivityOutput{}, fmt.Errorf("failed to get activity: %w", err)
 	}
 
-	// Return result
-	return map[string]interface{}{
-		"activity": activity,
-	}, nil
+	return GetActivityOutput{Activity: activity}, nil
 }

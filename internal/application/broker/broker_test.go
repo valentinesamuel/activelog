@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"testing"
@@ -13,28 +12,35 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
-// Mock use case for testing
-type mockUseCase struct {
-	name              string
-	output            map[string]interface{}
-	err               error
-	requiresTx        bool // Whether this mock requires a transaction
-	executeFn         func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error)
+// Typed mock use case for testing RunUseCase
+type mockTypedInput struct {
+	UserID int
+	Name   string
 }
 
-func (m *mockUseCase) Execute(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error) {
+type mockTypedOutput struct {
+	Result  string
+	Success bool
+}
+
+type mockTypedUseCase struct {
+	output     mockTypedOutput
+	err        error
+	requiresTx bool
+	executeFn  func(ctx context.Context, tx *sql.Tx, input mockTypedInput) (mockTypedOutput, error)
+}
+
+func (m *mockTypedUseCase) Execute(ctx context.Context, tx *sql.Tx, input mockTypedInput) (mockTypedOutput, error) {
 	if m.executeFn != nil {
 		return m.executeFn(ctx, tx, input)
 	}
 	if m.err != nil {
-		return nil, m.err
+		return mockTypedOutput{}, m.err
 	}
 	return m.output, nil
 }
 
-// RequiresTransaction implements TransactionalUseCase marker interface
-// For backward compatibility, mock use cases default to requiring transactions
-func (m *mockUseCase) RequiresTransaction() bool {
+func (m *mockTypedUseCase) RequiresTransaction() bool {
 	return m.requiresTx
 }
 
@@ -68,45 +74,62 @@ func TestNewBroker(t *testing.T) {
 	}
 }
 
-func TestRunUseCases_Success(t *testing.T) {
-	broker, mock, cleanup := setupTestBroker(t)
+func TestWithLogger(t *testing.T) {
+	broker, _, cleanup := setupTestBroker(t)
 	defer cleanup()
 
-	// Expect transaction to be started and committed
-	mock.ExpectBegin()
-	mock.ExpectCommit()
-
-	// Create simple use cases
-	useCase1 := &mockUseCase{
-		name:       "UseCase1",
-		output:     map[string]interface{}{"step1": "completed"},
-		requiresTx: true, // Requires transaction
+	// Should return the same broker instance
+	result := broker.WithLogger(nil)
+	if result != broker {
+		t.Error("expected WithLogger to return same broker instance")
 	}
-	useCase2 := &mockUseCase{
-		name:       "UseCase2",
-		output:     map[string]interface{}{"step2": "completed"},
-		requiresTx: true, // Requires transaction
+}
+
+func TestRunUseCase_Success_NonTransactional(t *testing.T) {
+	broker, _, cleanup := setupTestBroker(t)
+	defer cleanup()
+
+	// No transaction expected for non-transactional use case
+	useCase := &mockTypedUseCase{
+		output:     mockTypedOutput{Result: "success", Success: true},
+		requiresTx: false,
 	}
 
-	initialInput := map[string]interface{}{"user_id": 123}
-	useCases := []UseCase{useCase1, useCase2}
-
-	result, err := broker.RunUseCases(context.Background(), useCases, initialInput)
+	input := mockTypedInput{UserID: 123, Name: "test"}
+	result, err := RunUseCase(broker, context.Background(), useCase, input)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+	if result.Result != "success" {
+		t.Errorf("expected result 'success', got %q", result.Result)
+	}
+	if !result.Success {
+		t.Error("expected Success to be true")
+	}
+}
 
-	// Should have outputs from both use cases (initial input excluded)
-	if result["step1"] != "completed" {
-		t.Errorf("expected step1 to be completed")
+func TestRunUseCase_Success_Transactional(t *testing.T) {
+	broker, mock, cleanup := setupTestBroker(t)
+	defer cleanup()
+
+	// Expect transaction for transactional use case
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
+	useCase := &mockTypedUseCase{
+		output:     mockTypedOutput{Result: "created", Success: true},
+		requiresTx: true,
 	}
-	if result["step2"] != "completed" {
-		t.Errorf("expected step2 to be completed")
+
+	input := mockTypedInput{UserID: 456, Name: "create"}
+	result, err := RunUseCase(broker, context.Background(), useCase, input)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
-	// Initial input should be excluded from final results
-	if _, exists := result["user_id"]; exists {
-		t.Errorf("initial input should not be in final results")
+	if result.Result != "created" {
+		t.Errorf("expected result 'created', got %q", result.Result)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -114,77 +137,27 @@ func TestRunUseCases_Success(t *testing.T) {
 	}
 }
 
-func TestRunUseCases_ResultChaining(t *testing.T) {
-	broker, mock, cleanup := setupTestBroker(t)
-	defer cleanup()
-
-	mock.ExpectBegin()
-	mock.ExpectCommit()
-
-	// Use case 1 outputs a value that use case 2 should receive
-	var receivedInput map[string]interface{}
-	useCase1 := &mockUseCase{
-		output:     map[string]interface{}{"created_id": 456},
-		requiresTx: true, // Requires transaction
-	}
-	useCase2 := &mockUseCase{
-		requiresTx: true, // Requires transaction
-		executeFn: func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error) {
-			receivedInput = input
-			return map[string]interface{}{"updated": true}, nil
-		},
-	}
-
-	initialInput := map[string]interface{}{"user_id": 123}
-	useCases := []UseCase{useCase1, useCase2}
-
-	_, err := broker.RunUseCases(context.Background(), useCases, initialInput)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// UseCase2 should receive both initial input and output from UseCase1
-	if receivedInput["user_id"] != 123 {
-		t.Errorf("expected user_id from initial input")
-	}
-	if receivedInput["created_id"] != 456 {
-		t.Errorf("expected created_id from UseCase1 output")
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
-
-func TestRunUseCases_FailureRollback(t *testing.T) {
+func TestRunUseCase_Error_Rollback(t *testing.T) {
 	broker, mock, cleanup := setupTestBroker(t)
 	defer cleanup()
 
 	mock.ExpectBegin()
 	mock.ExpectRollback()
 
-	useCase1 := &mockUseCase{
-		output:     map[string]interface{}{"step1": "completed"},
-		requiresTx: true, // Requires transaction
-	}
-	useCase2 := &mockUseCase{
-		err:        errors.New("use case 2 failed"),
-		requiresTx: true, // Requires transaction
+	expectedErr := errors.New("use case failed")
+	useCase := &mockTypedUseCase{
+		err:        expectedErr,
+		requiresTx: true,
 	}
 
-	useCases := []UseCase{useCase1, useCase2}
-	initialInput := map[string]interface{}{"user_id": 123}
-
-	result, err := broker.RunUseCases(context.Background(), useCases, initialInput)
+	input := mockTypedInput{UserID: 789, Name: "fail"}
+	_, err := RunUseCase(broker, context.Background(), useCase, input)
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if result != nil {
-		t.Errorf("expected nil result on error, got %v", result)
-	}
-	if !errors.Is(err, useCase2.err) {
-		t.Errorf("expected error to contain use case error")
+	if !errors.Is(err, expectedErr) {
+		t.Errorf("expected error to wrap use case error, got %v", err)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -192,24 +165,7 @@ func TestRunUseCases_FailureRollback(t *testing.T) {
 	}
 }
 
-func TestRunUseCases_EmptyUseCases(t *testing.T) {
-	broker, _, cleanup := setupTestBroker(t)
-	defer cleanup()
-
-	result, err := broker.RunUseCases(context.Background(), []UseCase{}, nil)
-
-	if err == nil {
-		t.Fatal("expected error for empty use cases, got nil")
-	}
-	if result != nil {
-		t.Errorf("expected nil result, got %v", result)
-	}
-	if err.Error() != "at least one use case must be provided" {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-func TestRunUseCases_Timeout(t *testing.T) {
+func TestRunUseCase_Timeout(t *testing.T) {
 	broker, mock, cleanup := setupTestBroker(t)
 	defer cleanup()
 
@@ -217,63 +173,94 @@ func TestRunUseCases_Timeout(t *testing.T) {
 	mock.ExpectRollback()
 
 	// Use case that takes longer than timeout
-	slowUseCase := &mockUseCase{
-		requiresTx: true, // Requires transaction
-		executeFn: func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error) {
+	useCase := &mockTypedUseCase{
+		requiresTx: true,
+		executeFn: func(ctx context.Context, tx *sql.Tx, input mockTypedInput) (mockTypedOutput, error) {
 			select {
 			case <-time.After(200 * time.Millisecond):
-				return map[string]interface{}{}, nil
+				return mockTypedOutput{Result: "completed"}, nil
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return mockTypedOutput{}, ctx.Err()
 			}
 		},
 	}
 
-	useCases := []UseCase{slowUseCase}
-	initialInput := map[string]interface{}{}
-
-	// Set very short timeout
-	result, err := broker.RunUseCases(
-		context.Background(),
-		useCases,
-		initialInput,
-		WithTimeout(50*time.Millisecond),
-	)
+	input := mockTypedInput{UserID: 123, Name: "slow"}
+	_, err := RunUseCase(broker, context.Background(), useCase, input, WithTimeout(50*time.Millisecond))
 
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
-	if result != nil {
-		t.Errorf("expected nil result on timeout, got %v", result)
-	}
-	if err.Error() != "transaction timed out after 50ms" {
+	if err.Error() != "use case timed out after 50ms" {
 		t.Errorf("unexpected error message: %v", err)
 	}
-
-	// Note: Rollback might not be called in time due to goroutine
-	// This is acceptable as the transaction will be rolled back when connection closes
 }
 
-func TestRunUseCases_WithOptions(t *testing.T) {
+func TestRunUseCase_TransactionBeginError(t *testing.T) {
 	broker, mock, cleanup := setupTestBroker(t)
 	defer cleanup()
 
-	// Expect transaction with specific isolation level
+	mock.ExpectBegin().WillReturnError(errors.New("connection failed"))
+
+	useCase := &mockTypedUseCase{
+		output:     mockTypedOutput{Result: "success"},
+		requiresTx: true,
+	}
+
+	input := mockTypedInput{UserID: 123, Name: "test"}
+	_, err := RunUseCase(broker, context.Background(), useCase, input)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestRunUseCase_CommitError(t *testing.T) {
+	broker, mock, cleanup := setupTestBroker(t)
+	defer cleanup()
+
+	mock.ExpectBegin()
+	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+
+	useCase := &mockTypedUseCase{
+		output:     mockTypedOutput{Result: "success"},
+		requiresTx: true,
+	}
+
+	input := mockTypedInput{UserID: 123, Name: "test"}
+	_, err := RunUseCase(broker, context.Background(), useCase, input)
+
+	if err == nil {
+		t.Fatal("expected commit error, got nil")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestRunUseCase_WithOptions(t *testing.T) {
+	broker, mock, cleanup := setupTestBroker(t)
+	defer cleanup()
+
 	mock.ExpectBegin()
 	mock.ExpectCommit()
 
-	useCase := &mockUseCase{
-		output:     map[string]interface{}{"result": "success"},
-		requiresTx: true, // Requires transaction
+	useCase := &mockTypedUseCase{
+		output:     mockTypedOutput{Result: "success"},
+		requiresTx: true,
 	}
 
-	useCases := []UseCase{useCase}
-	initialInput := map[string]interface{}{}
-
-	_, err := broker.RunUseCases(
+	input := mockTypedInput{UserID: 123, Name: "test"}
+	_, err := RunUseCase(
+		broker,
 		context.Background(),
-		useCases,
-		initialInput,
+		useCase,
+		input,
 		WithTimeout(5*time.Second),
 		WithIsolationLevel(sql.LevelSerializable),
 	)
@@ -287,121 +274,27 @@ func TestRunUseCases_WithOptions(t *testing.T) {
 	}
 }
 
-func TestRunUseCases_TransactionBeginError(t *testing.T) {
-	broker, mock, cleanup := setupTestBroker(t)
-	defer cleanup()
-
-	// Simulate error when beginning transaction
-	mock.ExpectBegin().WillReturnError(errors.New("connection failed"))
-
-	useCase := &mockUseCase{
-		output:     map[string]interface{}{"result": "success"},
-		requiresTx: true, // Requires transaction
-	}
-
-	result, err := broker.RunUseCases(context.Background(), []UseCase{useCase}, nil)
-
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if result != nil {
-		t.Errorf("expected nil result, got %v", result)
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
-
-func TestRunUseCases_CommitError(t *testing.T) {
-	broker, mock, cleanup := setupTestBroker(t)
-	defer cleanup()
-
-	mock.ExpectBegin()
-	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
-
-	useCase := &mockUseCase{
-		output:     map[string]interface{}{"result": "success"},
-		requiresTx: true, // Requires transaction
-	}
-
-	result, err := broker.RunUseCases(context.Background(), []UseCase{useCase}, nil)
-
-	if err == nil {
-		t.Fatal("expected commit error, got nil")
-	}
-	if result != nil {
-		t.Errorf("expected nil result on commit error, got %v", result)
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
-
-// Note: Panic recovery testing is skipped because RunUseCases executes in a goroutine.
-// When a panic occurs in the goroutine, it's recovered, rollback happens, and then
-// the panic is re-thrown - which would crash the test. In production, this would
-// crash the server, which is the desired behavior (fail fast).
-//
-// The rollback mechanism is tested through the FailureRollback test instead.
-
-func TestUseCaseFunc(t *testing.T) {
-	// Test that UseCaseFunc wrapper works correctly
-	called := false
-	fn := UseCaseFunc(func(ctx context.Context, tx *sql.Tx, input map[string]interface{}) (map[string]interface{}, error) {
-		called = true
-		return map[string]interface{}{"result": "success"}, nil
-	})
-
-	result, err := fn.Execute(context.Background(), nil, nil)
-
-	if !called {
-		t.Error("expected function to be called")
-	}
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if result["result"] != "success" {
-		t.Errorf("unexpected result: %v", result)
-	}
-}
-
-func TestWithLogger(t *testing.T) {
-	broker, _, cleanup := setupTestBroker(t)
-	defer cleanup()
-
-	// Should return the same broker instance
-	result := broker.WithLogger(nil)
-	if result != broker {
-		t.Error("expected WithLogger to return same broker instance")
-	}
-}
-
 // Benchmark tests
-func BenchmarkRunUseCases_SingleUseCase(b *testing.B) {
-	db, mock, err := sqlmock.New()
+func BenchmarkRunUseCase_NonTransactional(b *testing.B) {
+	db, _, err := sqlmock.New()
 	if err != nil {
 		b.Fatalf("failed to create mock db: %v", err)
 	}
 	defer db.Close()
 
 	broker := NewBroker(db).WithLogger(log.New(io.Discard, "", 0))
-	useCase := &mockUseCase{
-		output:     map[string]interface{}{"result": "success"},
-		requiresTx: true, // Requires transaction
+	useCase := &mockTypedUseCase{
+		output:     mockTypedOutput{Result: "success"},
+		requiresTx: false,
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		mock.ExpectBegin()
-		mock.ExpectCommit()
-
-		broker.RunUseCases(context.Background(), []UseCase{useCase}, nil)
+		RunUseCase(broker, context.Background(), useCase, mockTypedInput{UserID: 1})
 	}
 }
 
-func BenchmarkRunUseCases_MultipleUseCases(b *testing.B) {
+func BenchmarkRunUseCase_Transactional(b *testing.B) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		b.Fatalf("failed to create mock db: %v", err)
@@ -409,12 +302,9 @@ func BenchmarkRunUseCases_MultipleUseCases(b *testing.B) {
 	defer db.Close()
 
 	broker := NewBroker(db).WithLogger(log.New(io.Discard, "", 0))
-	useCases := make([]UseCase, 5)
-	for i := range useCases {
-		useCases[i] = &mockUseCase{
-			output:     map[string]interface{}{fmt.Sprintf("step%d", i): "completed"},
-			requiresTx: true, // Requires transaction
-		}
+	useCase := &mockTypedUseCase{
+		output:     mockTypedOutput{Result: "success"},
+		requiresTx: true,
 	}
 
 	b.ResetTimer()
@@ -422,6 +312,6 @@ func BenchmarkRunUseCases_MultipleUseCases(b *testing.B) {
 		mock.ExpectBegin()
 		mock.ExpectCommit()
 
-		broker.RunUseCases(context.Background(), useCases, nil)
+		RunUseCase(broker, context.Background(), useCase, mockTypedInput{UserID: 1})
 	}
 }

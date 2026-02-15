@@ -51,18 +51,24 @@ func (ua *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Username: requestPayload.Username,
 	}
 
-	existingUser, error := ua.repo.FindUserByEmail(ctx, requestPayload.Email)
+	existingUser, err := ua.repo.FindUserByEmail(ctx, requestPayload.Email)
 
 	if existingUser != nil {
-		log.Error().Err(error).Str("email", requestPayload.Email).Msg("User already exists")
-		response.Error(w, http.StatusBadRequest, "User already exists")
+		log.Error().Err(err).Str("email", requestPayload.Email).Msg("User already exists")
+		err := response.Error(w, http.StatusBadRequest, "User already exists")
+		if err != nil {
+			return
+		}
 		return
 	}
 
 	encodedHash, err := auth.HashPassword(requestPayload.Password)
 	if err != nil {
 		log.Error().Err(err).Msg("❌ Failed to hash password")
-		response.Error(w, http.StatusInternalServerError, "Invalid password")
+		err := response.Error(w, http.StatusInternalServerError, "Invalid password")
+		if err != nil {
+			return
+		}
 		return
 	}
 

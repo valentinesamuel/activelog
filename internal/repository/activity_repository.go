@@ -85,7 +85,7 @@ func (ar *ActivityRepository) Create(ctx context.Context, tx TxConn, activity *m
 
 func (ar *ActivityRepository) GetByID(ctx context.Context, id int64) (*models.Activity, error) {
 	query := `
-		SELECT id, user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date, created_at, updated_at
+		SELECT id, user_id, activity_type, title, description, duration_minutes, distance_km, calories_burned, notes, activity_date, created_at, updated_at, deleted_at
 		FROM activities
 		WHERE id = $1
 	`
@@ -105,6 +105,7 @@ func (ar *ActivityRepository) GetByID(ctx context.Context, id int64) (*models.Ac
 		&activity.ActivityDate,
 		&activity.CreatedAt,
 		&activity.UpdatedAt,
+		&activity.DeletedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -127,7 +128,7 @@ func (ar *ActivityRepository) GetByID(ctx context.Context, id int64) (*models.Ac
 func (ar *ActivityRepository) ListByUser(ctx context.Context, UserID int) ([]*models.Activity, error) {
 	query := `
 		SELECT id, user_id, activity_type, title, description, duration_minutes,
-			distance_km, calories_burned, notes, activity_date, created_at, updated_at
+			distance_km, calories_burned, notes, activity_date, created_at, updated_at, deleted_at
 		FROM activities
 		WHERE user_id = $1
 		ORDER BY activity_date DESC
@@ -157,6 +158,7 @@ func (ar *ActivityRepository) ListByUser(ctx context.Context, UserID int) ([]*mo
 			&activity.ActivityDate,
 			&activity.CreatedAt,
 			&activity.UpdatedAt,
+			&activity.DeletedAt,
 		)
 
 		if err != nil {
@@ -174,7 +176,6 @@ func (ar *ActivityRepository) ListByUser(ctx context.Context, UserID int) ([]*mo
 
 	return activities, nil
 }
-
 
 func (ar *ActivityRepository) Count(userID int) (int, error) {
 	var count int
@@ -220,7 +221,8 @@ func (ar *ActivityRepository) Update(ctx context.Context, tx TxConn, id int, act
 // Delete deletes an activity
 // tx is optional - if nil, uses direct DB connection; if provided, uses the transaction
 func (ar *ActivityRepository) Delete(ctx context.Context, tx TxConn, id int, userID int) error {
-	query := "DELETE FROM activities WHERE id = $1 AND user_id = $2"
+	// query := "DELETE FROM activities WHERE id = $1 AND user_id = $2"
+	query := "UPDATE activities set deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2"
 
 	// Use helper - automatically chooses tx or db
 	result, err := ExecInTx(ctx, tx, ar.db, query, id, userID)
@@ -391,6 +393,7 @@ func (ar *ActivityRepository) scanActivity(rows *sql.Rows) (*models.Activity, er
 		&activity.ActivityDate,
 		&activity.CreatedAt,
 		&activity.UpdatedAt,
+		&activity.DeletedAt,
 	)
 	return activity, err
 }
@@ -405,24 +408,25 @@ func (ar *ActivityRepository) scanActivity(rows *sql.Rows) (*models.Activity, er
 //   - order[tags.name]=ASC → Automatically JOINs and orders by tag name
 //
 // Example usage in handler:
-//   opts := &query.QueryOptions{
-//       Page: 1,
-//       Limit: 20,
-//       Filter: map[string]interface{}{
-//           "activity_type": "running",
-//           "user_id": 123,
-//           "tags.name": "cardio",  // Natural column name - auto-JOINs!
-//       },
-//       Search: map[string]interface{}{
-//           "title": "morning",
-//           "tags.name": "run",     // Auto-JOINs for search too!
-//       },
-//       Order: map[string]string{
-//           "created_at": "DESC",
-//           "tags.name": "ASC",     // Auto-JOINs for ordering!
-//       },
-//   }
-//   result, err := repo.ListActivitiesWithQuery(ctx, opts)
+//
+//	opts := &query.QueryOptions{
+//	    Page: 1,
+//	    Limit: 20,
+//	    Filter: map[string]interface{}{
+//	        "activity_type": "running",
+//	        "user_id": 123,
+//	        "tags.name": "cardio",  // Natural column name - auto-JOINs!
+//	    },
+//	    Search: map[string]interface{}{
+//	        "title": "morning",
+//	        "tags.name": "run",     // Auto-JOINs for search too!
+//	    },
+//	    Order: map[string]string{
+//	        "created_at": "DESC",
+//	        "tags.name": "ASC",     // Auto-JOINs for ordering!
+//	    },
+//	}
+//	result, err := repo.ListActivitiesWithQuery(ctx, opts)
 func (ar *ActivityRepository) ListActivitiesWithQuery(
 	ctx context.Context,
 	opts *query.QueryOptions,

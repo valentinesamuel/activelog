@@ -42,16 +42,11 @@ func TestE2E_ListActivities_DynamicFiltering(t *testing.T) {
 	listActivitiesUC := usecases.NewListActivitiesUseCase(nil, activityRepo)
 
 	// Create handler
-	handler := handlers.NewActivityHandler(
-		brokerInstance,
-		activityRepo,
-		nil, // createActivityUC - not needed for these tests
-		nil, // getActivityUC - not needed for these tests
-		listActivitiesUC,
-		nil, // updateActivityUC - not needed for these tests
-		nil, // deleteActivityUC - not needed for these tests
-		nil, // getActivityStatsUC - not needed for these tests
-	)
+	handler := handlers.NewActivityHandler(handlers.ActivityHandlerDeps{
+		Broker:           brokerInstance,
+		Repo:             activityRepo,
+		ListActivitiesUC: listActivitiesUC,
+	})
 
 	// Create test user
 	userID := createE2ETestUser(t, db, "e2e@example.com", "e2euser")
@@ -335,11 +330,11 @@ func TestE2E_ListActivities_WithRouter(t *testing.T) {
 	brokerInstance := broker.NewBroker(db.GetRawDB())
 	listActivitiesUC := usecases.NewListActivitiesUseCase(nil, activityRepo)
 
-	handler := handlers.NewActivityHandler(
-		brokerInstance,
-		activityRepo,
-		nil, nil, listActivitiesUC, nil, nil, nil,
-	)
+	handler := handlers.NewActivityHandler(handlers.ActivityHandlerDeps{
+		Broker:           brokerInstance,
+		Repo:             activityRepo,
+		ListActivitiesUC: listActivitiesUC,
+	})
 
 	// Create router (mimic production routing)
 	router := mux.NewRouter()
@@ -445,11 +440,11 @@ func TestE2E_OperatorFiltering_HTTPRequests(t *testing.T) {
 	brokerInstance := broker.NewBroker(db.GetRawDB())
 	listActivitiesUC := usecases.NewListActivitiesUseCase(nil, activityRepo)
 
-	handler := handlers.NewActivityHandler(
-		brokerInstance,
-		activityRepo,
-		nil, nil, listActivitiesUC, nil, nil, nil,
-	)
+	handler := handlers.NewActivityHandler(handlers.ActivityHandlerDeps{
+		Broker:           brokerInstance,
+		Repo:             activityRepo,
+		ListActivitiesUC: listActivitiesUC,
+	})
 
 	// Create test user and data
 	userID := createE2ETestUser(t, db, "operator@example.com", "operatoruser")
@@ -803,12 +798,12 @@ func setupOperatorTestData(t *testing.T, activityRepo *repository.ActivityReposi
 		distance     float64
 		daysAgo      int
 	}{
-		{"running", "Recent Morning Run", 30, 5.0, 1},    // 1 day ago
-		{"running", "Last Week Run", 45, 7.5, 7},         // 7 days ago
-		{"cycling", "Bike Commute", 60, 12.0, 3},         // 3 days ago
-		{"swimming", "Pool Workout", 40, 2.0, 10},        // 10 days ago
-		{"running", "Long Distance Run", 90, 20.0, 14},   // 14 days ago
-		{"yoga", "Morning Yoga", 30, 0.0, 2},             // 2 days ago
+		{"running", "Recent Morning Run", 30, 5.0, 1},  // 1 day ago
+		{"running", "Last Week Run", 45, 7.5, 7},       // 7 days ago
+		{"cycling", "Bike Commute", 60, 12.0, 3},       // 3 days ago
+		{"swimming", "Pool Workout", 40, 2.0, 10},      // 10 days ago
+		{"running", "Long Distance Run", 90, 20.0, 14}, // 14 days ago
+		{"yoga", "Morning Yoga", 30, 0.0, 2},           // 2 days ago
 	}
 
 	for _, act := range activities {

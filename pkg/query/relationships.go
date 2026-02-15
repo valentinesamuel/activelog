@@ -63,12 +63,12 @@ type Relationship struct {
 	TargetPrimaryKey string
 
 	// v3.0: Additional configuration for advanced features
-	Alias           string                 // For self-referential relationships (e.g., "parent_comment")
-	MaxDepth        int                    // Max nesting depth for self-referential (default: 3)
-	PolymorphicType string                 // Type discriminator column (e.g., "commentable_type")
-	PolymorphicID   string                 // ID column (e.g., "commentable_id")
-	PolymorphicMap  map[string]string      // Type -> Table mapping (e.g., "Post" -> "posts")
-	JoinConditions  []AdditionalCondition  // Extra WHERE clauses in JOIN
+	Alias           string                // For self-referential relationships (e.g., "parent_comment")
+	MaxDepth        int                   // Max nesting depth for self-referential (default: 3)
+	PolymorphicType string                // Type discriminator column (e.g., "commentable_type")
+	PolymorphicID   string                // ID column (e.g., "commentable_id")
+	PolymorphicMap  map[string]string     // Type -> Table mapping (e.g., "Post" -> "posts")
+	JoinConditions  []AdditionalCondition // Extra WHERE clauses in JOIN
 }
 
 // AdditionalCondition represents extra conditions in JOIN clauses (v3.0)
@@ -132,13 +132,13 @@ func (rr *RelationshipRegistry) Register(rel Relationship) {
 // ManyToManyRelationship is a helper to create many-to-many relationships
 func ManyToManyRelationship(name, targetTable, junctionTable, junctionForeignKey, junctionTargetKey string) Relationship {
 	return Relationship{
-		Name:                name,
-		Type:                ManyToMany,
-		TargetTable:         targetTable,
-		JunctionTable:       junctionTable,
-		JunctionForeignKey:  junctionForeignKey,
-		JunctionTargetKey:   junctionTargetKey,
-		TargetPrimaryKey:    "id",
+		Name:               name,
+		Type:               ManyToMany,
+		TargetTable:        targetTable,
+		JunctionTable:      junctionTable,
+		JunctionForeignKey: junctionForeignKey,
+		JunctionTargetKey:  junctionTargetKey,
+		TargetPrimaryKey:   "id",
 	}
 }
 
