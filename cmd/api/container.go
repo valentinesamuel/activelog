@@ -9,6 +9,7 @@ import (
 	cacheRegister "github.com/valentinesamuel/activelog/internal/cache/di"
 	"github.com/valentinesamuel/activelog/internal/container"
 	handlerRegister "github.com/valentinesamuel/activelog/internal/handlers/di"
+	queueRegister "github.com/valentinesamuel/activelog/internal/queue/di"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	repositoryRegister "github.com/valentinesamuel/activelog/internal/repository/di"
 	serviceRegister "github.com/valentinesamuel/activelog/internal/service/di"
@@ -28,10 +29,12 @@ func setupContainer(db repository.DBConn) *container.Container {
 	// Register storage provider (uses config globals)
 	storageRegister.RegisterStorage(c)
 	cacheRegister.RegisterCache(c)
+	queueRegister.RegisterQueue(c)
 
 	// Eagerly resolve dependedncies
 	c.MustResolve(storageRegister.StorageProviderKey)
 	c.MustResolve(cacheRegister.CacheProviderKey)
+	c.MustResolve(queueRegister.QueueProviderKey)
 
 	// Register layers in dependency order
 	repositoryRegister.RegisterRepositories(c) // Layer 1: Data access

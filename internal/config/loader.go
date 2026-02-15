@@ -33,6 +33,7 @@ func LoadWithValidation() error {
 	Storage = loadStorage()
 	Cache = loadCache()
 	RateLimit = loadRateLimit()
+	Queue = loadQueue()
 
 	return nil
 }

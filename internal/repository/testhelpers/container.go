@@ -13,11 +13,11 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/valentinesamuel/activelog/pkg/database"
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"github.com/valentinesamuel/activelog/internal/database"
 )
 
 // SetupTestDB creates a PostgreSQL testcontainer and runs migrations
