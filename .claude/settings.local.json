@@ -27,7 +27,9 @@
       "Bash(pkill:*)",
       "Bash(aws:*)",
       "Bash(air -v:*)",
-      "Bash(swag init:*)"
+      "Bash(swag init:*)",
+      "Bash(go vet:*)",
+      "Bash(git log:*)"
     ]
   }
 }

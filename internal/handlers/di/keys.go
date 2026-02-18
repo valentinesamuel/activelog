@@ -7,4 +7,6 @@ const (
 	ActivityHandlerKey      = "activityHandler"
 	StatsHandlerKey         = "statsHandler"
 	ActivityPhotoHandlerKey = "activityPhotoHandler"
+	ExportHandlerKey        = "exportHandler"
+	WebhookHandlerKey      = "webhookHandler"
 )

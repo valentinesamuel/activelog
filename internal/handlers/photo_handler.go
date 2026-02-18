@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
@@ -70,21 +71,52 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		"image/png":  true,
 		"image/webp": true,
 	}
+
+	// Validate file types concurrently using a semaphore (chan struct{} with cap=5).
+	// Each goroutine acquires a slot before opening/inspecting the file, then releases it.
+	sem := make(chan struct{}, 5)
+	type validationErr struct{ err error }
+	validationCh := make(chan validationErr, len(photos))
+
+	var wg sync.WaitGroup
 	for _, photo := range photos {
-		file, err := photo.Open()
-		if err != nil {
-			continue
-		}
+		p := photo // capture loop variable
+		wg.Add(1)
+		sem <- struct{}{} // acquire semaphore slot
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }() // release slot
 
-		contentType, err := utils.DetectFileType(file)
-		file.Close()
+			file, err := p.Open()
+			if err != nil {
+				validationCh <- validationErr{fmt.Errorf("cannot open %s: %w", p.Filename, err)}
+				return
+			}
+			defer file.Close()
 
-		if !allowedTypes[contentType] {
-			response.Error(w, http.StatusBadRequest, "Invalid file format")
+			detectedType, err := utils.DetectFileType(file)
+			if err != nil {
+				validationCh <- validationErr{fmt.Errorf("cannot detect type for %s: %w", p.Filename, err)}
+				return
+			}
+			if !allowedTypes[detectedType] {
+				validationCh <- validationErr{fmt.Errorf("invalid file format for %s", p.Filename)}
+				return
+			}
+
+			logger.Info().Str("file", p.Filename).Str("type", detectedType).Msg("photo validated")
+			validationCh <- validationErr{}
+		}()
+	}
+
+	wg.Wait()
+	close(validationCh)
+
+	for v := range validationCh {
+		if v.err != nil {
+			response.Error(w, http.StatusBadRequest, v.err.Error())
 			return
 		}
-
-		fmt.Printf("File: %s, Type: %s\n", photo.Filename, contentType)
 	}
 
 	// Execute typed use case through broker
