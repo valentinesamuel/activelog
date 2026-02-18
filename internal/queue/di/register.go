@@ -6,16 +6,19 @@ import (
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/queue/asynq"
+	"github.com/valentinesamuel/activelog/internal/queue/memory"
 	"github.com/valentinesamuel/activelog/internal/queue/types"
 )
 
+// RegisterQueue registers the queue provider in the DI container.
 func RegisterQueue(c *container.Container) {
 	c.Register(QueueProviderKey, func(c *container.Container) (interface{}, error) {
 		return createProvider(), nil
 	})
 }
 
-func createProvider() types.QueueProviderKey {
+// createProvider selects a queue backend based on QUEUE_PROVIDER env var.
+func createProvider() types.QueueProvider {
 	switch config.Queue.Provider {
 	case "asynq":
 		provider, err := asynq.New()
@@ -23,11 +26,11 @@ func createProvider() types.QueueProviderKey {
 			log.Printf("Warning: Failed to initialize asynq provider: %v. Queue operations will fail.", err)
 			return nil
 		}
-		log.Printf("🤖 Queue provider initialized: asynq")
+		log.Printf("Queue provider initialized: asynq")
 		return provider
 
 	default:
-		log.Printf("Warning: Unknown queue provider '%s'. Queue operations will fail.", config.Queue.Provider)
-		return nil
+		log.Printf("Queue provider initialized: memory (buffer=100)")
+		return memory.New(100)
 	}
 }

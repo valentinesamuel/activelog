@@ -25,6 +25,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/handlers"
+	handlerDI "github.com/valentinesamuel/activelog/internal/handlers/di"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
@@ -106,11 +107,11 @@ func (app *Application) setupDependencies() {
 	app.RateLimiter = middleware.NewRateLimiter(cache, config.RateLimit)
 
 	// Resolve handlers from container
-	app.HealthHandler = app.Container.MustResolve("healthHandler").(*handlers.HealthHandler)
-	app.ActivityHandler = app.Container.MustResolve("activityHandler").(*handlers.ActivityHandler)
-	app.UserHandler = app.Container.MustResolve("userHandler").(*handlers.UserHandler)
-	app.StatsHandler = app.Container.MustResolve("statsHandler").(*handlers.StatsHandler)
-	app.photoHandler = app.Container.MustResolve("activityPhotoHandler").(*handlers.ActivityPhotoHandler)
+	app.HealthHandler = app.Container.MustResolve(handlerDI.HealthHandlerKey).(*handlers.HealthHandler)
+	app.ActivityHandler = app.Container.MustResolve(handlerDI.ActivityHandlerKey).(*handlers.ActivityHandler)
+	app.UserHandler = app.Container.MustResolve(handlerDI.UserHandlerKey).(*handlers.UserHandler)
+	app.StatsHandler = app.Container.MustResolve(handlerDI.StatsHandlerKey).(*handlers.StatsHandler)
+	app.photoHandler = app.Container.MustResolve(handlerDI.ActivityPhotoHandlerKey).(*handlers.ActivityPhotoHandler)
 }
 
 // setupRoutes configures all application routes and middleware
