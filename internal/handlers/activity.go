@@ -348,6 +348,14 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 	)
 
 	if err != nil {
+		if errors.Is(err, appErrors.ErrUnauthorized) {
+			response.Fail(w, r, http.StatusForbidden, "You do not own this activity")
+			return
+		}
+		if errors.Is(err, appErrors.ErrNotFound) {
+			response.Fail(w, r, http.StatusNotFound, "Activity not found")
+			return
+		}
 		log.Error().Err(err).Msg("Failed to update activity")
 		response.Fail(w, r, http.StatusInternalServerError, "Failed to update activity")
 		return
@@ -391,8 +399,16 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 	)
 
 	if err != nil {
+		if errors.Is(err, appErrors.ErrUnauthorized) {
+			response.Fail(w, r, http.StatusForbidden, "You do not own this activity")
+			return
+		}
+		if errors.Is(err, appErrors.ErrNotFound) {
+			response.Fail(w, r, http.StatusNotFound, "Activity not found")
+			return
+		}
 		log.Error().Err(err).Int("id", id).Msg("Failed to delete activity")
-		response.Fail(w, r, http.StatusNotFound, "Activity not found")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to delete activity")
 		return
 	}
 

@@ -95,7 +95,7 @@ func (s *ActivityService) UpdateActivity(
 
 	// Business Rule 2: Verify ownership
 	if existingActivity.UserID != userID {
-		return nil, fmt.Errorf("unauthorized: activity does not belong to user")
+		return nil, appErrors.ErrUnauthorized
 	}
 
 	// Business Rule 3: Activity date cannot be in the future
@@ -174,7 +174,7 @@ func (s *ActivityService) DeleteActivity(
 
 	// Business Rule 2: Verify ownership
 	if existingActivity.UserID != userID {
-		return fmt.Errorf("unauthorized: activity does not belong to user")
+		return appErrors.ErrUnauthorized
 	}
 
 	// Business Rule 3: Prevent deletion of activities older than 1 year (business policy)

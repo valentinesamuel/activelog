@@ -9,7 +9,6 @@ import (
 	cacheRegister "github.com/valentinesamuel/activelog/internal/cache/di"
 	"github.com/valentinesamuel/activelog/internal/container"
 	emailRegister "github.com/valentinesamuel/activelog/internal/email/di"
-	webhookRegister "github.com/valentinesamuel/activelog/internal/webhook/di"
 	handlerRegister "github.com/valentinesamuel/activelog/internal/handlers/di"
 	queueRegister "github.com/valentinesamuel/activelog/internal/queue/di"
 	"github.com/valentinesamuel/activelog/internal/repository"
@@ -17,6 +16,7 @@ import (
 	schedulerRegister "github.com/valentinesamuel/activelog/internal/scheduler/di"
 	serviceRegister "github.com/valentinesamuel/activelog/internal/service/di"
 	storageRegister "github.com/valentinesamuel/activelog/internal/storage/di"
+	webhookRegister "github.com/valentinesamuel/activelog/internal/webhook/di"
 	"github.com/valentinesamuel/activelog/internal/websocket"
 	"github.com/valentinesamuel/activelog/pkg/query"
 )
@@ -54,9 +54,9 @@ func setupContainer(db repository.DBConn, hub *websocket.Hub) *container.Contain
 	// Eagerly resolve webhook delivery and retry worker (depends on repositories)
 	c.MustResolve(webhookRegister.WebhookDeliveryKey)
 	c.MustResolve(webhookRegister.RetryWorkerKey)
-	serviceRegister.RegisterServices(c)        // Layer 2: Business logic
-	di.RegisterBroker(c)                       // Layer 3: Use case orchestration
-	schedulerRegister.RegisterScheduler(c)     // Scheduler (cron jobs)
+	serviceRegister.RegisterServices(c)    // Layer 2: Business logic
+	di.RegisterBroker(c)                   // Layer 3: Use case orchestration
+	schedulerRegister.RegisterScheduler(c) // Scheduler (cron jobs)
 
 	// Register use cases by domain
 	activityUsecases.RegisterActivityUseCases(c)
@@ -83,13 +83,6 @@ func registerCoreDependencies(c *container.Container, db repository.DBConn, hub 
 // All table registries are registered here for deep nesting support
 func setupRegistryManager() *query.RegistryManager {
 	manager := query.NewRegistryManager()
-
-	// Activities registry will be registered later (needs TagRepository)
-	// See repository.RegisterRepositories() for actual registration
-
-	// Future: Register other table registries here as needed
-	// manager.RegisterTable("users", usersRegistry)
-	// manager.RegisterTable("companies", companiesRegistry)
 
 	return manager
 }

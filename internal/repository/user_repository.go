@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/pkg/errors"
 )
@@ -31,6 +31,9 @@ func (ar *UserRepository) CreateUser(ctx context.Context, user *models.User) err
 	err := ar.db.QueryRowContext(ctx, query, user.Email, user.Username, user.PasswordHash).Scan(&user.Email, &user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			return errors.ErrAlreadyExists
+		}
 		return fmt.Errorf("❌ Error creating user %w", err)
 	}
 
