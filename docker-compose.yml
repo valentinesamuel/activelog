@@ -30,6 +30,7 @@ services:
       - "4510-4559:4510-4559"
     volumes:
       - localstack_data:/var/lib/localstack
+      - ./infra/docker/localstack:/etc/localstack/init/ready.d
     environment:
       - PERSISTENCE=1
       - LAMBDA_PERSISTENCE=1
@@ -41,7 +42,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
 
