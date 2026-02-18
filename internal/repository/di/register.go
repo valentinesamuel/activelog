@@ -61,4 +61,16 @@ func RegisterRepositories(c *container.Container) {
 		db := c.MustResolve(CoreDBKey).(repository.DBConn)
 		return repository.NewStatsRepository(db), nil
 	})
+
+	// Export repository
+	c.Register(ExportRepoKey, func(c *container.Container) (interface{}, error) {
+		db := c.MustResolve(CoreDBKey).(repository.DBConn)
+		return repository.NewExportRepository(db), nil
+	})
+
+	// Webhook repository
+	c.Register(WebhookRepoKey, func(c *container.Container) (interface{}, error) {
+		db := c.MustResolve(CoreDBKey).(repository.DBConn)
+		return repository.NewWebhookRepository(db), nil
+	})
 }

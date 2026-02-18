@@ -10,6 +10,15 @@
 
 ActiveLog is a REST API and web application where users can log any type of physical activity (running, basketball, jump rope, walking, gym workouts, etc.) and view their complete activity history and analytics in one unified platform.
 
+## Universal Rules (MUST FOLLOW)
+
+- **Baby Steps™**: Break tasks into the smallest possible meaningful changes.
+- **Architecutre**: Always stick to the design pattern that we have.
+- **Functionality**: Always make sure that all interactions are functional.   
+- **Agent Spawning**: Always make sure that you do not spawn agents unnecessarily unless you have to edit more than 5 files at once.
+- **Post session Operation**: At the end of every session, make sure that that there are no build errors  in the project
+
+
 ### Why This Project?
 
 - **Learning Goal:** Master Go well enough to build secure, scalable enterprise systems
@@ -273,13 +282,13 @@ See `DEBUGGING.md` for:
 
 #### Key Differences from JavaScript Debugging
 
-| Aspect | JavaScript/Node.js | Go |
-|--------|-------------------|-----|
-| Debugger | Built into Node | Requires Delve installation |
-| VS Code Setup | Often auto-configured | Needs explicit launch.json |
-| Breakpoints | Usually "just work" | May need debug build flags |
-| Performance | Minimal impact | Can be slower (disable optimizations) |
-| Goroutines | N/A | Multiple execution contexts to track |
+| Aspect        | JavaScript/Node.js    | Go                                    |
+| ------------- | --------------------- | ------------------------------------- |
+| Debugger      | Built into Node       | Requires Delve installation           |
+| VS Code Setup | Often auto-configured | Needs explicit launch.json            |
+| Breakpoints   | Usually "just work"   | May need debug build flags            |
+| Performance   | Minimal impact        | Can be slower (disable optimizations) |
+| Goroutines    | N/A                   | Multiple execution contexts to track  |
 
 **Pro Tip:** Set up debugging in Week 1 or 2. You'll use it constantly throughout your Go journey.
 

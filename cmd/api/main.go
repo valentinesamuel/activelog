@@ -24,9 +24,17 @@ import (
 	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/container"
+	"github.com/valentinesamuel/activelog/internal/featureflags"
 	"github.com/valentinesamuel/activelog/internal/handlers"
+	handlerDI "github.com/valentinesamuel/activelog/internal/handlers/di"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	"github.com/valentinesamuel/activelog/internal/scheduler"
+	schedulerDI "github.com/valentinesamuel/activelog/internal/scheduler/di"
+	"github.com/valentinesamuel/activelog/internal/webhook"
+	webhookDI "github.com/valentinesamuel/activelog/internal/webhook/di"
+	webhookTypes "github.com/valentinesamuel/activelog/internal/webhook/types"
+	appwebsocket "github.com/valentinesamuel/activelog/internal/websocket"
 )
 
 // @title ActiveLog API
@@ -44,12 +52,23 @@ type Application struct {
 	DBCloser        interface{ Close() error } // For cleanup during shutdown
 	Container       *container.Container       // DI container
 	Broker          *broker.Broker             // Use case orchestrator
+	Scheduler       *scheduler.Scheduler       // Cron scheduler
 	RateLimiter     *middleware.RateLimiter    // Rate limiting middleware
+	Flags           *featureflags.FeatureFlags
+	FlagMiddleware  *featureflags.Middleware
+	WSHub           *appwebsocket.Hub
+	WSHandler       *appwebsocket.Handler
 	HealthHandler   *handlers.HealthHandler
 	ActivityHandler *handlers.ActivityHandler
 	UserHandler     *handlers.UserHandler
 	StatsHandler    *handlers.StatsHandler
 	photoHandler    *handlers.ActivityPhotoHandler
+	ExportHandler    *handlers.ExportHandler
+	FeaturesHandler  *handlers.FeaturesHandler
+	WebhookHandler   *handlers.WebhookHandler
+	WebhookBus          webhookTypes.WebhookBusProvider
+	WebhookDelivery     *webhook.Delivery
+	WebhookRetryWorker  *webhook.RetryWorker
 }
 
 func main() {
@@ -95,8 +114,17 @@ func run() error {
 // setupDependencies initializes all repositories and handlers using DI container
 // All dependencies are registered and resolved through the centralized container
 func (app *Application) setupDependencies() {
+	// Load feature flags
+	app.Flags = featureflags.Load()
+	app.FlagMiddleware = featureflags.NewMiddleware(app.Flags)
+	app.FeaturesHandler = handlers.NewFeaturesHandler(app.Flags)
+
+	// Create WebSocket hub
+	app.WSHub = appwebsocket.NewHub()
+	app.WSHandler = appwebsocket.NewHandler(app.WSHub)
+
 	// Initialize container with all dependencies
-	app.Container = setupContainer(app.DB)
+	app.Container = setupContainer(app.DB, app.WSHub)
 
 	// Resolve core dependencies from container
 	app.Broker = app.Container.MustResolve(di.BrokerKey).(*broker.Broker)
@@ -105,12 +133,22 @@ func (app *Application) setupDependencies() {
 	cache := app.Container.MustResolve(cacheDI.CacheProviderKey).(cacheTypes.CacheProvider)
 	app.RateLimiter = middleware.NewRateLimiter(cache, config.RateLimit)
 
+	// Resolve scheduler from container
+	app.Scheduler = app.Container.MustResolve(schedulerDI.SchedulerKey).(*scheduler.Scheduler)
+
 	// Resolve handlers from container
-	app.HealthHandler = app.Container.MustResolve("healthHandler").(*handlers.HealthHandler)
-	app.ActivityHandler = app.Container.MustResolve("activityHandler").(*handlers.ActivityHandler)
-	app.UserHandler = app.Container.MustResolve("userHandler").(*handlers.UserHandler)
-	app.StatsHandler = app.Container.MustResolve("statsHandler").(*handlers.StatsHandler)
-	app.photoHandler = app.Container.MustResolve("activityPhotoHandler").(*handlers.ActivityPhotoHandler)
+	app.HealthHandler = app.Container.MustResolve(handlerDI.HealthHandlerKey).(*handlers.HealthHandler)
+	app.ActivityHandler = app.Container.MustResolve(handlerDI.ActivityHandlerKey).(*handlers.ActivityHandler)
+	app.UserHandler = app.Container.MustResolve(handlerDI.UserHandlerKey).(*handlers.UserHandler)
+	app.StatsHandler = app.Container.MustResolve(handlerDI.StatsHandlerKey).(*handlers.StatsHandler)
+	app.photoHandler = app.Container.MustResolve(handlerDI.ActivityPhotoHandlerKey).(*handlers.ActivityPhotoHandler)
+	app.ExportHandler = app.Container.MustResolve(handlerDI.ExportHandlerKey).(*handlers.ExportHandler)
+	app.WebhookHandler = app.Container.MustResolve(handlerDI.WebhookHandlerKey).(*handlers.WebhookHandler)
+
+	// Resolve webhook bus, delivery, and retry worker from container
+	app.WebhookDelivery = app.Container.MustResolve(webhookDI.WebhookDeliveryKey).(*webhook.Delivery)
+	app.WebhookRetryWorker = app.Container.MustResolve(webhookDI.RetryWorkerKey).(*webhook.RetryWorker)
+	app.WebhookBus = app.Container.MustResolve(webhookDI.WebhookBusKey).(webhookTypes.WebhookBusProvider)
 }
 
 // setupRoutes configures all application routes and middleware
@@ -147,6 +185,20 @@ func (app *Application) setupRoutes() http.Handler {
 	// User routes
 	app.registerUserRoutes(api)
 
+	// Export routes
+	app.registerExportRoutes(api)
+
+	// Features route
+	app.registerFeaturesRoutes(api)
+
+	// Webhook routes
+	app.registerWebhookRoutes(api)
+
+	// WebSocket route (protected - JWT via query param or header)
+	wsRouter := router.PathPrefix("/ws").Subrouter()
+	wsRouter.Use(middleware.AuthMiddleware)
+	wsRouter.HandleFunc("", app.WSHandler.ServeWS)
+
 	return router
 }
 
@@ -171,6 +223,8 @@ func (app *Application) registerActivityRoutes(router *mux.Router) {
 
 	activityRouter.HandleFunc("", app.ActivityHandler.ListActivities).Methods("GET")
 	activityRouter.HandleFunc("", app.ActivityHandler.CreateActivity).Methods("POST")
+	activityRouter.HandleFunc("/batch", app.ActivityHandler.BatchCreateActivities).Methods("POST")
+	activityRouter.HandleFunc("/batch", app.ActivityHandler.BatchDeleteActivities).Methods("DELETE")
 	activityRouter.HandleFunc("/stats", app.ActivityHandler.GetStats).Methods("GET")
 	activityRouter.HandleFunc("/{id}", app.ActivityHandler.GetActivity).Methods("GET")
 	activityRouter.HandleFunc("/{id}", app.ActivityHandler.UpdateActivity).Methods("PATCH")
@@ -207,6 +261,35 @@ func (app *Application) registerUserRoutes(router *mux.Router) {
 	userRouter.HandleFunc("/stats/by-type", app.StatsHandler.GetActivityCountByType).Methods("GET")
 }
 
+// registerFeaturesRoutes registers the feature flags endpoint
+func (app *Application) registerFeaturesRoutes(router *mux.Router) {
+	featuresRouter := router.PathPrefix("/features").Subrouter()
+	featuresRouter.Use(middleware.AuthMiddleware)
+	featuresRouter.HandleFunc("", app.FeaturesHandler.GetFeatures).Methods("GET")
+}
+
+// registerWebhookRoutes registers webhook management routes
+func (app *Application) registerWebhookRoutes(router *mux.Router) {
+	webhookRouter := router.PathPrefix("/webhooks").Subrouter()
+	webhookRouter.Use(middleware.AuthMiddleware)
+	webhookRouter.HandleFunc("", app.WebhookHandler.CreateWebhook).Methods("POST")
+	webhookRouter.HandleFunc("", app.WebhookHandler.ListWebhooks).Methods("GET")
+	webhookRouter.HandleFunc("/{id}", app.WebhookHandler.DeleteWebhook).Methods("DELETE")
+}
+
+// registerExportRoutes registers export and job routes
+func (app *Application) registerExportRoutes(router *mux.Router) {
+	exportRouter := router.PathPrefix("/activities/export").Subrouter()
+	exportRouter.Use(middleware.AuthMiddleware)
+	exportRouter.HandleFunc("/csv", app.ExportHandler.ExportCSV).Methods("GET")
+	exportRouter.HandleFunc("/pdf", app.ExportHandler.EnqueuePDFExport).Methods("POST")
+
+	jobRouter := router.PathPrefix("/jobs").Subrouter()
+	jobRouter.Use(middleware.AuthMiddleware)
+	jobRouter.HandleFunc("/{jobId}/status", app.ExportHandler.GetJobStatus).Methods("GET")
+	jobRouter.HandleFunc("/{jobId}/download", app.ExportHandler.GetDownloadURL).Methods("GET")
+}
+
 // newServer creates and configures the HTTP server
 func (app *Application) newServer() *http.Server {
 	return &http.Server{
@@ -223,6 +306,21 @@ func (app *Application) serve(server *http.Server) error {
 	// Create signal channel for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	// Start WebSocket hub event loop
+	go app.WSHub.Run()
+
+	// Subscribe webhook delivery to webhook bus
+	webhookCtx, webhookCancel := context.WithCancel(context.Background())
+	defer webhookCancel()
+	if err := app.WebhookBus.Subscribe(webhookCtx, app.WebhookDelivery.Handle); err != nil {
+		log.Printf("Warning: Failed to subscribe webhook delivery: %v", err)
+	}
+
+	app.WebhookRetryWorker.Start(webhookCtx)
+
+	// Start scheduler
+	app.Scheduler.Start()
 
 	// Start server in goroutine
 	serverErrors := make(chan error, 1)
@@ -262,6 +360,11 @@ func (app *Application) gracefulShutdown(server *http.Server) error {
 	} else {
 		log.Println("✅ All connections closed gracefully")
 	}
+
+	// Stop scheduler
+	log.Println("⏳ Stopping scheduler...")
+	app.Scheduler.Stop()
+	log.Println("✅ Scheduler stopped")
 
 	// Close database connections
 	log.Println("🔌 Closing database connections...")

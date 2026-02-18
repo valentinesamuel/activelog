@@ -7,4 +7,6 @@ const (
 	ActivityPhotoRepoKey = "activityPhotoRepo"
 	UserRepoKey          = "userRepo"
 	StatsRepoKey         = "statsRepo"
+	ExportRepoKey        = "exportRepo"
+	WebhookRepoKey       = "webhookRepo"
 )

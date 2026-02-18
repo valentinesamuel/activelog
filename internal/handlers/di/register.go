@@ -9,8 +9,12 @@ import (
 	"github.com/valentinesamuel/activelog/internal/application/broker/di"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/handlers"
+	queueDI "github.com/valentinesamuel/activelog/internal/queue/di"
+	queueTypes "github.com/valentinesamuel/activelog/internal/queue/types"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	di2 "github.com/valentinesamuel/activelog/internal/repository/di"
+	storageDI "github.com/valentinesamuel/activelog/internal/storage/di"
+	storageTypes "github.com/valentinesamuel/activelog/internal/storage/types"
 )
 
 // RegisterHandlers registers all HTTP handler factories with the container
@@ -68,5 +72,25 @@ func RegisterHandlers(c *container.Container) {
 		getActivityPhotoUC := c.MustResolve(photoUsecasesDI.GetActivityPhotosUCKey).(*photoUsecases.GetActivityPhotoUseCase)
 
 		return handlers.NewActivityPhotoHandler(brokerInstance, repo, uploadActivityPhotoUC, getActivityPhotoUC), nil
+	})
+
+	// Webhook handler
+	c.Register(WebhookHandlerKey, func(c *container.Container) (interface{}, error) {
+		webhookRepo := c.MustResolve(di2.WebhookRepoKey).(*repository.WebhookRepository)
+		return handlers.NewWebhookHandler(webhookRepo), nil
+	})
+
+	// Export handler
+	c.Register(ExportHandlerKey, func(c *container.Container) (interface{}, error) {
+		activityRepo := c.MustResolve(di2.ActivityRepoKey).(repository.ActivityRepositoryInterface)
+		exportRepo := c.MustResolve(di2.ExportRepoKey).(*repository.ExportRepository)
+		queueProvider := c.MustResolve(queueDI.QueueProviderKey).(queueTypes.QueueProvider)
+		storage := c.MustResolve(storageDI.StorageProviderKey).(storageTypes.StorageProvider)
+		return handlers.NewExportHandler(handlers.ExportHandlerDeps{
+			ActivityRepo:  activityRepo,
+			ExportRepo:    exportRepo,
+			QueueProvider: queueProvider,
+			Storage:       storage,
+		}), nil
 	})
 }
