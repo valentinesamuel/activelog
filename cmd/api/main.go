@@ -29,8 +29,12 @@ import (
 	handlerDI "github.com/valentinesamuel/activelog/internal/handlers/di"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	repoDI "github.com/valentinesamuel/activelog/internal/repository/di"
 	"github.com/valentinesamuel/activelog/internal/scheduler"
 	schedulerDI "github.com/valentinesamuel/activelog/internal/scheduler/di"
+	"github.com/valentinesamuel/activelog/internal/webhook"
+	webhookDI "github.com/valentinesamuel/activelog/internal/webhook/di"
+	webhookTypes "github.com/valentinesamuel/activelog/internal/webhook/types"
 	appwebsocket "github.com/valentinesamuel/activelog/internal/websocket"
 )
 
@@ -60,8 +64,11 @@ type Application struct {
 	UserHandler     *handlers.UserHandler
 	StatsHandler    *handlers.StatsHandler
 	photoHandler    *handlers.ActivityPhotoHandler
-	ExportHandler   *handlers.ExportHandler
-	FeaturesHandler *handlers.FeaturesHandler
+	ExportHandler    *handlers.ExportHandler
+	FeaturesHandler  *handlers.FeaturesHandler
+	WebhookHandler   *handlers.WebhookHandler
+	WebhookBus       webhookTypes.WebhookBusProvider
+	WebhookDelivery  *webhook.Delivery
 }
 
 func main() {
@@ -136,6 +143,12 @@ func (app *Application) setupDependencies() {
 	app.StatsHandler = app.Container.MustResolve(handlerDI.StatsHandlerKey).(*handlers.StatsHandler)
 	app.photoHandler = app.Container.MustResolve(handlerDI.ActivityPhotoHandlerKey).(*handlers.ActivityPhotoHandler)
 	app.ExportHandler = app.Container.MustResolve(handlerDI.ExportHandlerKey).(*handlers.ExportHandler)
+	app.WebhookHandler = app.Container.MustResolve(handlerDI.WebhookHandlerKey).(*handlers.WebhookHandler)
+
+	// Resolve webhook bus and delivery
+	webhookRepo := app.Container.MustResolve(repoDI.WebhookRepoKey).(*repository.WebhookRepository)
+	app.WebhookDelivery = webhook.NewDelivery(webhookRepo)
+	app.WebhookBus = app.Container.MustResolve(webhookDI.WebhookBusKey).(webhookTypes.WebhookBusProvider)
 }
 
 // setupRoutes configures all application routes and middleware
@@ -177,6 +190,9 @@ func (app *Application) setupRoutes() http.Handler {
 
 	// Features route
 	app.registerFeaturesRoutes(api)
+
+	// Webhook routes
+	app.registerWebhookRoutes(api)
 
 	// WebSocket route (protected - JWT via query param or header)
 	wsRouter := router.PathPrefix("/ws").Subrouter()
@@ -252,6 +268,15 @@ func (app *Application) registerFeaturesRoutes(router *mux.Router) {
 	featuresRouter.HandleFunc("", app.FeaturesHandler.GetFeatures).Methods("GET")
 }
 
+// registerWebhookRoutes registers webhook management routes
+func (app *Application) registerWebhookRoutes(router *mux.Router) {
+	webhookRouter := router.PathPrefix("/webhooks").Subrouter()
+	webhookRouter.Use(middleware.AuthMiddleware)
+	webhookRouter.HandleFunc("", app.WebhookHandler.CreateWebhook).Methods("POST")
+	webhookRouter.HandleFunc("", app.WebhookHandler.ListWebhooks).Methods("GET")
+	webhookRouter.HandleFunc("/{id}", app.WebhookHandler.DeleteWebhook).Methods("DELETE")
+}
+
 // registerExportRoutes registers export and job routes
 func (app *Application) registerExportRoutes(router *mux.Router) {
 	exportRouter := router.PathPrefix("/activities/export").Subrouter()
@@ -284,6 +309,13 @@ func (app *Application) serve(server *http.Server) error {
 
 	// Start WebSocket hub event loop
 	go app.WSHub.Run()
+
+	// Subscribe webhook delivery to webhook bus
+	webhookCtx, webhookCancel := context.WithCancel(context.Background())
+	defer webhookCancel()
+	if err := app.WebhookBus.Subscribe(webhookCtx, app.WebhookDelivery.Handle); err != nil {
+		log.Printf("Warning: Failed to subscribe webhook delivery: %v", err)
+	}
 
 	// Start scheduler
 	app.Scheduler.Start()

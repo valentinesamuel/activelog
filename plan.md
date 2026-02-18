@@ -1,382 +1,285 @@
-# Implementation Plan: Month 6 + Month 7 Features
+# Webhook Delivery: Async + Persistence + Retry (Redis Streams + NATS)
 
 ## Context
 
-The todo.md lists 4 work areas to complete:
-1. **Queue System** – fully functional inbox/outbox queues using asynq with a consumer factory pattern
-2. **Email Adapter** – pluggable email provider (SMTP/SendGrid/etc) mirroring the existing storage adapter pattern
-3. **Cron** – scheduled tasks per Week 23 of month6.md (daily stats, weekly emails, monthly reports, cleanup)
-4. **Month 7 extras** – webhook support, CSV export, PDF export, concurrency patterns
+The current webhook system uses Redis pub/sub (no durability — messages are lost if no subscriber is active at publish time) and delivers webhooks **synchronously** inside the subscriber goroutine, blocking event processing while HTTP calls are in flight. There is no audit trail; if the app crashes mid-delivery, all in-flight work is lost. Retry logic only exists in memory (3 short attempts: 1s/2s/4s).
 
-Current state of queue code is broken: `internal/queue/di/register.go:18` returns `types.QueueProviderKey` which does not exist in the types package (compile error introduced after the rename commit). The `asynq.Provider.New()` also closes its client immediately, which is a bug.
-
-Libraries already in go.mod: `github.com/hibiken/asynq v0.26.0`, `github.com/robfig/cron/v3 v3.0.1`, `github.com/redis/go-redis/v9`.
+**Goals:**
+1. Replace Redis pub/sub with **two durable providers**: Redis Streams (XADD/XREADGROUP/XACK) and **NATS JetStream** (pull consumer with Ack/Nak).
+2. Make HTTP delivery **asynchronous** — subscriber returns immediately after creating DB records.
+3. Persist every delivery attempt in a `webhook_deliveries` table (audit trail + crash recovery).
+4. Retry with **exponential backoff** (1m → 5m → 30m → 2h → 24h, max 5 attempts) via a polling retry worker.
 
 ---
 
-## Phase 1: Queue System (Complete & Redesign)✅
-
-### Goal
-Enable `queueAdapter.Enqueue(ctx, queue, payload)` from anywhere. Multiple provider backends selectable via `QUEUE_PROVIDER` env var. Two providers: `asynq` (Redis-backed, distributed) and `memory` (in-process, for dev/tests).
-
-### Interface (`internal/queue/types/types.go`) [MODIFY]
-- Remove `EmailTask` struct
-- Add `QueueName` type + constants: `InboxQueue = "inbox"`, `OutboxQueue = "outbox"`
-- Add `EventType` type + constants for inbox: `EventWelcomeEmail`, `EventWeeklySummary`, `EventGenerateExport`, `EventSendVerificationEmail`; for outbox: `EventActivityCreated`, `EventActivityDeleted`
-- Add `JobPayload { Event EventType; Data json.RawMessage }`
-- Redesign `QueueProvider` interface:
-  ```go
-  type QueueProvider interface {
-      Enqueue(ctx context.Context, queue QueueName, payload JobPayload) (taskID string, err error)
-  }
-  ```
-
-### Provider: Asynq (`internal/queue/asynq/provider.go`) [MODIFY]
-- Fix `New()`: do not close client immediately (current bug)
-- Implement `Enqueue()`: marshal payload to JSON, `client.EnqueueContext(ctx, asynq.NewTask(string(event), data), asynq.Queue(string(queue)), asynq.MaxRetry(3))`
-- Add `NewWorkerServer(redisAddr string, concurrency int) *asynq.Server`
-
-### Provider: In-Memory (`internal/queue/memory/provider.go`) [CREATE]
-- Buffered channel per queue: `jobs map[QueueName]chan JobPayload`
-- `New(bufferSize int) *Provider`
-- `Enqueue()`: non-blocking send to channel; returns error if channel full
-- `StartWorking(ctx, queue QueueName, handler func(ctx, JobPayload) error)`: background goroutine draining the channel; stops on ctx cancel
-- Suitable for tests and local dev (no Redis required)
-
-### DI (`internal/queue/di/register.go`) [MODIFY]
-- Fix broken return type `types.QueueProviderKey` → `types.QueueProvider`
-- Factory: `QUEUE_PROVIDER=asynq` → asynq provider; `QUEUE_PROVIDER=memory` (default) → memory provider
-
-### Job Layer
-**`internal/jobs/types.go`** [CREATE]
-- Payload structs: `WelcomeEmailPayload{UserID, Email, Name}`, `WeeklySummaryPayload{UserID}`, `ExportPayload{UserID, Format}`
-
-**`internal/jobs/handlers.go`** [CREATE]
-- `HandleWelcomeEmail(ctx, payload) error` – call email provider
-- `HandleWeeklySummary(ctx, payload) error` – fetch stats, send email
-- `HandleGenerateExport(ctx, payload) error` – generate CSV/PDF, upload S3, update export record
-
-**`internal/jobs/factory.go`** [CREATE]
-- `HandlerFactory { handlers map[EventType]func(ctx, JobPayload) error }`
-- `Register(event, handlerFn)` / `Dispatch(ctx, payload) error`
-- Provider-agnostic: works with both asynq worker mux and memory provider's `StartWorking`
-
-**`cmd/worker/main.go`** [CREATE]
-- Separate worker binary; initializes DI container, builds factory, starts asynq server (`critical:6, default:3, low:1`)
-- When `QUEUE_PROVIDER=memory`, skip asynq server and call `memProvider.StartWorking` per queue
-- Graceful shutdown on `SIGTERM`
-
----
-
-## Phase 2: Email Provider (Mirror Storage Pattern)✅
-
-### Goal
-`emailProvider.Send(ctx, input)` works regardless of backend (SMTP, SendGrid, noop).
-
-### Changes
-
-**`internal/config/email.go`** [CREATE]
-- `EmailConfigType { Provider, SMTPHost, SMTPPort, SMTPUser, SMTPPass, From string }`
-- Load from env vars: `EMAIL_PROVIDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`
-
-**`internal/config/schema.go`** [MODIFY]
-- Add `Email *EmailConfigType` field; call `loadEmail()` in `MustLoad()`
-
-**`internal/email/types/types.go`** [CREATE]
-- `EmailProvider` interface: `Send(ctx, input SendEmailInput) error`
-- `SendEmailInput { To, From, Subject, HTMLBody, TextBody string }`
-
-**`internal/email/smtp/provider.go`** [CREATE]
-- Uses `gopkg.in/gomail.v2` (add to go.mod)
-- `New(config) (*Provider, error)`, `Send(ctx, input) error`
-
-**`internal/email/noop/provider.go`** [CREATE]
-- No-op implementation for testing/dev that logs instead of sending
-
-**`internal/email/templates/`** [CREATE]
-- `welcome.html`, `weekly_summary.html`, `verification.html` (HTML templates)
-- `template_data.go` – structs for template data
-
-**`internal/email/di/register.go` + `keys.go`** [CREATE]
-- Factory following storage DI pattern; selects smtp vs noop based on `config.Email.Provider`
-- `EmailProviderKey = "EmailProvider"`
-
-**`cmd/api/container.go`** [MODIFY]
-- Call `emailRegister.RegisterEmail(c)` and eagerly resolve it
-
----
-
-## Phase 3: Cron / Scheduler (Week 23)✅
-
-### Goal
-Scheduled background tasks using `robfig/cron/v3` (already in go.mod).
-
-### Changes
-
-**`migrations/007_create_daily_stats.up.sql`** [CREATE]
-- Table: `daily_stats(id, user_id, date, total_activities, total_distance_km, total_duration_minutes, created_at)`
-
-**`internal/scheduler/scheduler.go`** [CREATE]
-- `Scheduler { cron *cron.Cron }` wrapping `cron.New(cron.WithLocation(time.UTC))`
-- `NewScheduler(statsCalc, cleanup, emailSvc, jobQueue) *Scheduler`
-- `Start()` / `Stop()` methods
-- Registered jobs:
-  - `"0 0 * * *"` → `statsCalc.CalculateDailyStats(ctx)`
-  - `"0 9 * * 0"` → enqueue weekly summary jobs for all active users via `jobQueue.Enqueue`
-  - `"0 0 1 * *"` → enqueue monthly report generation per user
-  - `"0 2 * * *"` → `cleanup.DeleteOldData(ctx)`
-
-**`internal/services/stats_calculator.go`** [CREATE]
-- `CalculateDailyStats(ctx) error` – aggregates previous day's activities per user, writes to `daily_stats`
-
-**`internal/services/cleanup_service.go`** [CREATE]
-- `DeleteOldData(ctx) error` – hard-deletes soft-deleted records older than 30 days
-
-**`cmd/api/main.go`** [MODIFY]
-- Resolve scheduler dependencies from container, call `scheduler.Start()` in `run()`, call `scheduler.Stop()` in `gracefulShutdown()`
-
----
-
-## Phase 4: Export Features (Week 24)✅
-
-### Goal
-CSV streaming download + async PDF export backed by S3.
-
-### Changes
-
-**`migrations/008_create_exports.up.sql`** [CREATE]
-- Table: `exports(id uuid, user_id, format, status, s3_key, error_message, created_at, completed_at)`
-
-**`internal/export/types.go`** [CREATE]
-- `ExportFormat` enum: `CSV`, `PDF`
-- `ExportStatus` enum: `Pending`, `Processing`, `Completed`, `Failed`
-
-**`internal/export/csv_exporter.go`** [CREATE]
-- `ExportActivitiesCSV(ctx, userID int, w io.Writer) error`
-- Streams rows via `encoding/csv` – no full dataset in memory
-
-**`internal/export/pdf_exporter.go`** [CREATE]
-- `GenerateActivityReport(ctx, userID int) ([]byte, error)`
-- Uses `github.com/jung-kurt/gofpdf` (add to go.mod if not present)
-- Sections: title, user info, summary stats table, activity list
-
-**`internal/repository/export_repository.go`** [CREATE]
-- `Create`, `UpdateStatus`, `GetByID`, `ListByUser` for export records
-
-**`internal/handlers/export_handler.go`** [CREATE]
-- `GET /api/v1/activities/export/csv` – direct streaming CSV
-- `POST /api/v1/activities/export/pdf` – enqueue PDF job, return `job_id`
-- `GET /api/v1/jobs/{jobId}/status` – poll job status
-- `GET /api/v1/jobs/{jobId}/download` – redirect to S3 presigned URL
-
-**`cmd/api/main.go`** [MODIFY]
-- Register export routes in `registerActivityRoutes`
-
----
-
-## Phase 5: Concurrency Patterns (Month 7)✅
-
-### Goal
-Apply goroutines/channels/sync patterns to existing services; add batch endpoints; build reusable worker pool.
-
-### Changes
-
-**`pkg/workers/pool.go`** [CREATE]
-- Generic `WorkerPool[J, R any]` using buffered job/result channels + `sync.WaitGroup`
-- `New(numWorkers int) *WorkerPool[J, R]`
-- `Submit(jobs []J, fn func(J) R) []R`
-
-**`internal/service/stats_service.go`** [MODIFY]
-- Add `CalculateUserStatsConcurrent(ctx, userID int) (*Stats, error)`
-- Launch 4 goroutines (total activities, distance, duration, streak), collect via buffered channel
-
-**`internal/handlers/activity.go`** [MODIFY]
-- Add `BatchCreateActivities` handler: `POST /api/v1/activities/batch`
-- Add `BatchDeleteActivities` handler: `DELETE /api/v1/activities/batch`
-- Both use `pkg/workers.WorkerPool` for parallel processing
-
-**`internal/handlers/photo_handler.go`** [MODIFY]
-- Refactor multi-photo upload to use semaphore pattern (`chan struct{}` with cap=5)
-
-**`pkg/cache/memory_cache.go`** [CREATE]
-- `MemoryCache` with `sync.RWMutex`, TTL support
-- `Get(key)`, `Set(key, value, ttl)`, `Delete(key)`, `Flush()`
-
----
-
-## Phase 6: WebSocket Hub (Real-time Notifications)✅
-
-### Goal
-Real-time push notifications to connected clients (friend requests, likes, comments, activity events).
-
-### Changes
-
-**`internal/websocket/hub.go`** [CREATE]
-- `Hub { clients map[int]*Client; broadcast chan Message; register chan *Client; unregister chan *Client; mu sync.RWMutex }`
-- `NewHub() *Hub`
-- `Run()` – event loop: registers/unregisters clients, broadcasts messages; uses `select` over the 3 channels
-- `SendToUser(userID int, msgType string, payload any)` – targeted delivery; acquires RLock, writes to client's send channel
-
-**`internal/websocket/client.go`** [CREATE]
-- `Client { hub *Hub; conn *websocket.Conn; userID int; send chan []byte }`
-- `readPump()` – reads from WebSocket connection; defers unregister + close on exit
-- `writePump()` – reads from `send` channel and writes to WebSocket; sends ping every 54s via `time.NewTicker`; handles close gracefully
-
-**`internal/websocket/types.go`** [CREATE]
-- `Message { Type, UserID string; Payload any; Timestamp time.Time }`
-- Message type constants: `MsgFriendRequest`, `MsgFriendAccepted`, `MsgActivityLiked`, `MsgActivityComment`
-
-**`internal/websocket/handler.go`** [CREATE]
-- `ServeWS(w, r)` – upgrades HTTP to WebSocket using `gorilla/websocket` upgrader (need `go get github.com/gorilla/websocket`)
-- Extracts `userID` from JWT context, creates `Client`, registers with hub, launches `readPump`/`writePump` goroutines
-
-**`cmd/api/main.go`** [MODIFY]
-- Initialize `hub := websocket.NewHub()`; `go hub.Run()` in `run()`
-- Register `GET /ws` route → `hub.ServeWS`
-- Register hub in DI container so services can call `hub.SendToUser`
-
-**`cmd/api/container.go`** [MODIFY]
-- Register `WebSocketHubKey` singleton in container
-
-### Note
-The hub is intentionally single-instance (in-process). For multi-instance deployments, replace the in-process hub with Redis pub/sub to fan out to all instances — but this is a later concern.
-
----
-
-## Phase 7: Feature Flags✅
-
-### Goal
-Env-var-driven feature toggles with middleware, enabling gradual rollouts and kill switches without deploys.
-
-### Changes
-
-**`internal/featureflags/flags.go`** [CREATE]
-- `FeatureFlags { EnableComments, EnableLikes, EnableFriends, EnableWebhooks, EnableFeed bool }`
-- `Load() *FeatureFlags` – reads from env vars (`FEATURE_COMMENTS=enabled`, etc.)
-- `IsEnabled(userID int, feature string) bool` – checks flag; supports future per-user percentage rollouts via consistent hashing
-
-**`internal/featureflags/middleware.go`** [CREATE]
-- `Middleware struct { flags *FeatureFlags }`
-- `Check(feature string) func(http.Handler) http.Handler` – returns 403 with `{"error": "feature_not_available"}` if flag is off
-
-**`internal/handlers/features_handler.go`** [CREATE]
-- `GET /api/v1/features` – returns current flag state for the requesting user
-
-**`cmd/api/main.go`** [MODIFY]
-- Load feature flags on startup; wire `featureflags.Middleware` into routes that require them (friends, comments, likes endpoints)
-
----
-
-## Phase 8: Webhook System (Provider Pattern)
-
-### Goal
-Outgoing webhooks with a pluggable event-bus backend. The event-bus (how webhook events are fanned out internally) is provider-switchable via `WEBHOOK_PROVIDER` env var. Two providers: `memory` (in-process channels) and `redis` (Redis pub/sub for multi-instance).
-
-### Interface (`internal/webhook/types/types.go`) [CREATE]
-```go
-// WebhookEvent is the internal event published when something happens
-type WebhookEvent struct {
-    EventType string
-    UserID    int
-    Payload   json.RawMessage
-    Timestamp time.Time
-}
-
-// WebhookBusProvider is the event-bus that fans events to subscribers
-type WebhookBusProvider interface {
-    Publish(ctx context.Context, event WebhookEvent) error
-    Subscribe(ctx context.Context, handler func(ctx context.Context, event WebhookEvent)) error
-}
+## New Architecture
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         WEBHOOK DELIVERY SYSTEM                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  Activity Handler
+       │
+       │  broker.Publish(event)
+       ▼
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                       WebhookBusProvider interface                      │
+  │                  Publish(ctx, event) / Subscribe(ctx, handler)          │
+  └──────────┬──────────────────────────────────┬───────────────────────────┘
+             │                                  │
+    WEBHOOK_PROVIDER=redis             WEBHOOK_PROVIDER=nats
+             │                                  │
+             ▼                                  ▼
+  ┌──────────────────────┐          ┌───────────────────────────┐
+  │   Redis Streams      │          │   NATS JetStream          │
+  │                      │          │                           │
+  │  XADD webhook:events │          │  js.Publish("webhook.     │
+  │  XREADGROUP GROUP    │          │    events", data)         │
+  │    webhook-delivery  │          │  sub.Fetch(10)            │
+  │  XACK <msg-id>       │          │  msg.Ack()                │
+  └──────────┬───────────┘          └───────────┬───────────────┘
+             │                                  │
+             └───────────────┬──────────────────┘
+                             │
+                             │  handler(ctx, event)
+                             ▼
+               ┌─────────────────────────────┐
+               │         Delivery.Handle()   │
+               │                             │
+               │  1. ListByEvent(eventType)  │
+               │  2. For each webhook:       │
+               │     CreateDelivery(DB)  ────┼──► webhook_deliveries table
+               │     go dispatchAsync()  ────┼──► goroutine (non-blocking)
+               │  3. Return immediately      │
+               │     (XACK / msg.Ack sent)   │
+               └─────────────────────────────┘
+                             │
+                ┌────────────┴────────────┐
+                │                         │
+                ▼                         ▼
+          HTTP 2xx                   HTTP error / timeout
+                │                         │
+     MarkDeliverySucceeded       MarkDeliveryFailed
+      (status=succeeded)          (status=failed,
+                                   next_retry_at=now+delay)
+                                         │
+                             ┌───────────┴───────────┐
+                             │     RetryWorker        │
+                             │                        │
+                             │  Polls every 30s       │
+                             │  ListPendingRetries()  │
+                             │   WHERE next_retry_at  │
+                             │     <= NOW()           │
+                             │  go retryDelivery()    │
+                             └───────────────────────┘
+
+  BACKOFF SCHEDULE:
+  ┌──────────┬────────────────────┬──────────────────────────────────┐
+  │ Attempt  │  Delay             │  Status after failure            │
+  ├──────────┼────────────────────┼──────────────────────────────────┤
+  │ 1st      │ 1 minute           │ failed, next_retry_at = now+1m   │
+  │ 2nd      │ 5 minutes          │ failed, next_retry_at = now+5m   │
+  │ 3rd      │ 30 minutes         │ failed, next_retry_at = now+30m  │
+  │ 4th      │ 2 hours            │ failed, next_retry_at = now+2h   │
+  │ 5th      │ 24 hours           │ failed, next_retry_at = now+24h  │
+  │ after 5  │ —                  │ exhausted (terminal, no retry)   │
+  └──────────┴────────────────────┴──────────────────────────────────┘
+
+  PROVIDERS (selected via WEBHOOK_PROVIDER env var):
+  ┌──────────────┬─────────────────┬──────────────┬───────────────────────┐
+  │ Provider     │ Durability      │ Multi-node   │ Dev dependency        │
+  ├──────────────┼─────────────────┼──────────────┼───────────────────────┤
+  │ memory       │ None (dev only) │ No           │ None                  │
+  │ redis        │ Yes (streams)   │ Yes (groups) │ Redis already present │
+  │ nats         │ Yes (JetStream) │ Yes (pull)   │ Add nats.go           │
+  └──────────────┴─────────────────┴──────────────┴───────────────────────┘
 ```
 
-### Provider: In-Process (`internal/webhook/memory/provider.go`) [CREATE]
-- `Provider { ch chan WebhookEvent; mu sync.RWMutex; handlers []func(ctx, WebhookEvent) }`
-- `Publish()`: sends to buffered channel (non-blocking)
-- `Subscribe()`: starts a goroutine reading from the channel, calls registered handlers
-- Suitable for single-instance deploys and tests
+---
 
-### Provider: Redis Pub/Sub (`internal/webhook/redis/provider.go`) [CREATE]
-- Uses `redis/go-redis/v9` (already in go.mod)
-- `Publish()`: `rdb.Publish(ctx, "webhook:events", jsonMarshal(event))`
-- `Subscribe()`: `rdb.Subscribe(ctx, "webhook:events")` in a goroutine; JSON-unmarshal each message and call handlers
-- Suitable for multi-instance deploys (all instances share the same Redis channel)
+## Key Design Decisions
 
-### DI (`internal/webhook/di/register.go` + `keys.go`) [CREATE]
-- `WEBHOOK_PROVIDER=memory` → memory provider; `WEBHOOK_PROVIDER=redis` → redis provider
-- `WebhookBusKey = "WebhookBus"`
+**XACK / msg.Ack() timing:** Sent after `Handle()` returns (after DB delivery records are written, before HTTP completes). The DB is the source of truth for retry state. The stream stays clean; crashes are recovered by the retry worker polling `status IN ('pending','failed')`.
 
-### Webhook Delivery (`internal/webhook/delivery.go`) [CREATE]
-- Called by the subscriber goroutine after receiving an event
-- Looks up registered webhooks for the event type from `webhook_repository`
-- For each matching webhook: HTTP POST with HMAC-SHA256 `X-Webhook-Signature` header (using webhook's secret)
-- Retries up to 3 times with exponential backoff on non-2xx responses
+**Malformed messages:** ACK'd and dropped immediately (non-retryable at stream level).
 
-### Database
-**`migrations/009_create_webhooks.up.sql`** [CREATE]
-- `webhooks(id uuid, user_id, url, events text[], secret, active, created_at)`
+**Retry worker vs. asynq:** The polling worker reads DB state directly, making crash recovery automatic — no separate queue message needed. 30-second poll interval gives adequate freshness given delays are in minutes/hours.
 
-**`internal/repository/webhook_repository.go`** [CREATE]
-- `Create`, `Delete`, `ListByUserID`, `ListByEvent(eventType) []*Webhook`
-
-### API
-**`internal/handlers/webhook_handler.go`** [CREATE]
-- `POST /api/v1/webhooks` – register webhook URL
-- `GET /api/v1/webhooks` – list user's webhooks
-- `DELETE /api/v1/webhooks/{id}` – delete webhook
-
-### Integration
-**`internal/application/activity/usecases/create_activity.go`** [MODIFY]
-- After activity created: `webhookBus.Publish(ctx, WebhookEvent{EventType: "activity.created", ...})`
-
-**`cmd/api/main.go`** [MODIFY]
-- Initialize webhook bus from DI container
-- Call `webhookBus.Subscribe(ctx, delivery.Handle)` to start the delivery goroutine
+**Goroutine management:** One goroutine per webhook endpoint per event. Acceptable at current scale. Future: bounded semaphore `make(chan struct{}, N)`.
 
 ---
 
-## Critical Files to Modify
+## New Dependency
 
-| File                                | Change                                  |
-| ----------------------------------- | --------------------------------------- |
-| `internal/queue/types/types.go`     | Full redesign                           |
-| `internal/queue/asynq/provider.go`  | Fix bug + implement                     |
-| `internal/queue/di/register.go`     | Fix broken type reference               |
-| `internal/config/schema.go`         | Add email config                        |
-| `cmd/api/main.go`                   | Add scheduler start/stop, export routes |
-| `cmd/api/container.go`              | Register email + scheduler              |
-| `internal/service/stats_service.go` | Add concurrent stats                    |
-| `internal/handlers/activity.go`     | Add batch endpoints                     |
+```
+github.com/nats-io/nats.go v1.38.0   (add to go.mod)
+```
+
+---
+
+## Database Migration
+
+### `migrations/010_create_webhook_deliveries.up.sql`
+```sql
+CREATE TYPE webhook_delivery_status AS ENUM ('pending', 'succeeded', 'failed', 'exhausted');
+
+CREATE TABLE webhook_deliveries (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    webhook_id       UUID NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+    event_type       TEXT NOT NULL,
+    payload          JSONB NOT NULL,
+    status           webhook_delivery_status NOT NULL DEFAULT 'pending',
+    attempt_count    INTEGER NOT NULL DEFAULT 0,
+    max_attempts     INTEGER NOT NULL DEFAULT 5,
+    last_http_status INTEGER,
+    last_error       TEXT,
+    next_retry_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
+CREATE INDEX idx_webhook_deliveries_status_retry ON webhook_deliveries(status, next_retry_at)
+    WHERE status IN ('pending', 'failed');
+```
+
+### `migrations/010_create_webhook_deliveries.down.sql`
+```sql
+DROP TABLE IF EXISTS webhook_deliveries;
+DROP TYPE IF EXISTS webhook_delivery_status;
+```
+
+---
+
+## Files to Create
+
+### `internal/webhook/nats/provider.go`
+NATS JetStream pull-consumer-based provider:
+- `New(url string) (*Provider, error)` — `nats.Connect(url)`, get JetStream context, create/bind stream `WEBHOOK_EVENTS` on subject `webhook.events`, create durable pull consumer `webhook-delivery`
+- `Publish(ctx, event)` — `js.PublishMsg` with JSON-serialized event
+- `Subscribe(ctx, handler)` — starts `go readLoop()`
+- `readLoop()` — `sub.Fetch(10, nats.MaxWait(5s))` in a loop; for each message: deserialize → call `handler(ctx, event)` → `msg.Ack()`; on deserialize error: `msg.Ack()` (drop malformed); on context cancel: return
+
+### `internal/webhook/retry_worker.go` (`webhook` package)
+- `RetryWorker{webhookRepo, delivery}` struct
+- `NewRetryWorker(repo, delivery) *RetryWorker`
+- `Start(ctx)` — `go run(ctx)`
+- `run(ctx)` — `time.NewTicker(retryPollInterval)` loop, calls `poll(ctx)` on each tick
+- `poll(ctx)` — `ListPendingRetries(100)`, for each: `GetByID(webhookID)` + deserialize payload + `go retryDelivery()`
+- `retryDelivery(wh, delivery, event)` — `delivery.attemptHTTP()` + write result to DB (same logic as `dispatchAsync`)
+
+### `migrations/010_create_webhook_deliveries.up.sql` — see above
+### `migrations/010_create_webhook_deliveries.down.sql` — see above
+
+---
+
+## Files to Modify
+
+### `internal/webhook/types/types.go`
+Add `DeliveryStatus` enum constants and `WebhookDelivery` struct with all DB fields.
+
+### `internal/webhook/redis/provider.go` — REWRITE (pub/sub → streams)
+- Constants: `streamName="webhook:events"`, `groupName="webhook-delivery"`, `consumerName="activelog-worker-1"`, `blockDuration=5s`
+- `ensureConsumerGroup(ctx)` — `XGroupCreateMkStream(..., "$")` idempotent
+- `Publish(ctx, event)` — `XADD MaxLen=10000 Approx=true field="event" value=<json>`
+- `Subscribe(ctx, handler)` — `ensureConsumerGroup` + `go readLoop()`
+- `readLoop()` — `XREADGROUP Block=5s Count=10 Streams=[stream, ">"]`; on timeout: continue; on error: sleep 1s + continue
+- `processMessage(ctx, msg, handler)` — deserialize → `handler()` → `XACK`; on bad message: `XACK` + drop
+
+### `internal/webhook/delivery.go` — REWRITE (sync → async)
+```go
+var retryDelays = []time.Duration{1*time.Minute, 5*time.Minute, 30*time.Minute, 2*time.Hour, 24*time.Hour}
+const maxAttempts = 5
+```
+- `Handle(ctx, event)` — creates DB records + `go dispatchAsync()` per webhook, returns immediately
+- `dispatchAsync(wh, delivery, event)` — uses `context.Background()`, calls `attemptHTTP()`, writes outcome
+- `attemptHTTP(ctx, url, eventType, sig, body) (int, error)` — single HTTP POST, 10s timeout, HMAC headers; returns `(statusCode, error)`
+- `computeSignature(secret, body) string` — HMAC-SHA256, unchanged logic
+
+### `internal/repository/webhook_repository.go`
+Add 4 methods (existing 5 methods unchanged):
+- `CreateDelivery(ctx, *WebhookDelivery) error` — INSERT RETURNING id/timestamps
+- `MarkDeliverySucceeded(ctx, id, httpStatus) error`
+- `MarkDeliveryFailed(ctx, id, *httpStatus, errMsg, *nextRetryAt) error` — status=failed or exhausted
+- `ListPendingRetries(ctx, limit) ([]*WebhookDelivery, error)` — JOIN webhooks WHERE active AND status IN ('pending','failed') AND next_retry_at <= NOW() ORDER BY next_retry_at LIMIT $1
+
+### `internal/config/webhook.go`
+Add fields to `WebhookConfigType`:
+```go
+StreamMaxLen   int64  // WEBHOOK_STREAM_MAX_LEN, default 10000
+RetryPollSecs  int    // WEBHOOK_RETRY_POLL_SECONDS, default 30
+NATSUrl        string // NATS_URL, default "nats://localhost:4222"
+```
+
+### `internal/config/schema.go`
+Add optional env var entries: `WEBHOOK_STREAM_MAX_LEN` (int), `WEBHOOK_RETRY_POLL_SECONDS` (int), `NATS_URL` (string). Add `"nats"` to `ValidValues` for `WEBHOOK_PROVIDER`.
+
+### `internal/webhook/di/keys.go`
+Add constants:
+```go
+WebhookDeliveryKey = "WebhookDelivery"
+RetryWorkerKey     = "WebhookRetryWorker"
+```
+
+### `internal/webhook/di/register.go`
+- `RegisterWebhookBus(c)` — factory updated with `case "nats": webhookNATS.New(config.Webhook.NATSUrl)`
+- Add `RegisterWebhookDelivery(c)` — resolves `WebhookRepoKey`, constructs `webhook.NewDelivery(repo)`
+- Add `RegisterRetryWorker(c)` — resolves `WebhookRepoKey` + `WebhookDeliveryKey`, constructs `webhook.NewRetryWorker(repo, delivery)`
+- `createProvider()` switch: `"redis"` → Redis Streams, `"nats"` → NATS JetStream, default → memory
+
+### `cmd/api/container.go`
+After `RegisterWebhookBus(c)`:
+```go
+webhookDI.RegisterWebhookDelivery(c)
+webhookDI.RegisterRetryWorker(c)
+```
+
+### `cmd/api/main.go`
+- Add `WebhookRetryWorker *webhook.RetryWorker` field to `Application` struct
+- Resolve from container in `setupDependencies()`
+- After existing subscribe block in `serve()`:
+  ```go
+  app.WebhookRetryWorker.Start(webhookCtx)  // same ctx as bus subscription
+  ```
+
+---
+
+## Complete File Summary
+
+| File                                                | Action                                           |
+| --------------------------------------------------- | ------------------------------------------------ |
+| `migrations/010_create_webhook_deliveries.up.sql`   | CREATE                                           |
+| `migrations/010_create_webhook_deliveries.down.sql` | CREATE                                           |
+| `internal/webhook/nats/provider.go`                 | CREATE                                           |
+| `internal/webhook/retry_worker.go`                  | CREATE                                           |
+| `internal/webhook/types/types.go`                   | MODIFY — add `DeliveryStatus`, `WebhookDelivery` |
+| `internal/webhook/redis/provider.go`                | REWRITE — pub/sub → streams                      |
+| `internal/webhook/delivery.go`                      | REWRITE — sync → async + persistence             |
+| `internal/repository/webhook_repository.go`         | MODIFY — 4 new delivery methods                  |
+| `internal/config/webhook.go`                        | MODIFY — add 3 new config fields                 |
+| `internal/config/schema.go`                         | MODIFY — add 3 new env var entries               |
+| `internal/webhook/di/keys.go`                       | MODIFY — add 2 new keys                          |
+| `internal/webhook/di/register.go`                   | MODIFY — add nats case + 2 new registrations     |
+| `cmd/api/container.go`                              | MODIFY — register delivery + retry worker        |
+| `cmd/api/main.go`                                   | MODIFY — add retry worker field + start          |
+
+**Total:** 4 new files, 10 modified files. All changes contained within webhook subsystem and its DI wiring.
 
 ---
 
 ## Verification
 
-```bash
-# Build everything
-go build ./...
-
-# Run with race detector
-go test -race ./...
-
-# Test queue (requires Redis)
-docker-compose up -d redis
-QUEUE_PROVIDER=asynq go run ./cmd/worker/main.go
-
-# Test email (use noop provider for dev)
-EMAIL_PROVIDER=noop go run ./cmd/api/main.go
-
-# Test CSV export
-curl -H "Authorization: Bearer <token>" http://localhost:8080/api/v1/activities/export/csv
-
-# Test cron manually (expose a test endpoint or call directly in tests)
-```
-
-## Implementation Order
-
-Phases should be implemented in order (1→8) as each builds on the previous:
-- Phase 1 (Queue) is a prerequisite for email jobs (Phase 2) and export jobs (Phase 4)
-- Phase 2 (Email) is a prerequisite for the cron weekly email job (Phase 3)
-- Phase 3 (Cron) depends on the export job handler (Phase 4) for monthly reports
-- Phase 5 (Concurrency) and Phase 6 (WebSocket) can be done in parallel after Phase 4
-- Phase 7 (Feature Flags) is independent – can be done any time after Phase 4
-- Phase 8 (Webhooks) builds on Phase 1 (queue for async delivery) and Phase 6 (WS hub for notifications)
+1. **Build:** `go build ./...` — no compile errors after `go get github.com/nats-io/nats.go`
+2. **Migration:** Run `010_create_webhook_deliveries.up.sql`; verify table + partial index exist
+3. **Redis Streams path:**
+   - `WEBHOOK_PROVIDER=redis` — register webhook, trigger activity event
+   - `redis-cli XLEN webhook:events` — should show stream entries
+   - `redis-cli XPENDING webhook:events webhook-delivery - + 10` — empty after ACK
+   - Check `webhook_deliveries` table for new rows
+4. **NATS path:**
+   - `WEBHOOK_PROVIDER=nats` + `NATS_URL=nats://localhost:4222` (run `nats-server -js`)
+   - Same trigger; verify delivery record + HTTP call
+5. **Retry:** Point webhook at URL returning 500; check `status=failed` rows with advancing `next_retry_at`
+6. **Exhaustion:** After 5 failures, verify `status=exhausted`, retry worker skips row
+7. **Crash recovery:** Kill app after `CreateDelivery` but before XACK/Ack; restart; verify message reprocessed (delivery record may duplicate — acceptable for now)

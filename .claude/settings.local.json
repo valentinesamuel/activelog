@@ -28,7 +28,8 @@
       "Bash(aws:*)",
       "Bash(air -v:*)",
       "Bash(swag init:*)",
-      "Bash(go vet:*)"
+      "Bash(go vet:*)",
+      "Bash(git log:*)"
     ]
   }
 }

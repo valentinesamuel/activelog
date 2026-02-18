@@ -39,6 +39,9 @@ var Schema = []EnvVar{
 	{Key: "SMTP_USER", Required: false, DefaultValue: "", Type: "string"},
 	{Key: "SMTP_PASS", Required: false, DefaultValue: "", Type: "string"},
 
+	// Webhook
+	{Key: "WEBHOOK_PROVIDER", Required: false, DefaultValue: "memory", Type: "string", ValidValues: []string{"memory", "redis"}},
+
 	// AWS S3
 	{Key: "AWS_S3_BUCKET", Required: false, DefaultValue: "", Type: "string"},
 	{Key: "AWS_REGION", Required: false, DefaultValue: "us-east-1", Type: "string"},

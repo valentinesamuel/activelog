@@ -9,6 +9,7 @@ import (
 	cacheRegister "github.com/valentinesamuel/activelog/internal/cache/di"
 	"github.com/valentinesamuel/activelog/internal/container"
 	emailRegister "github.com/valentinesamuel/activelog/internal/email/di"
+	webhookRegister "github.com/valentinesamuel/activelog/internal/webhook/di"
 	handlerRegister "github.com/valentinesamuel/activelog/internal/handlers/di"
 	queueRegister "github.com/valentinesamuel/activelog/internal/queue/di"
 	"github.com/valentinesamuel/activelog/internal/repository"
@@ -36,12 +37,14 @@ func setupContainer(db repository.DBConn, hub *websocket.Hub) *container.Contain
 	cacheRegister.RegisterCache(c)
 	queueRegister.RegisterQueue(c)
 	emailRegister.RegisterEmail(c)
+	webhookRegister.RegisterWebhookBus(c)
 
 	// Eagerly resolve dependedncies
 	c.MustResolve(storageRegister.StorageProviderKey)
 	c.MustResolve(cacheRegister.CacheProviderKey)
 	c.MustResolve(queueRegister.QueueProviderKey)
 	c.MustResolve(emailRegister.EmailProviderKey)
+	c.MustResolve(webhookRegister.WebhookBusKey)
 
 	// Register layers in dependency order
 	repositoryRegister.RegisterRepositories(c) // Layer 1: Data access

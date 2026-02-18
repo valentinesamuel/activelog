@@ -35,6 +35,7 @@ func LoadWithValidation() error {
 	Cache = loadCache()
 	RateLimit = loadRateLimit()
 	Queue = loadQueue()
+	Webhook = loadWebhook()
 
 	return nil
 }

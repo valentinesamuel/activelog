@@ -74,6 +74,12 @@ func RegisterHandlers(c *container.Container) {
 		return handlers.NewActivityPhotoHandler(brokerInstance, repo, uploadActivityPhotoUC, getActivityPhotoUC), nil
 	})
 
+	// Webhook handler
+	c.Register(WebhookHandlerKey, func(c *container.Container) (interface{}, error) {
+		webhookRepo := c.MustResolve(di2.WebhookRepoKey).(*repository.WebhookRepository)
+		return handlers.NewWebhookHandler(webhookRepo), nil
+	})
+
 	// Export handler
 	c.Register(ExportHandlerKey, func(c *container.Container) (interface{}, error) {
 		activityRepo := c.MustResolve(di2.ActivityRepoKey).(repository.ActivityRepositoryInterface)
