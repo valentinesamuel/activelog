@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE TYPE webhook_delivery_status AS ENUM ('pending', 'succeeded', 'failed', 'exhausted');
 
 CREATE TABLE webhook_deliveries (
@@ -18,3 +20,5 @@ CREATE TABLE webhook_deliveries (
 CREATE INDEX idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
 CREATE INDEX idx_webhook_deliveries_status_retry ON webhook_deliveries(status, next_retry_at)
     WHERE status IN ('pending', 'failed');
+
+COMMIT;

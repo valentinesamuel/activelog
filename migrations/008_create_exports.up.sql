@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE TABLE exports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -10,3 +12,5 @@ CREATE TABLE exports (
 );
 CREATE INDEX idx_exports_user_id ON exports(user_id);
 CREATE INDEX idx_exports_status ON exports(status);
+
+COMMIT;

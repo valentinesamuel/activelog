@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE TABLE IF NOT EXISTS daily_stats (
     id                      SERIAL PRIMARY KEY,
     user_id                 INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -10,3 +12,5 @@ CREATE TABLE IF NOT EXISTS daily_stats (
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_stats_user_date ON daily_stats (user_id, date);
+
+COMMIT;
