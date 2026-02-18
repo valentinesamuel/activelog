@@ -37,3 +37,29 @@ type Webhook struct {
 	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+// DeliveryStatus represents the status of a webhook delivery attempt
+type DeliveryStatus string
+
+const (
+	DeliveryStatusPending   DeliveryStatus = "pending"
+	DeliveryStatusSucceeded DeliveryStatus = "succeeded"
+	DeliveryStatusFailed    DeliveryStatus = "failed"
+	DeliveryStatusExhausted DeliveryStatus = "exhausted"
+)
+
+// WebhookDelivery represents a single delivery attempt persisted in the DB
+type WebhookDelivery struct {
+	ID             string          `db:"id"`
+	WebhookID      string          `db:"webhook_id"`
+	EventType      string          `db:"event_type"`
+	Payload        json.RawMessage `db:"payload"`
+	Status         DeliveryStatus  `db:"status"`
+	AttemptCount   int             `db:"attempt_count"`
+	MaxAttempts    int             `db:"max_attempts"`
+	LastHTTPStatus *int            `db:"last_http_status"`
+	LastError      *string         `db:"last_error"`
+	NextRetryAt    time.Time       `db:"next_retry_at"`
+	CreatedAt      time.Time       `db:"created_at"`
+	UpdatedAt      time.Time       `db:"updated_at"`
+}

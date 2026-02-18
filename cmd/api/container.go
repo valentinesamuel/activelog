@@ -38,6 +38,8 @@ func setupContainer(db repository.DBConn, hub *websocket.Hub) *container.Contain
 	queueRegister.RegisterQueue(c)
 	emailRegister.RegisterEmail(c)
 	webhookRegister.RegisterWebhookBus(c)
+	webhookRegister.RegisterWebhookDelivery(c)
+	webhookRegister.RegisterRetryWorker(c)
 
 	// Eagerly resolve dependedncies
 	c.MustResolve(storageRegister.StorageProviderKey)
@@ -48,6 +50,10 @@ func setupContainer(db repository.DBConn, hub *websocket.Hub) *container.Contain
 
 	// Register layers in dependency order
 	repositoryRegister.RegisterRepositories(c) // Layer 1: Data access
+
+	// Eagerly resolve webhook delivery and retry worker (depends on repositories)
+	c.MustResolve(webhookRegister.WebhookDeliveryKey)
+	c.MustResolve(webhookRegister.RetryWorkerKey)
 	serviceRegister.RegisterServices(c)        // Layer 2: Business logic
 	di.RegisterBroker(c)                       // Layer 3: Use case orchestration
 	schedulerRegister.RegisterScheduler(c)     // Scheduler (cron jobs)

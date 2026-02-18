@@ -5,7 +5,11 @@ import (
 
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/container"
+	"github.com/valentinesamuel/activelog/internal/repository"
+	repoDI "github.com/valentinesamuel/activelog/internal/repository/di"
+	"github.com/valentinesamuel/activelog/internal/webhook"
 	webhookMemory "github.com/valentinesamuel/activelog/internal/webhook/memory"
+	webhookNATS "github.com/valentinesamuel/activelog/internal/webhook/nats"
 	webhookRedis "github.com/valentinesamuel/activelog/internal/webhook/redis"
 	webhookTypes "github.com/valentinesamuel/activelog/internal/webhook/types"
 )
@@ -17,6 +21,23 @@ func RegisterWebhookBus(c *container.Container) {
 	})
 }
 
+// RegisterWebhookDelivery registers the webhook delivery handler in the DI container
+func RegisterWebhookDelivery(c *container.Container) {
+	c.Register(WebhookDeliveryKey, func(c *container.Container) (interface{}, error) {
+		repo := c.MustResolve(repoDI.WebhookRepoKey).(*repository.WebhookRepository)
+		return webhook.NewDelivery(repo), nil
+	})
+}
+
+// RegisterRetryWorker registers the webhook retry worker in the DI container
+func RegisterRetryWorker(c *container.Container) {
+	c.Register(RetryWorkerKey, func(c *container.Container) (interface{}, error) {
+		repo := c.MustResolve(repoDI.WebhookRepoKey).(*repository.WebhookRepository)
+		delivery := c.MustResolve(WebhookDeliveryKey).(*webhook.Delivery)
+		return webhook.NewRetryWorker(repo, delivery), nil
+	})
+}
+
 func createProvider() webhookTypes.WebhookBusProvider {
 	switch config.Webhook.Provider {
 	case "redis":
@@ -25,7 +46,16 @@ func createProvider() webhookTypes.WebhookBusProvider {
 			log.Printf("Warning: Failed to initialize Redis webhook bus: %v. Falling back to memory.", err)
 			return webhookMemory.New(100)
 		}
-		log.Printf("Webhook bus provider initialized: redis")
+		log.Printf("Webhook bus provider initialized: redis (streams)")
+		return provider
+
+	case "nats":
+		provider, err := webhookNATS.New(config.Webhook.NATSUrl)
+		if err != nil {
+			log.Printf("Warning: Failed to initialize NATS webhook bus: %v. Falling back to memory.", err)
+			return webhookMemory.New(100)
+		}
+		log.Printf("Webhook bus provider initialized: nats (jetstream)")
 		return provider
 
 	default:

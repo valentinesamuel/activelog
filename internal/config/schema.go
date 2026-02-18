@@ -40,7 +40,10 @@ var Schema = []EnvVar{
 	{Key: "SMTP_PASS", Required: false, DefaultValue: "", Type: "string"},
 
 	// Webhook
-	{Key: "WEBHOOK_PROVIDER", Required: false, DefaultValue: "memory", Type: "string", ValidValues: []string{"memory", "redis"}},
+	{Key: "WEBHOOK_PROVIDER", Required: false, DefaultValue: "memory", Type: "string", ValidValues: []string{"memory", "redis", "nats"}},
+	{Key: "WEBHOOK_STREAM_MAX_LEN", Required: false, DefaultValue: "10000", Type: "int"},
+	{Key: "WEBHOOK_RETRY_POLL_SECONDS", Required: false, DefaultValue: "30", Type: "int"},
+	{Key: "NATS_URL", Required: false, DefaultValue: "nats://localhost:4222", Type: "string"},
 
 	// AWS S3
 	{Key: "AWS_S3_BUCKET", Required: false, DefaultValue: "", Type: "string"},

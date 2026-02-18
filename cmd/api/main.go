@@ -29,7 +29,6 @@ import (
 	handlerDI "github.com/valentinesamuel/activelog/internal/handlers/di"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
-	repoDI "github.com/valentinesamuel/activelog/internal/repository/di"
 	"github.com/valentinesamuel/activelog/internal/scheduler"
 	schedulerDI "github.com/valentinesamuel/activelog/internal/scheduler/di"
 	"github.com/valentinesamuel/activelog/internal/webhook"
@@ -67,8 +66,9 @@ type Application struct {
 	ExportHandler    *handlers.ExportHandler
 	FeaturesHandler  *handlers.FeaturesHandler
 	WebhookHandler   *handlers.WebhookHandler
-	WebhookBus       webhookTypes.WebhookBusProvider
-	WebhookDelivery  *webhook.Delivery
+	WebhookBus          webhookTypes.WebhookBusProvider
+	WebhookDelivery     *webhook.Delivery
+	WebhookRetryWorker  *webhook.RetryWorker
 }
 
 func main() {
@@ -145,9 +145,9 @@ func (app *Application) setupDependencies() {
 	app.ExportHandler = app.Container.MustResolve(handlerDI.ExportHandlerKey).(*handlers.ExportHandler)
 	app.WebhookHandler = app.Container.MustResolve(handlerDI.WebhookHandlerKey).(*handlers.WebhookHandler)
 
-	// Resolve webhook bus and delivery
-	webhookRepo := app.Container.MustResolve(repoDI.WebhookRepoKey).(*repository.WebhookRepository)
-	app.WebhookDelivery = webhook.NewDelivery(webhookRepo)
+	// Resolve webhook bus, delivery, and retry worker from container
+	app.WebhookDelivery = app.Container.MustResolve(webhookDI.WebhookDeliveryKey).(*webhook.Delivery)
+	app.WebhookRetryWorker = app.Container.MustResolve(webhookDI.RetryWorkerKey).(*webhook.RetryWorker)
 	app.WebhookBus = app.Container.MustResolve(webhookDI.WebhookBusKey).(webhookTypes.WebhookBusProvider)
 }
 
@@ -316,6 +316,8 @@ func (app *Application) serve(server *http.Server) error {
 	if err := app.WebhookBus.Subscribe(webhookCtx, app.WebhookDelivery.Handle); err != nil {
 		log.Printf("Warning: Failed to subscribe webhook delivery: %v", err)
 	}
+
+	app.WebhookRetryWorker.Start(webhookCtx)
 
 	// Start scheduler
 	app.Scheduler.Start()
