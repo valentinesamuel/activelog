@@ -54,6 +54,7 @@ type Application struct {
 	UserHandler     *handlers.UserHandler
 	StatsHandler    *handlers.StatsHandler
 	photoHandler    *handlers.ActivityPhotoHandler
+	ExportHandler   *handlers.ExportHandler
 }
 
 func main() {
@@ -118,6 +119,7 @@ func (app *Application) setupDependencies() {
 	app.UserHandler = app.Container.MustResolve(handlerDI.UserHandlerKey).(*handlers.UserHandler)
 	app.StatsHandler = app.Container.MustResolve(handlerDI.StatsHandlerKey).(*handlers.StatsHandler)
 	app.photoHandler = app.Container.MustResolve(handlerDI.ActivityPhotoHandlerKey).(*handlers.ActivityPhotoHandler)
+	app.ExportHandler = app.Container.MustResolve(handlerDI.ExportHandlerKey).(*handlers.ExportHandler)
 }
 
 // setupRoutes configures all application routes and middleware
@@ -153,6 +155,9 @@ func (app *Application) setupRoutes() http.Handler {
 
 	// User routes
 	app.registerUserRoutes(api)
+
+	// Export routes
+	app.registerExportRoutes(api)
 
 	return router
 }
@@ -212,6 +217,19 @@ func (app *Application) registerUserRoutes(router *mux.Router) {
 	userRouter.HandleFunc("/stats/weekly", app.StatsHandler.GetWeeklyStats).Methods("GET")
 	userRouter.HandleFunc("/stats/monthly", app.StatsHandler.GetMonthlyStats).Methods("GET")
 	userRouter.HandleFunc("/stats/by-type", app.StatsHandler.GetActivityCountByType).Methods("GET")
+}
+
+// registerExportRoutes registers export and job routes
+func (app *Application) registerExportRoutes(router *mux.Router) {
+	exportRouter := router.PathPrefix("/activities/export").Subrouter()
+	exportRouter.Use(middleware.AuthMiddleware)
+	exportRouter.HandleFunc("/csv", app.ExportHandler.ExportCSV).Methods("GET")
+	exportRouter.HandleFunc("/pdf", app.ExportHandler.EnqueuePDFExport).Methods("POST")
+
+	jobRouter := router.PathPrefix("/jobs").Subrouter()
+	jobRouter.Use(middleware.AuthMiddleware)
+	jobRouter.HandleFunc("/{jobId}/status", app.ExportHandler.GetJobStatus).Methods("GET")
+	jobRouter.HandleFunc("/{jobId}/download", app.ExportHandler.GetDownloadURL).Methods("GET")
 }
 
 // newServer creates and configures the HTTP server

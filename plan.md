@@ -137,7 +137,7 @@ Scheduled background tasks using `robfig/cron/v3` (already in go.mod).
 
 ---
 
-## Phase 4: Export Features (Week 24)
+## Phase 4: Export Features (Week 24)✅
 
 ### Goal
 CSV streaming download + async PDF export backed by S3.
