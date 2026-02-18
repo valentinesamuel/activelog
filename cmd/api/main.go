@@ -203,6 +203,7 @@ func (app *Application) setupRoutes() http.Handler {
 	router := mux.NewRouter()
 
 	// Global middleware
+	router.Use(middleware.TimingMiddleware)
 	router.Use(middleware.MetricsMiddleware)
 	router.Use(middleware.LoggingMiddleware)
 	router.Use(middleware.CORS)

@@ -48,7 +48,7 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 
 	activities, err := h.activityRepo.ListByUser(ctx, user.Id)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to fetch activities")
 		return
 	}
 
@@ -56,7 +56,8 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="activities.csv"`)
 
 	if err := exportPkg.ExportActivitiesCSV(ctx, activities, w); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to generate CSV export")
+		// CSV headers already written, cannot switch to JSON — use stdlib http.Error
+		http.Error(w, "Failed to generate CSV export", http.StatusInternalServerError)
 		return
 	}
 }
@@ -73,7 +74,7 @@ func (h *ExportHandler) EnqueuePDFExport(w http.ResponseWriter, r *http.Request)
 		Status: exportPkg.StatusPending,
 	}
 	if err := h.exportRepo.Create(ctx, record); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create export record")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to create export record")
 		return
 	}
 
@@ -84,7 +85,7 @@ func (h *ExportHandler) EnqueuePDFExport(w http.ResponseWriter, r *http.Request)
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to marshal job payload")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to marshal job payload")
 		return
 	}
 
@@ -94,11 +95,11 @@ func (h *ExportHandler) EnqueuePDFExport(w http.ResponseWriter, r *http.Request)
 		Data:  data,
 	}
 	if _, err := h.queueProvider.Enqueue(ctx, queueTypes.InboxQueue, jobPayload); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to enqueue export job")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to enqueue export job")
 		return
 	}
 
-	response.SendJSON(w, http.StatusAccepted, map[string]string{
+	response.Success(w, r, http.StatusAccepted, map[string]string{
 		"job_id": record.ID,
 	})
 }
@@ -111,11 +112,11 @@ func (h *ExportHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 
 	record, err := h.exportRepo.GetByID(ctx, jobID)
 	if err != nil {
-		response.Error(w, http.StatusNotFound, "Export job not found")
+		response.Fail(w, r, http.StatusNotFound, "Export job not found")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, record)
+	response.Success(w, r, http.StatusOK, record)
 }
 
 // GetDownloadURL generates a presigned URL for a completed export.
@@ -126,17 +127,17 @@ func (h *ExportHandler) GetDownloadURL(w http.ResponseWriter, r *http.Request) {
 
 	record, err := h.exportRepo.GetByID(ctx, jobID)
 	if err != nil {
-		response.Error(w, http.StatusNotFound, "Export job not found")
+		response.Fail(w, r, http.StatusNotFound, "Export job not found")
 		return
 	}
 
 	if record.Status != exportPkg.StatusCompleted {
-		response.Error(w, http.StatusConflict, "Export is not yet completed")
+		response.Fail(w, r, http.StatusConflict, "Export is not yet completed")
 		return
 	}
 
 	if record.S3Key == nil {
-		response.Error(w, http.StatusInternalServerError, "Export file key is missing")
+		response.Fail(w, r, http.StatusInternalServerError, "Export file key is missing")
 		return
 	}
 
@@ -146,11 +147,11 @@ func (h *ExportHandler) GetDownloadURL(w http.ResponseWriter, r *http.Request) {
 		Operation: storageTypes.PresignGet,
 	})
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to generate download URL")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to generate download URL")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, map[string]string{
+	response.Success(w, r, http.StatusOK, map[string]string{
 		"download_url": url,
 	})
 }

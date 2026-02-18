@@ -21,7 +21,7 @@ func (m *Middleware) Check(feature string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !m.flags.IsEnabled(feature) {
-				response.Error(w, http.StatusForbidden, "feature_not_available")
+				response.Fail(w, r, http.StatusForbidden, "feature_not_available")
 				return
 			}
 			next.ServeHTTP(w, r)

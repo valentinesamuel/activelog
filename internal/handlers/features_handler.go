@@ -26,5 +26,5 @@ func (h *FeaturesHandler) GetFeatures(w http.ResponseWriter, r *http.Request) {
 		"webhooks": h.flags.IsEnabled("webhooks"),
 		"feed":     h.flags.IsEnabled("feed"),
 	}
-	response.SendJSON(w, http.StatusOK, features)
+	response.Success(w, r, http.StatusOK, features)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/config"
 	queueTypes "github.com/valentinesamuel/activelog/internal/queue/types"
 	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
+	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
 // getClientIP extracts the client IP address from the request
@@ -163,7 +164,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			w.Header().Set("X-RateLimit-Remaining", "0")
 			w.Header().Set("X-Retry-After", strconv.Itoa(int(window.Seconds())))
 
-			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+			response.Fail(w, r, http.StatusTooManyRequests, "Rate limit exceeded")
 			return
 		}
 

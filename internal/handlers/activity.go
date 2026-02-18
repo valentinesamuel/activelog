@@ -80,20 +80,14 @@ func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 	var req models.CreateActivityRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid request body")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	// Validate request
 	err := validator.Validate(&req)
 	if err != nil {
-		validationErrors := validator.FormatValidationErrors(err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":  "Validation failed",
-			"fields": validationErrors,
-		})
+		response.ValidationFail(w, r, validator.FormatValidationErrors(err))
 		return
 	}
 
@@ -110,12 +104,12 @@ func (h *ActivityHandler) CreateActivity(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create activity")
-		response.Error(w, http.StatusInternalServerError, "Failed to create activity")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to create activity")
 		return
 	}
 
 	log.Info().Int64("activityId", result.ActivityID).Msg("Activity Created")
-	response.SendJSON(w, http.StatusCreated, result.Activity)
+	response.Success(w, r, http.StatusCreated, result.Activity)
 }
 
 // GetActivity fetches a single activity using broker pattern
@@ -137,7 +131,7 @@ func (h *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid activity ID")
 		return
 	}
 
@@ -153,16 +147,16 @@ func (h *ActivityHandler) GetActivity(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, appErrors.ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "Activity not found")
+			response.Fail(w, r, http.StatusNotFound, "Activity not found")
 			return
 		}
 
 		log.Error().Err(err).Int("id", id).Msg("Failed to get activity")
-		response.Error(w, http.StatusInternalServerError, "Failed to fetch activity")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to fetch activity")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, result.Activity)
+	response.Success(w, r, http.StatusOK, result.Activity)
 }
 
 // ListActivities fetches activities using dynamic filtering with QueryOptions
@@ -190,14 +184,14 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 
 	if !ok {
 		log.Error().Msg("Failed to get user from context")
-		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to fetch activities")
 		return
 	}
 
 	// Parse query parameters into QueryOptions
 	queryOpts, err := query.ParseQueryParams(r.URL.Query())
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid query parameters")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid query parameters")
 		return
 	}
 
@@ -261,14 +255,14 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 	// Validate query options against whitelists
 	if err := query.ValidateQueryOptions(queryOpts, allowedFilters, allowedSearch, allowedOrder); err != nil {
 		log.Warn().Err(err).Msg("Invalid query parameters")
-		response.Error(w, http.StatusBadRequest, err.Error())
+		response.Fail(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Validate operator-based filters (v1.1.0+)
 	if err := query.ValidateFilterConditions(queryOpts, allowedFilters, operatorWhitelists); err != nil {
 		log.Warn().Err(err).Msg("Invalid filter operator")
-		response.Error(w, http.StatusBadRequest, err.Error())
+		response.Fail(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -285,7 +279,7 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list activities")
-		response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to fetch activities")
 		return
 	}
 
@@ -298,7 +292,7 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Return standardized response with pagination metadata
-	response.SendJSON(w, http.StatusOK, map[string]interface{}{
+	response.Success(w, r, http.StatusOK, map[string]interface{}{
 		"data": result.Result.Data,
 		"meta": result.Result.Meta,
 	})
@@ -325,25 +319,19 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid activity ID")
 		return
 	}
 
 	var req models.UpdateActivityRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid JSON")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
 
 	// Validate
 	if err := validator.Validate(&req); err != nil {
-		validationErrors := validator.FormatValidationErrors(err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":  "Validation failed",
-			"fields": validationErrors,
-		})
+		response.ValidationFail(w, r, validator.FormatValidationErrors(err))
 		return
 	}
 
@@ -361,11 +349,11 @@ func (h *ActivityHandler) UpdateActivity(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to update activity")
-		response.Error(w, http.StatusInternalServerError, "Failed to update activity")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to update activity")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, result.Activity)
+	response.Success(w, r, http.StatusOK, result.Activity)
 }
 
 // DeleteActivity handles activity deletion using broker pattern
@@ -387,7 +375,7 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid activity ID")
 		return
 	}
 
@@ -404,7 +392,7 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		log.Error().Err(err).Int("id", id).Msg("Failed to delete activity")
-		response.Error(w, http.StatusNotFound, "Activity not found")
+		response.Fail(w, r, http.StatusNotFound, "Activity not found")
 		return
 	}
 
@@ -446,11 +434,11 @@ func (h *ActivityHandler) BatchCreateActivities(w http.ResponseWriter, r *http.R
 		Activities []models.CreateActivityRequest `json:"activities"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid request body")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 	if len(req.Activities) == 0 || len(req.Activities) > 50 {
-		response.Error(w, http.StatusBadRequest, "activities must have between 1 and 50 items")
+		response.Fail(w, r, http.StatusBadRequest, "activities must have between 1 and 50 items")
 		return
 	}
 
@@ -480,7 +468,7 @@ func (h *ActivityHandler) BatchCreateActivities(w http.ResponseWriter, r *http.R
 		return batchActivityResult{Index: j.index, Success: true, Activity: out.Activity}
 	})
 
-	response.SendJSON(w, http.StatusMultiStatus, results)
+	response.Success(w, r, http.StatusMultiStatus, results)
 }
 
 // BatchDeleteActivities handles concurrent deletion of multiple activities.
@@ -503,11 +491,11 @@ func (h *ActivityHandler) BatchDeleteActivities(w http.ResponseWriter, r *http.R
 		IDs []int `json:"ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid request body")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 	if len(req.IDs) == 0 || len(req.IDs) > 50 {
-		response.Error(w, http.StatusBadRequest, "ids must have between 1 and 50 items")
+		response.Fail(w, r, http.StatusBadRequest, "ids must have between 1 and 50 items")
 		return
 	}
 
@@ -535,7 +523,7 @@ func (h *ActivityHandler) BatchDeleteActivities(w http.ResponseWriter, r *http.R
 		return batchDeleteResult{ID: j.activityID, Success: true}
 	})
 
-	response.SendJSON(w, http.StatusMultiStatus, results)
+	response.Success(w, r, http.StatusMultiStatus, results)
 }
 
 // GetStats fetches activity statistics using broker pattern
@@ -581,9 +569,9 @@ func (h *ActivityHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get stats")
-		response.Error(w, http.StatusInternalServerError, "Failed to get statistics")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to get statistics")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, result.Stats)
+	response.Success(w, r, http.StatusOK, result.Stats)
 }
