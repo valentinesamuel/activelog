@@ -1,0 +1,6 @@
+BEGIN;
+
+DROP TABLE IF EXISTS outbox_event;
+DROP TABLE IF EXISTS inbox_event;
+
+COMMIT;
