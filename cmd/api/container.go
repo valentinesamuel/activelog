@@ -16,17 +16,20 @@ import (
 	schedulerRegister "github.com/valentinesamuel/activelog/internal/scheduler/di"
 	serviceRegister "github.com/valentinesamuel/activelog/internal/service/di"
 	storageRegister "github.com/valentinesamuel/activelog/internal/storage/di"
+	"github.com/valentinesamuel/activelog/internal/websocket"
 	"github.com/valentinesamuel/activelog/pkg/query"
 )
+
+const WebSocketHubKey = "WebSocketHub"
 
 // setupContainer creates and configures the DI container
 // All dependencies are registered here following Clean Architecture layering
 // Registration order: Core → Storage → Repositories → Services → Broker → UseCases → Handlers
-func setupContainer(db repository.DBConn) *container.Container {
+func setupContainer(db repository.DBConn, hub *websocket.Hub) *container.Container {
 	c := container.New()
 
 	// Register core singletons (must be first)
-	registerCoreDependencies(c, db)
+	registerCoreDependencies(c, db, hub)
 
 	// Register storage provider (uses config globals)
 	storageRegister.RegisterStorage(c)
@@ -60,10 +63,11 @@ func setupContainer(db repository.DBConn) *container.Container {
 
 // registerCoreDependencies registers core singletons like database connection
 // These must be registered before any other dependencies
-func registerCoreDependencies(c *container.Container, db repository.DBConn) {
+func registerCoreDependencies(c *container.Container, db repository.DBConn, hub *websocket.Hub) {
 	c.RegisterSingleton(repositoryRegister.CoreDBKey, db)
 	c.RegisterSingleton(di.CoreRawDBKey, db.GetRawDB())
 	c.RegisterSingleton(repositoryRegister.CoreRegistryManagerKey, setupRegistryManager())
+	c.RegisterSingleton(WebSocketHubKey, hub)
 }
 
 // setupRegistryManager creates and configures the global RegistryManager (v3.0)

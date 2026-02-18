@@ -24,12 +24,14 @@ import (
 	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
 	"github.com/valentinesamuel/activelog/internal/config"
 	"github.com/valentinesamuel/activelog/internal/container"
+	"github.com/valentinesamuel/activelog/internal/featureflags"
 	"github.com/valentinesamuel/activelog/internal/handlers"
 	handlerDI "github.com/valentinesamuel/activelog/internal/handlers/di"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/scheduler"
 	schedulerDI "github.com/valentinesamuel/activelog/internal/scheduler/di"
+	appwebsocket "github.com/valentinesamuel/activelog/internal/websocket"
 )
 
 // @title ActiveLog API
@@ -49,12 +51,17 @@ type Application struct {
 	Broker          *broker.Broker             // Use case orchestrator
 	Scheduler       *scheduler.Scheduler       // Cron scheduler
 	RateLimiter     *middleware.RateLimiter    // Rate limiting middleware
+	Flags           *featureflags.FeatureFlags
+	FlagMiddleware  *featureflags.Middleware
+	WSHub           *appwebsocket.Hub
+	WSHandler       *appwebsocket.Handler
 	HealthHandler   *handlers.HealthHandler
 	ActivityHandler *handlers.ActivityHandler
 	UserHandler     *handlers.UserHandler
 	StatsHandler    *handlers.StatsHandler
 	photoHandler    *handlers.ActivityPhotoHandler
 	ExportHandler   *handlers.ExportHandler
+	FeaturesHandler *handlers.FeaturesHandler
 }
 
 func main() {
@@ -100,8 +107,17 @@ func run() error {
 // setupDependencies initializes all repositories and handlers using DI container
 // All dependencies are registered and resolved through the centralized container
 func (app *Application) setupDependencies() {
+	// Load feature flags
+	app.Flags = featureflags.Load()
+	app.FlagMiddleware = featureflags.NewMiddleware(app.Flags)
+	app.FeaturesHandler = handlers.NewFeaturesHandler(app.Flags)
+
+	// Create WebSocket hub
+	app.WSHub = appwebsocket.NewHub()
+	app.WSHandler = appwebsocket.NewHandler(app.WSHub)
+
 	// Initialize container with all dependencies
-	app.Container = setupContainer(app.DB)
+	app.Container = setupContainer(app.DB, app.WSHub)
 
 	// Resolve core dependencies from container
 	app.Broker = app.Container.MustResolve(di.BrokerKey).(*broker.Broker)
@@ -158,6 +174,14 @@ func (app *Application) setupRoutes() http.Handler {
 
 	// Export routes
 	app.registerExportRoutes(api)
+
+	// Features route
+	app.registerFeaturesRoutes(api)
+
+	// WebSocket route (protected - JWT via query param or header)
+	wsRouter := router.PathPrefix("/ws").Subrouter()
+	wsRouter.Use(middleware.AuthMiddleware)
+	wsRouter.HandleFunc("", app.WSHandler.ServeWS)
 
 	return router
 }
@@ -221,6 +245,13 @@ func (app *Application) registerUserRoutes(router *mux.Router) {
 	userRouter.HandleFunc("/stats/by-type", app.StatsHandler.GetActivityCountByType).Methods("GET")
 }
 
+// registerFeaturesRoutes registers the feature flags endpoint
+func (app *Application) registerFeaturesRoutes(router *mux.Router) {
+	featuresRouter := router.PathPrefix("/features").Subrouter()
+	featuresRouter.Use(middleware.AuthMiddleware)
+	featuresRouter.HandleFunc("", app.FeaturesHandler.GetFeatures).Methods("GET")
+}
+
 // registerExportRoutes registers export and job routes
 func (app *Application) registerExportRoutes(router *mux.Router) {
 	exportRouter := router.PathPrefix("/activities/export").Subrouter()
@@ -250,6 +281,9 @@ func (app *Application) serve(server *http.Server) error {
 	// Create signal channel for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	// Start WebSocket hub event loop
+	go app.WSHub.Run()
 
 	// Start scheduler
 	app.Scheduler.Start()

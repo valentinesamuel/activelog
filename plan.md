@@ -204,7 +204,7 @@ Apply goroutines/channels/sync patterns to existing services; add batch endpoint
 
 ---
 
-## Phase 6: WebSocket Hub (Real-time Notifications)
+## Phase 6: WebSocket Hub (Real-time Notifications)✅
 
 ### Goal
 Real-time push notifications to connected clients (friend requests, likes, comments, activity events).
@@ -243,7 +243,7 @@ The hub is intentionally single-instance (in-process). For multi-instance deploy
 
 ---
 
-## Phase 7: Feature Flags
+## Phase 7: Feature Flags✅
 
 ### Goal
 Env-var-driven feature toggles with middleware, enabling gradual rollouts and kill switches without deploys.
