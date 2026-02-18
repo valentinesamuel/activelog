@@ -13,6 +13,7 @@ import (
 	queueRegister "github.com/valentinesamuel/activelog/internal/queue/di"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	repositoryRegister "github.com/valentinesamuel/activelog/internal/repository/di"
+	schedulerRegister "github.com/valentinesamuel/activelog/internal/scheduler/di"
 	serviceRegister "github.com/valentinesamuel/activelog/internal/service/di"
 	storageRegister "github.com/valentinesamuel/activelog/internal/storage/di"
 	"github.com/valentinesamuel/activelog/pkg/query"
@@ -43,6 +44,7 @@ func setupContainer(db repository.DBConn) *container.Container {
 	repositoryRegister.RegisterRepositories(c) // Layer 1: Data access
 	serviceRegister.RegisterServices(c)        // Layer 2: Business logic
 	di.RegisterBroker(c)                       // Layer 3: Use case orchestration
+	schedulerRegister.RegisterScheduler(c)     // Scheduler (cron jobs)
 
 	// Register use cases by domain
 	activityUsecases.RegisterActivityUseCases(c)

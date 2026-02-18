@@ -14,7 +14,7 @@ Libraries already in go.mod: `github.com/hibiken/asynq v0.26.0`, `github.com/rob
 
 ---
 
-## Phase 1: Queue System (Complete & Redesign)
+## Phase 1: Queue System (Complete & Redesign)✅
 
 ### Goal
 Enable `queueAdapter.Enqueue(ctx, queue, payload)` from anywhere. Multiple provider backends selectable via `QUEUE_PROVIDER` env var. Two providers: `asynq` (Redis-backed, distributed) and `memory` (in-process, for dev/tests).
@@ -68,7 +68,7 @@ Enable `queueAdapter.Enqueue(ctx, queue, payload)` from anywhere. Multiple provi
 
 ---
 
-## Phase 2: Email Provider (Mirror Storage Pattern)
+## Phase 2: Email Provider (Mirror Storage Pattern)✅
 
 ### Goal
 `emailProvider.Send(ctx, input)` works regardless of backend (SMTP, SendGrid, noop).
@@ -106,7 +106,7 @@ Enable `queueAdapter.Enqueue(ctx, queue, payload)` from anywhere. Multiple provi
 
 ---
 
-## Phase 3: Cron / Scheduler (Week 23)
+## Phase 3: Cron / Scheduler (Week 23)✅
 
 ### Goal
 Scheduled background tasks using `robfig/cron/v3` (already in go.mod).

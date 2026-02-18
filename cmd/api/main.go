@@ -28,6 +28,8 @@ import (
 	handlerDI "github.com/valentinesamuel/activelog/internal/handlers/di"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
+	"github.com/valentinesamuel/activelog/internal/scheduler"
+	schedulerDI "github.com/valentinesamuel/activelog/internal/scheduler/di"
 )
 
 // @title ActiveLog API
@@ -45,6 +47,7 @@ type Application struct {
 	DBCloser        interface{ Close() error } // For cleanup during shutdown
 	Container       *container.Container       // DI container
 	Broker          *broker.Broker             // Use case orchestrator
+	Scheduler       *scheduler.Scheduler       // Cron scheduler
 	RateLimiter     *middleware.RateLimiter    // Rate limiting middleware
 	HealthHandler   *handlers.HealthHandler
 	ActivityHandler *handlers.ActivityHandler
@@ -105,6 +108,9 @@ func (app *Application) setupDependencies() {
 	// Setup rate limiter with cache from container
 	cache := app.Container.MustResolve(cacheDI.CacheProviderKey).(cacheTypes.CacheProvider)
 	app.RateLimiter = middleware.NewRateLimiter(cache, config.RateLimit)
+
+	// Resolve scheduler from container
+	app.Scheduler = app.Container.MustResolve(schedulerDI.SchedulerKey).(*scheduler.Scheduler)
 
 	// Resolve handlers from container
 	app.HealthHandler = app.Container.MustResolve(handlerDI.HealthHandlerKey).(*handlers.HealthHandler)
@@ -225,6 +231,9 @@ func (app *Application) serve(server *http.Server) error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
+	// Start scheduler
+	app.Scheduler.Start()
+
 	// Start server in goroutine
 	serverErrors := make(chan error, 1)
 	go func() {
@@ -263,6 +272,11 @@ func (app *Application) gracefulShutdown(server *http.Server) error {
 	} else {
 		log.Println("✅ All connections closed gracefully")
 	}
+
+	// Stop scheduler
+	log.Println("⏳ Stopping scheduler...")
+	app.Scheduler.Stop()
+	log.Println("✅ Scheduler stopped")
 
 	// Close database connections
 	log.Println("🔌 Closing database connections...")
