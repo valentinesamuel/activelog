@@ -1,7 +1,7 @@
 package di
 
 import (
-	"github.com/valentinesamuel/activelog/internal/container"
+	"github.com/valentinesamuel/activelog/internal/platform/container"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/pkg/query"
 )

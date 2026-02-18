@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
+	cacheTypes "github.com/valentinesamuel/activelog/internal/adapters/cache/types"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"

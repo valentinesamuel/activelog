@@ -14,7 +14,7 @@ import (
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
-	"github.com/valentinesamuel/activelog/internal/storage/types"
+	"github.com/valentinesamuel/activelog/internal/adapters/storage/types"
 	"github.com/valentinesamuel/activelog/pkg/imageutil"
 )
 

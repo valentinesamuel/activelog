@@ -7,14 +7,14 @@ import (
 	photoUsecasesDI "github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases/di"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/application/broker/di"
-	"github.com/valentinesamuel/activelog/internal/container"
+	"github.com/valentinesamuel/activelog/internal/platform/container"
 	"github.com/valentinesamuel/activelog/internal/handlers"
-	queueDI "github.com/valentinesamuel/activelog/internal/queue/di"
-	queueTypes "github.com/valentinesamuel/activelog/internal/queue/types"
+	queueDI "github.com/valentinesamuel/activelog/internal/adapters/queue/di"
+	queueTypes "github.com/valentinesamuel/activelog/internal/adapters/queue/types"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	di2 "github.com/valentinesamuel/activelog/internal/repository/di"
-	storageDI "github.com/valentinesamuel/activelog/internal/storage/di"
-	storageTypes "github.com/valentinesamuel/activelog/internal/storage/types"
+	storageDI "github.com/valentinesamuel/activelog/internal/adapters/storage/di"
+	storageTypes "github.com/valentinesamuel/activelog/internal/adapters/storage/types"
 )
 
 // RegisterHandlers registers all HTTP handler factories with the container

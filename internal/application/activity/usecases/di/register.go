@@ -2,9 +2,9 @@ package di
 
 import (
 	"github.com/valentinesamuel/activelog/internal/application/activity/usecases"
-	cacheDI "github.com/valentinesamuel/activelog/internal/cache/di"
-	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
-	"github.com/valentinesamuel/activelog/internal/container"
+	cacheDI "github.com/valentinesamuel/activelog/internal/adapters/cache/di"
+	cacheTypes "github.com/valentinesamuel/activelog/internal/adapters/cache/types"
+	"github.com/valentinesamuel/activelog/internal/platform/container"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	repoDI "github.com/valentinesamuel/activelog/internal/repository/di"
 	"github.com/valentinesamuel/activelog/internal/service"

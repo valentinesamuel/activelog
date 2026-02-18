@@ -10,11 +10,11 @@ import (
 	"syscall"
 
 	"github.com/hibiken/asynq"
-	"github.com/valentinesamuel/activelog/internal/config"
-	"github.com/valentinesamuel/activelog/internal/jobs"
-	internalAsynq "github.com/valentinesamuel/activelog/internal/queue/asynq"
-	"github.com/valentinesamuel/activelog/internal/queue/memory"
-	queueTypes "github.com/valentinesamuel/activelog/internal/queue/types"
+	"github.com/valentinesamuel/activelog/internal/platform/config"
+	"github.com/valentinesamuel/activelog/internal/platform/jobs"
+	internalAsynq "github.com/valentinesamuel/activelog/internal/adapters/queue/asynq"
+	"github.com/valentinesamuel/activelog/internal/adapters/queue/memory"
+	queueTypes "github.com/valentinesamuel/activelog/internal/adapters/queue/types"
 )
 
 func main() {

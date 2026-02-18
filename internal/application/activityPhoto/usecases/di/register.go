@@ -2,13 +2,13 @@ package di
 
 import (
 	"github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases"
-	"github.com/valentinesamuel/activelog/internal/container"
+	"github.com/valentinesamuel/activelog/internal/platform/container"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/repository/di"
 	"github.com/valentinesamuel/activelog/internal/service"
 	di2 "github.com/valentinesamuel/activelog/internal/service/di"
-	di3 "github.com/valentinesamuel/activelog/internal/storage/di"
-	"github.com/valentinesamuel/activelog/internal/storage/types"
+	di3 "github.com/valentinesamuel/activelog/internal/adapters/storage/di"
+	"github.com/valentinesamuel/activelog/internal/adapters/storage/types"
 )
 
 // RegisterPhotoUseCases registers all photo-related use case factories

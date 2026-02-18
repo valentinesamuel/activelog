@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
-	"github.com/valentinesamuel/activelog/internal/validator"
+	"github.com/valentinesamuel/activelog/internal/platform/validator"
 	"github.com/valentinesamuel/activelog/pkg/auth"
 	appErrors "github.com/valentinesamuel/activelog/pkg/errors"
 	"github.com/valentinesamuel/activelog/pkg/response"
