@@ -31,6 +31,7 @@ func LoadWithValidation() error {
 	Common = loadCommon()
 	Database = loadDatabase()
 	Storage = loadStorage()
+	Email = loadEmail()
 	Cache = loadCache()
 	RateLimit = loadRateLimit()
 	Queue = loadQueue()

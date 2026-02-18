@@ -31,6 +31,14 @@ var Schema = []EnvVar{
 	// Storage
 	{Key: "STORAGE_PROVIDER", Required: false, DefaultValue: "s3", Type: "string", ValidValues: []string{"s3", "local", "supabase", "azure"}},
 
+	// Email
+	{Key: "EMAIL_PROVIDER", Required: false, DefaultValue: "noop", Type: "string", ValidValues: []string{"smtp", "noop"}},
+	{Key: "EMAIL_FROM", Required: false, DefaultValue: "noreply@activelog.app", Type: "string"},
+	{Key: "SMTP_HOST", Required: false, DefaultValue: "localhost", Type: "string"},
+	{Key: "SMTP_PORT", Required: false, DefaultValue: "587", Type: "int"},
+	{Key: "SMTP_USER", Required: false, DefaultValue: "", Type: "string"},
+	{Key: "SMTP_PASS", Required: false, DefaultValue: "", Type: "string"},
+
 	// AWS S3
 	{Key: "AWS_S3_BUCKET", Required: false, DefaultValue: "", Type: "string"},
 	{Key: "AWS_REGION", Required: false, DefaultValue: "us-east-1", Type: "string"},

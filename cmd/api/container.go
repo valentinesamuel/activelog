@@ -8,6 +8,7 @@ import (
 	tagUsecases "github.com/valentinesamuel/activelog/internal/application/tag/usecases/di"
 	cacheRegister "github.com/valentinesamuel/activelog/internal/cache/di"
 	"github.com/valentinesamuel/activelog/internal/container"
+	emailRegister "github.com/valentinesamuel/activelog/internal/email/di"
 	handlerRegister "github.com/valentinesamuel/activelog/internal/handlers/di"
 	queueRegister "github.com/valentinesamuel/activelog/internal/queue/di"
 	"github.com/valentinesamuel/activelog/internal/repository"
@@ -30,11 +31,13 @@ func setupContainer(db repository.DBConn) *container.Container {
 	storageRegister.RegisterStorage(c)
 	cacheRegister.RegisterCache(c)
 	queueRegister.RegisterQueue(c)
+	emailRegister.RegisterEmail(c)
 
 	// Eagerly resolve dependedncies
 	c.MustResolve(storageRegister.StorageProviderKey)
 	c.MustResolve(cacheRegister.CacheProviderKey)
 	c.MustResolve(queueRegister.QueueProviderKey)
+	c.MustResolve(emailRegister.EmailProviderKey)
 
 	// Register layers in dependency order
 	repositoryRegister.RegisterRepositories(c) // Layer 1: Data access
