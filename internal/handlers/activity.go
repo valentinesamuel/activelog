@@ -18,6 +18,7 @@ import (
 	appErrors "github.com/valentinesamuel/activelog/pkg/errors"
 	"github.com/valentinesamuel/activelog/pkg/query"
 	"github.com/valentinesamuel/activelog/pkg/response"
+	"github.com/valentinesamuel/activelog/pkg/workers"
 )
 
 // ActivityHandler uses the broker pattern for use case orchestration
@@ -408,6 +409,133 @@ func (h *ActivityHandler) DeleteActivity(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// batchActivityResult is the per-item outcome for batch operations.
+type batchActivityResult struct {
+	Index    int              `json:"index"`
+	Success  bool             `json:"success"`
+	Activity *models.Activity `json:"activity,omitempty"`
+	Error    string           `json:"error,omitempty"`
+}
+
+// batchDeleteResult is the per-item outcome for a batch delete.
+type batchDeleteResult struct {
+	ID      int    `json:"id"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// BatchCreateActivities handles concurrent creation of multiple activities.
+// @Summary Batch create activities
+// @Description Creates multiple activities in parallel using a worker pool
+// @Tags Activities
+// @Accept json
+// @Produce json
+// @Param request body object true "Batch create request with activities array (max 50)"
+// @Success 207 {array} batchActivityResult "Per-item results"
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Security BearerAuth
+// @Router /api/v1/activities/batch [post]
+func (h *ActivityHandler) BatchCreateActivities(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	requestUser, _ := requestcontext.FromContext(ctx)
+
+	var req struct {
+		Activities []models.CreateActivityRequest `json:"activities"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if len(req.Activities) == 0 || len(req.Activities) > 50 {
+		response.Error(w, http.StatusBadRequest, "activities must have between 1 and 50 items")
+		return
+	}
+
+	type job struct {
+		index int
+		req   models.CreateActivityRequest
+	}
+
+	pool := workers.New[job, batchActivityResult](5)
+	jobs := make([]job, len(req.Activities))
+	for i, a := range req.Activities {
+		jobs[i] = job{index: i, req: a}
+	}
+
+	results := pool.Submit(jobs, func(j job) batchActivityResult {
+		a := j.req // local copy so &a is safe within this call
+		out, err := broker.RunUseCase(
+			h.broker,
+			ctx,
+			h.createActivityUC,
+			usecases.CreateActivityInput{UserID: requestUser.Id, Request: &a},
+		)
+		if err != nil {
+			log.Error().Err(err).Int("index", j.index).Msg("BatchCreate item failed")
+			return batchActivityResult{Index: j.index, Success: false, Error: err.Error()}
+		}
+		return batchActivityResult{Index: j.index, Success: true, Activity: out.Activity}
+	})
+
+	response.SendJSON(w, http.StatusMultiStatus, results)
+}
+
+// BatchDeleteActivities handles concurrent deletion of multiple activities.
+// @Summary Batch delete activities
+// @Description Deletes multiple activities in parallel using a worker pool
+// @Tags Activities
+// @Accept json
+// @Produce json
+// @Param request body object true "Batch delete request with ids array (max 50)"
+// @Success 207 {array} batchDeleteResult "Per-item results"
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 401 {object} map[string]string "Unauthorized"
+// @Security BearerAuth
+// @Router /api/v1/activities/batch [delete]
+func (h *ActivityHandler) BatchDeleteActivities(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	requestUser, _ := requestcontext.FromContext(ctx)
+
+	var req struct {
+		IDs []int `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if len(req.IDs) == 0 || len(req.IDs) > 50 {
+		response.Error(w, http.StatusBadRequest, "ids must have between 1 and 50 items")
+		return
+	}
+
+	type job struct {
+		activityID int
+	}
+
+	pool := workers.New[job, batchDeleteResult](5)
+	jobs := make([]job, len(req.IDs))
+	for i, id := range req.IDs {
+		jobs[i] = job{activityID: id}
+	}
+
+	results := pool.Submit(jobs, func(j job) batchDeleteResult {
+		_, err := broker.RunUseCase(
+			h.broker,
+			ctx,
+			h.deleteActivityUC,
+			usecases.DeleteActivityInput{UserID: requestUser.Id, ActivityID: j.activityID},
+		)
+		if err != nil {
+			log.Error().Err(err).Int("activityID", j.activityID).Msg("BatchDelete item failed")
+			return batchDeleteResult{ID: j.activityID, Success: false, Error: err.Error()}
+		}
+		return batchDeleteResult{ID: j.activityID, Success: true}
+	})
+
+	response.SendJSON(w, http.StatusMultiStatus, results)
 }
 
 // GetStats fetches activity statistics using broker pattern

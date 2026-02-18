@@ -2,10 +2,19 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/valentinesamuel/activelog/internal/repository"
 )
+
+// ConcurrentUserStats holds aggregated stats fetched by parallel goroutines.
+type ConcurrentUserStats struct {
+	TotalActivities int
+	WeeklyStats     *repository.WeeklyStats
+	MonthlyStats    *repository.MonthlyStats
+	ActivityByType  map[string]int
+}
 
 // StatsService implements StatsServiceInterface
 // Encapsulates business logic for statistics and analytics
@@ -71,6 +80,58 @@ func (s *StatsService) CalculateActivityStats(
 	// Business logic: Calculate additional derived metrics
 	// (This is where you'd add computations that don't belong in the repository)
 	// For now, just return the stats as-is
+	return stats, nil
+}
+
+// CalculateUserStatsConcurrent fetches four independent stats in parallel using goroutines
+// and collects them via a buffered channel. This demonstrates Go concurrency patterns.
+func (s *StatsService) CalculateUserStatsConcurrent(ctx context.Context, userID int) (*ConcurrentUserStats, error) {
+	type statResult struct {
+		key   string
+		value any
+		err   error
+	}
+
+	resultCh := make(chan statResult, 4)
+
+	go func() {
+		count, err := s.activityRepo.Count(userID)
+		resultCh <- statResult{key: "count", value: count, err: err}
+	}()
+
+	go func() {
+		weekly, err := s.statsRepo.GetWeeklyStats(ctx, userID)
+		resultCh <- statResult{key: "weekly", value: weekly, err: err}
+	}()
+
+	go func() {
+		monthly, err := s.statsRepo.GetMonthlyStats(ctx, userID)
+		resultCh <- statResult{key: "monthly", value: monthly, err: err}
+	}()
+
+	go func() {
+		byType, err := s.statsRepo.GetActivityCountByType(ctx, userID)
+		resultCh <- statResult{key: "by_type", value: byType, err: err}
+	}()
+
+	stats := &ConcurrentUserStats{}
+	for i := 0; i < 4; i++ {
+		r := <-resultCh
+		if r.err != nil {
+			return nil, fmt.Errorf("stats fetch failed for %s: %w", r.key, r.err)
+		}
+		switch r.key {
+		case "count":
+			stats.TotalActivities = r.value.(int)
+		case "weekly":
+			stats.WeeklyStats = r.value.(*repository.WeeklyStats)
+		case "monthly":
+			stats.MonthlyStats = r.value.(*repository.MonthlyStats)
+		case "by_type":
+			stats.ActivityByType = r.value.(map[string]int)
+		}
+	}
+
 	return stats, nil
 }
 

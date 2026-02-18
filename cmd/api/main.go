@@ -183,6 +183,8 @@ func (app *Application) registerActivityRoutes(router *mux.Router) {
 
 	activityRouter.HandleFunc("", app.ActivityHandler.ListActivities).Methods("GET")
 	activityRouter.HandleFunc("", app.ActivityHandler.CreateActivity).Methods("POST")
+	activityRouter.HandleFunc("/batch", app.ActivityHandler.BatchCreateActivities).Methods("POST")
+	activityRouter.HandleFunc("/batch", app.ActivityHandler.BatchDeleteActivities).Methods("DELETE")
 	activityRouter.HandleFunc("/stats", app.ActivityHandler.GetStats).Methods("GET")
 	activityRouter.HandleFunc("/{id}", app.ActivityHandler.GetActivity).Methods("GET")
 	activityRouter.HandleFunc("/{id}", app.ActivityHandler.UpdateActivity).Methods("PATCH")

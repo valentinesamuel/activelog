@@ -174,7 +174,7 @@ CSV streaming download + async PDF export backed by S3.
 
 ---
 
-## Phase 5: Concurrency Patterns (Month 7)
+## Phase 5: Concurrency Patterns (Month 7)✅
 
 ### Goal
 Apply goroutines/channels/sync patterns to existing services; add batch endpoints; build reusable worker pool.
