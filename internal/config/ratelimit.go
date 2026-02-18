@@ -68,6 +68,20 @@ func compilePathPattern(pattern string) *regexp.Regexp {
 	return regexp.MustCompile("^" + escaped + "$")
 }
 
+// ReloadRateLimit reads ratelimit.yaml from disk and returns a fresh config.
+// This is used by the background refresh job to re-read and re-cache config.
+func ReloadRateLimit() *RateLimitConfig {
+	return loadRateLimit()
+}
+
+// CompilePatterns recompiles all path patterns after JSON unmarshaling.
+// Must be called after unmarshaling a RateLimitConfig from JSON/Redis.
+func (c *RateLimitConfig) CompilePatterns() {
+	for i := range c.Rules {
+		c.Rules[i].pattern = compilePathPattern(c.Rules[i].Path)
+	}
+}
+
 // FindRule returns the best matching rule for method+path
 // Returns limit and window duration for the matched rule
 func (c *RateLimitConfig) FindRule(method, path string) (int, time.Duration) {

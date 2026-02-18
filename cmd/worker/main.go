@@ -32,6 +32,7 @@ func run() error {
 	factory.Register(queueTypes.EventWelcomeEmail, jobs.HandleWelcomeEmail)
 	factory.Register(queueTypes.EventWeeklySummary, jobs.HandleWeeklySummary)
 	factory.Register(queueTypes.EventGenerateExport, jobs.HandleGenerateExport)
+	factory.Register(queueTypes.EventRefreshRateLimitConfig, jobs.HandleRefreshRateLimitConfig)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -66,6 +67,7 @@ func runAsynqWorker(_ context.Context, factory *jobs.HandlerFactory, quit <-chan
 		queueTypes.EventSendVerificationEmail,
 		queueTypes.EventActivityCreated,
 		queueTypes.EventActivityDeleted,
+		queueTypes.EventRefreshRateLimitConfig,
 	} {
 		mux.HandleFunc(string(event), handler)
 	}

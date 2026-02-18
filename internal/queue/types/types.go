@@ -18,10 +18,11 @@ type EventType string
 
 // Inbox events
 const (
-	EventWelcomeEmail          EventType = "welcome_email"
-	EventWeeklySummary         EventType = "weekly_summary"
-	EventGenerateExport        EventType = "generate_export"
-	EventSendVerificationEmail EventType = "send_verification_email"
+	EventWelcomeEmail             EventType = "welcome_email"
+	EventWeeklySummary            EventType = "weekly_summary"
+	EventGenerateExport           EventType = "generate_export"
+	EventSendVerificationEmail    EventType = "send_verification_email"
+	EventRefreshRateLimitConfig   EventType = "refresh_rate_limit_config"
 )
 
 // Outbox events

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/valentinesamuel/activelog/internal/cache/types"
+	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
 	"github.com/valentinesamuel/activelog/internal/middleware"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
@@ -33,13 +33,13 @@ type ListActivitiesOutput struct {
 type ListActivitiesUseCase struct {
 	service service.ActivityServiceInterface
 	repo    repository.ActivityRepositoryInterface
-	cache   types.CacheProvider
+	cache   cacheTypes.CacheAdapter
 }
 
 func NewListActivitiesUseCase(
 	svc service.ActivityServiceInterface,
 	repo repository.ActivityRepositoryInterface,
-	cache types.CacheProvider,
+	cache cacheTypes.CacheAdapter,
 ) *ListActivitiesUseCase {
 	return &ListActivitiesUseCase{
 		service: svc,
@@ -53,6 +53,11 @@ func (uc *ListActivitiesUseCase) RequiresTransaction() bool {
 }
 
 const cacheTTL = 2 * time.Minute
+
+var activityCacheOpts = cacheTypes.CacheOptions{
+	DB:           cacheTypes.CacheDBActivityData,
+	PartitionKey: cacheTypes.CachePartitionActivities,
+}
 
 func (uc *ListActivitiesUseCase) Execute(
 	ctx context.Context,
@@ -71,7 +76,7 @@ func (uc *ListActivitiesUseCase) Execute(
 
 	// Try cache first
 	if uc.cache != nil {
-		if cached, err := uc.cache.Get(cacheKey); err == nil && cached != "" {
+		if cached, err := uc.cache.Get(ctx, cacheKey, activityCacheOpts); err == nil && cached != "" {
 			var result query.PaginatedResult
 			if err := json.Unmarshal([]byte(cached), &result); err == nil {
 				middleware.CacheHitsTotal.Inc()
@@ -93,7 +98,7 @@ func (uc *ListActivitiesUseCase) Execute(
 	// Store in cache
 	if uc.cache != nil {
 		if jsonData, err := json.Marshal(result); err == nil {
-			_ = uc.cache.Set(cacheKey, string(jsonData), cacheTTL)
+			_ = uc.cache.Set(ctx, cacheKey, string(jsonData), cacheTTL, activityCacheOpts)
 		}
 	}
 
@@ -107,5 +112,5 @@ func (uc *ListActivitiesUseCase) Execute(
 func (uc *ListActivitiesUseCase) generateCacheKey(userID int, opts *query.QueryOptions) string {
 	// Include query params in key to avoid serving wrong cached data
 	keyData, _ := json.Marshal(opts)
-	return fmt.Sprintf("activities:user:%d:query:%s", userID, string(keyData))
+	return fmt.Sprintf("user:%d:query:%s", userID, string(keyData))
 }

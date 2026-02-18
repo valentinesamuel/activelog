@@ -1,285 +1,323 @@
-# Webhook Delivery: Async + Persistence + Retry (Redis Streams + NATS)
+# Cache Adapter with Multi-DB + Partition Support (incl. Rate Limiter)
 
 ## Context
 
-The current webhook system uses Redis pub/sub (no durability — messages are lost if no subscriber is active at publish time) and delivers webhooks **synchronously** inside the subscriber goroutine, blocking event processing while HTTP calls are in flight. There is no audit trail; if the app crashes mid-delivery, all in-flight work is lost. Retry logic only exists in memory (3 short attempts: 1s/2s/4s).
+The current cache setup uses a single `CacheProvider` connected to Redis DB 0 for everything. Use cases and the rate limiter call it with raw string keys — no DB isolation, no namespacing, no config caching.
 
-**Goals:**
-1. Replace Redis pub/sub with **two durable providers**: Redis Streams (XADD/XREADGROUP/XACK) and **NATS JetStream** (pull consumer with Ack/Nak).
-2. Make HTTP delivery **asynchronous** — subscriber returns immediately after creating DB records.
-3. Persist every delivery attempt in a `webhook_deliveries` table (audit trail + crash recovery).
-4. Retry with **exponential backoff** (1m → 5m → 30m → 2h → 24h, max 5 attempts) via a polling retry worker.
+Goals:
+1. Introduce a `CacheAdapter` layer that routes to the correct Redis DB + namespaces every key — both are **mandatory**, no defaults.
+2. Add a `RateLimitCacheProvider` interface (separate, for Increment/Expire) used by the rate limiter.
+3. The rate limit config (from `ratelimit.yaml`) is cached to Redis at startup with a 48-hour TTL, read back to verify, and stale-while-revalidate refreshed atomically when < 3 minutes remain before expiry.
+4. Migrate existing use cases (`ListActivities`, `UpdateActivity`) to the new `CacheAdapter`.
 
----
-
-## New Architecture
-
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                         WEBHOOK DELIVERY SYSTEM                            ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-  Activity Handler
-       │
-       │  broker.Publish(event)
-       ▼
-  ┌─────────────────────────────────────────────────────────────────────────┐
-  │                       WebhookBusProvider interface                      │
-  │                  Publish(ctx, event) / Subscribe(ctx, handler)          │
-  └──────────┬──────────────────────────────────┬───────────────────────────┘
-             │                                  │
-    WEBHOOK_PROVIDER=redis             WEBHOOK_PROVIDER=nats
-             │                                  │
-             ▼                                  ▼
-  ┌──────────────────────┐          ┌───────────────────────────┐
-  │   Redis Streams      │          │   NATS JetStream          │
-  │                      │          │                           │
-  │  XADD webhook:events │          │  js.Publish("webhook.     │
-  │  XREADGROUP GROUP    │          │    events", data)         │
-  │    webhook-delivery  │          │  sub.Fetch(10)            │
-  │  XACK <msg-id>       │          │  msg.Ack()                │
-  └──────────┬───────────┘          └───────────┬───────────────┘
-             │                                  │
-             └───────────────┬──────────────────┘
-                             │
-                             │  handler(ctx, event)
-                             ▼
-               ┌─────────────────────────────┐
-               │         Delivery.Handle()   │
-               │                             │
-               │  1. ListByEvent(eventType)  │
-               │  2. For each webhook:       │
-               │     CreateDelivery(DB)  ────┼──► webhook_deliveries table
-               │     go dispatchAsync()  ────┼──► goroutine (non-blocking)
-               │  3. Return immediately      │
-               │     (XACK / msg.Ack sent)   │
-               └─────────────────────────────┘
-                             │
-                ┌────────────┴────────────┐
-                │                         │
-                ▼                         ▼
-          HTTP 2xx                   HTTP error / timeout
-                │                         │
-     MarkDeliverySucceeded       MarkDeliveryFailed
-      (status=succeeded)          (status=failed,
-                                   next_retry_at=now+delay)
-                                         │
-                             ┌───────────┴───────────┐
-                             │     RetryWorker        │
-                             │                        │
-                             │  Polls every 30s       │
-                             │  ListPendingRetries()  │
-                             │   WHERE next_retry_at  │
-                             │     <= NOW()           │
-                             │  go retryDelivery()    │
-                             └───────────────────────┘
-
-  BACKOFF SCHEDULE:
-  ┌──────────┬────────────────────┬──────────────────────────────────┐
-  │ Attempt  │  Delay             │  Status after failure            │
-  ├──────────┼────────────────────┼──────────────────────────────────┤
-  │ 1st      │ 1 minute           │ failed, next_retry_at = now+1m   │
-  │ 2nd      │ 5 minutes          │ failed, next_retry_at = now+5m   │
-  │ 3rd      │ 30 minutes         │ failed, next_retry_at = now+30m  │
-  │ 4th      │ 2 hours            │ failed, next_retry_at = now+2h   │
-  │ 5th      │ 24 hours           │ failed, next_retry_at = now+24h  │
-  │ after 5  │ —                  │ exhausted (terminal, no retry)   │
-  └──────────┴────────────────────┴──────────────────────────────────┘
-
-  PROVIDERS (selected via WEBHOOK_PROVIDER env var):
-  ┌──────────────┬─────────────────┬──────────────┬───────────────────────┐
-  │ Provider     │ Durability      │ Multi-node   │ Dev dependency        │
-  ├──────────────┼─────────────────┼──────────────┼───────────────────────┤
-  │ memory       │ None (dev only) │ No           │ None                  │
-  │ redis        │ Yes (streams)   │ Yes (groups) │ Redis already present │
-  │ nats         │ Yes (JetStream) │ Yes (pull)   │ Add nats.go           │
-  └──────────────┴─────────────────┴──────────────┴───────────────────────┘
-```
+Inbox/outbox queues (DB 0 via asynq) are untouched.
 
 ---
 
-## Key Design Decisions
+## Architecture Overview
 
-**XACK / msg.Ack() timing:** Sent after `Handle()` returns (after DB delivery records are written, before HTTP completes). The DB is the source of truth for retry state. The stream stays clean; crashes are recovered by the retry worker polling `status IN ('pending','failed')`.
+```
+Use Case / RateLimiter
+        │
+        ▼
+CacheAdapter (Get/Set/Del)          ← types.CacheAdapter interface
+RateLimitCacheProvider (Incr/Expire) ← types.RateLimitCacheProvider interface
+        │
+        └── both implemented by internal/cache/adapter/redis.Adapter
+                │  holds map[dbNumber]*redis.Client (lazy, mutex-protected)
+                │  builds key: "<partition>:<caller-key>"
+                ▼
+        Redis DB 1 (activity data)
+        Redis DB 2 (stats)
+        Redis DB 3 (rate limits — config + counters)
+```
 
-**Malformed messages:** ACK'd and dropped immediately (non-retryable at stream level).
-
-**Retry worker vs. asynq:** The polling worker reads DB state directly, making crash recovery automatic — no separate queue message needed. 30-second poll interval gives adequate freshness given delays are in minutes/hours.
-
-**Goroutine management:** One goroutine per webhook endpoint per event. Acceptable at current scale. Future: bounded semaphore `make(chan struct{}, N)`.
+The existing `CacheProvider` + its DI registration remain **untouched** (no regressions).
 
 ---
 
-## New Dependency
+## Implementation Phases
 
-```
-github.com/nats-io/nats.go v1.38.0   (add to go.mod)
-```
+### Phase 1 — Config: named Redis DB numbers
+**File:** `internal/config/redis.go`
 
----
-
-## Database Migration
-
-### `migrations/010_create_webhook_deliveries.up.sql`
-```sql
-CREATE TYPE webhook_delivery_status AS ENUM ('pending', 'succeeded', 'failed', 'exhausted');
-
-CREATE TABLE webhook_deliveries (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    webhook_id       UUID NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
-    event_type       TEXT NOT NULL,
-    payload          JSONB NOT NULL,
-    status           webhook_delivery_status NOT NULL DEFAULT 'pending',
-    attempt_count    INTEGER NOT NULL DEFAULT 0,
-    max_attempts     INTEGER NOT NULL DEFAULT 5,
-    last_http_status INTEGER,
-    last_error       TEXT,
-    next_retry_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
-CREATE INDEX idx_webhook_deliveries_status_retry ON webhook_deliveries(status, next_retry_at)
-    WHERE status IN ('pending', 'failed');
-```
-
-### `migrations/010_create_webhook_deliveries.down.sql`
-```sql
-DROP TABLE IF EXISTS webhook_deliveries;
-DROP TYPE IF EXISTS webhook_delivery_status;
-```
-
----
-
-## Files to Create
-
-### `internal/webhook/nats/provider.go`
-NATS JetStream pull-consumer-based provider:
-- `New(url string) (*Provider, error)` — `nats.Connect(url)`, get JetStream context, create/bind stream `WEBHOOK_EVENTS` on subject `webhook.events`, create durable pull consumer `webhook-delivery`
-- `Publish(ctx, event)` — `js.PublishMsg` with JSON-serialized event
-- `Subscribe(ctx, handler)` — starts `go readLoop()`
-- `readLoop()` — `sub.Fetch(10, nats.MaxWait(5s))` in a loop; for each message: deserialize → call `handler(ctx, event)` → `msg.Ack()`; on deserialize error: `msg.Ack()` (drop malformed); on context cancel: return
-
-### `internal/webhook/retry_worker.go` (`webhook` package)
-- `RetryWorker{webhookRepo, delivery}` struct
-- `NewRetryWorker(repo, delivery) *RetryWorker`
-- `Start(ctx)` — `go run(ctx)`
-- `run(ctx)` — `time.NewTicker(retryPollInterval)` loop, calls `poll(ctx)` on each tick
-- `poll(ctx)` — `ListPendingRetries(100)`, for each: `GetByID(webhookID)` + deserialize payload + `go retryDelivery()`
-- `retryDelivery(wh, delivery, event)` — `delivery.attemptHTTP()` + write result to DB (same logic as `dispatchAsync`)
-
-### `migrations/010_create_webhook_deliveries.up.sql` — see above
-### `migrations/010_create_webhook_deliveries.down.sql` — see above
-
----
-
-## Files to Modify
-
-### `internal/webhook/types/types.go`
-Add `DeliveryStatus` enum constants and `WebhookDelivery` struct with all DB fields.
-
-### `internal/webhook/redis/provider.go` — REWRITE (pub/sub → streams)
-- Constants: `streamName="webhook:events"`, `groupName="webhook-delivery"`, `consumerName="activelog-worker-1"`, `blockDuration=5s`
-- `ensureConsumerGroup(ctx)` — `XGroupCreateMkStream(..., "$")` idempotent
-- `Publish(ctx, event)` — `XADD MaxLen=10000 Approx=true field="event" value=<json>`
-- `Subscribe(ctx, handler)` — `ensureConsumerGroup` + `go readLoop()`
-- `readLoop()` — `XREADGROUP Block=5s Count=10 Streams=[stream, ">"]`; on timeout: continue; on error: sleep 1s + continue
-- `processMessage(ctx, msg, handler)` — deserialize → `handler()` → `XACK`; on bad message: `XACK` + drop
-
-### `internal/webhook/delivery.go` — REWRITE (sync → async)
 ```go
-var retryDelays = []time.Duration{1*time.Minute, 5*time.Minute, 30*time.Minute, 2*time.Hour, 24*time.Hour}
-const maxAttempts = 5
+type CacheDBNumbers struct {
+    ActivityData int  // REDIS_DB_ACTIVITY_DATA (default 1)
+    Stats        int  // REDIS_DB_STATS         (default 2)
+    RateLimits   int  // REDIS_DB_RATE_LIMITS   (default 3)
+}
+
+type CacheConfigType struct {
+    Provider string
+    Redis    RedisConfigType
+    DBs      CacheDBNumbers   // ← new
+}
 ```
-- `Handle(ctx, event)` — creates DB records + `go dispatchAsync()` per webhook, returns immediately
-- `dispatchAsync(wh, delivery, event)` — uses `context.Background()`, calls `attemptHTTP()`, writes outcome
-- `attemptHTTP(ctx, url, eventType, sig, body) (int, error)` — single HTTP POST, 10s timeout, HMAC headers; returns `(statusCode, error)`
-- `computeSignature(secret, body) string` — HMAC-SHA256, unchanged logic
 
-### `internal/repository/webhook_repository.go`
-Add 4 methods (existing 5 methods unchanged):
-- `CreateDelivery(ctx, *WebhookDelivery) error` — INSERT RETURNING id/timestamps
-- `MarkDeliverySucceeded(ctx, id, httpStatus) error`
-- `MarkDeliveryFailed(ctx, id, *httpStatus, errMsg, *nextRetryAt) error` — status=failed or exhausted
-- `ListPendingRetries(ctx, limit) ([]*WebhookDelivery, error)` — JOIN webhooks WHERE active AND status IN ('pending','failed') AND next_retry_at <= NOW() ORDER BY next_retry_at LIMIT $1
-
-### `internal/config/webhook.go`
-Add fields to `WebhookConfigType`:
+`loadCache()` addition:
 ```go
-StreamMaxLen   int64  // WEBHOOK_STREAM_MAX_LEN, default 10000
-RetryPollSecs  int    // WEBHOOK_RETRY_POLL_SECONDS, default 30
-NATSUrl        string // NATS_URL, default "nats://localhost:4222"
+DBs: CacheDBNumbers{
+    ActivityData: GetEnvInt("REDIS_DB_ACTIVITY_DATA", 1),
+    Stats:        GetEnvInt("REDIS_DB_STATS", 2),
+    RateLimits:   GetEnvInt("REDIS_DB_RATE_LIMITS", 3),
+},
 ```
-
-### `internal/config/schema.go`
-Add optional env var entries: `WEBHOOK_STREAM_MAX_LEN` (int), `WEBHOOK_RETRY_POLL_SECONDS` (int), `NATS_URL` (string). Add `"nats"` to `ValidValues` for `WEBHOOK_PROVIDER`.
-
-### `internal/webhook/di/keys.go`
-Add constants:
-```go
-WebhookDeliveryKey = "WebhookDelivery"
-RetryWorkerKey     = "WebhookRetryWorker"
-```
-
-### `internal/webhook/di/register.go`
-- `RegisterWebhookBus(c)` — factory updated with `case "nats": webhookNATS.New(config.Webhook.NATSUrl)`
-- Add `RegisterWebhookDelivery(c)` — resolves `WebhookRepoKey`, constructs `webhook.NewDelivery(repo)`
-- Add `RegisterRetryWorker(c)` — resolves `WebhookRepoKey` + `WebhookDeliveryKey`, constructs `webhook.NewRetryWorker(repo, delivery)`
-- `createProvider()` switch: `"redis"` → Redis Streams, `"nats"` → NATS JetStream, default → memory
-
-### `cmd/api/container.go`
-After `RegisterWebhookBus(c)`:
-```go
-webhookDI.RegisterWebhookDelivery(c)
-webhookDI.RegisterRetryWorker(c)
-```
-
-### `cmd/api/main.go`
-- Add `WebhookRetryWorker *webhook.RetryWorker` field to `Application` struct
-- Resolve from container in `setupDependencies()`
-- After existing subscribe block in `serve()`:
-  ```go
-  app.WebhookRetryWorker.Start(webhookCtx)  // same ctx as bus subscription
-  ```
 
 ---
 
-## Complete File Summary
+### Phase 2 — Cache types: enums + adapter interfaces
+**File:** `internal/cache/types/types.go`
 
-| File                                                | Action                                           |
-| --------------------------------------------------- | ------------------------------------------------ |
-| `migrations/010_create_webhook_deliveries.up.sql`   | CREATE                                           |
-| `migrations/010_create_webhook_deliveries.down.sql` | CREATE                                           |
-| `internal/webhook/nats/provider.go`                 | CREATE                                           |
-| `internal/webhook/retry_worker.go`                  | CREATE                                           |
-| `internal/webhook/types/types.go`                   | MODIFY — add `DeliveryStatus`, `WebhookDelivery` |
-| `internal/webhook/redis/provider.go`                | REWRITE — pub/sub → streams                      |
-| `internal/webhook/delivery.go`                      | REWRITE — sync → async + persistence             |
-| `internal/repository/webhook_repository.go`         | MODIFY — 4 new delivery methods                  |
-| `internal/config/webhook.go`                        | MODIFY — add 3 new config fields                 |
-| `internal/config/schema.go`                         | MODIFY — add 3 new env var entries               |
-| `internal/webhook/di/keys.go`                       | MODIFY — add 2 new keys                          |
-| `internal/webhook/di/register.go`                   | MODIFY — add nats case + 2 new registrations     |
-| `cmd/api/container.go`                              | MODIFY — register delivery + retry worker        |
-| `cmd/api/main.go`                                   | MODIFY — add retry worker field + start          |
+Append below the existing `CacheProvider` interface (do not modify it):
 
-**Total:** 4 new files, 10 modified files. All changes contained within webhook subsystem and its DI wiring.
+```go
+// --- Multi-DB Adapter types ---
+
+type CacheDBName string
+
+const (
+    CacheDBActivityData CacheDBName = "ACTIVITY_DATA"
+    CacheDBStats        CacheDBName = "STATS"
+    CacheDBRateLimits   CacheDBName = "RATE_LIMITS"
+)
+
+type CachePartition string
+
+const (
+    CachePartitionActivities        CachePartition = "activities"
+    CachePartitionStats             CachePartition = "stats"
+    CachePartitionRateLimitConfig   CachePartition = "ratelimit:config"
+    CachePartitionRateLimitCounters CachePartition = "ratelimit:counters"
+)
+
+// CacheOptions is required on every CacheAdapter call.
+type CacheOptions struct {
+    DB           CacheDBName
+    PartitionKey CachePartition
+}
+
+// CacheAdapter is the high-level interface for general caching.
+// DB and PartitionKey are always required — no defaults.
+type CacheAdapter interface {
+    Get(ctx context.Context, key string, opts CacheOptions) (string, error)
+    Set(ctx context.Context, key string, value string, ttl time.Duration, opts CacheOptions) error
+    Del(ctx context.Context, key string, opts CacheOptions) error
+}
+
+// RateLimitCacheProvider is the dedicated interface for rate limiter counter operations.
+type RateLimitCacheProvider interface {
+    Increment(ctx context.Context, key string, opts CacheOptions) (int64, error)
+    Expire(ctx context.Context, key string, ttl time.Duration, opts CacheOptions) (bool, error)
+    SetNX(ctx context.Context, key string, value string, ttl time.Duration, opts CacheOptions) (bool, error)
+}
+```
+
+> `SetNX` is needed for the atomic refresh lock.
+
+---
+
+### Phase 3 — Redis adapter (implements both interfaces)
+**New file:** `internal/cache/adapter/redis/adapter.go`
+
+```go
+package redis
+
+// Adapter implements both CacheAdapter and RateLimitCacheProvider.
+// It lazily creates one *redis.Client per DB number, protected by a mutex.
+type Adapter struct {
+    addr     string
+    password string
+    dbMap    map[types.CacheDBName]int   // name → DB number
+    clients  map[int]*redis.Client       // DB number → client (lazy)
+    mu       sync.Mutex
+}
+
+func New() *Adapter {
+    return &Adapter{
+        addr:     config.Cache.Redis.Address,
+        password: config.Cache.Redis.Password,
+        dbMap: map[types.CacheDBName]int{
+            types.CacheDBActivityData: config.Cache.DBs.ActivityData,
+            types.CacheDBStats:        config.Cache.DBs.Stats,
+            types.CacheDBRateLimits:   config.Cache.DBs.RateLimits,
+        },
+        clients: make(map[int]*redis.Client),
+    }
+}
+
+// client lazily initialises and returns the redis.Client for the given DB name.
+func (a *Adapter) client(db types.CacheDBName) (*redis.Client, error) { ... }
+
+// buildKey → "<partition>:<key>"
+func buildKey(opts types.CacheOptions, key string) string {
+    return fmt.Sprintf("%s:%s", opts.PartitionKey, key)
+}
+
+// CacheAdapter methods: Get, Set, Del
+// RateLimitCacheProvider methods: Increment, Expire, SetNX
+```
+
+---
+
+### Phase 4 — DI wiring
+**File:** `internal/cache/di/keys.go`
+
+```go
+const CacheAdapterKey = "cacheAdapter"
+```
+
+**File:** `internal/cache/di/register.go`
+
+Add `RegisterCacheAdapter`:
+```go
+func RegisterCacheAdapter(c *container.Container) {
+    c.Register(CacheAdapterKey, func(c *container.Container) (interface{}, error) {
+        switch config.Cache.Provider {
+        case "redis":
+            adapter := redisadapter.New()
+            log.Printf("Cache adapter initialized: Redis multi-DB")
+            return adapter, nil
+        default:
+            return nil, fmt.Errorf("unsupported provider: %s", config.Cache.Provider)
+        }
+    })
+}
+```
+
+Call `RegisterCacheAdapter` in the app bootstrap alongside `RegisterCache`.
+
+---
+
+### Phase 5 — Rate limit config caching (startup + stale-while-revalidate)
+
+#### Startup sequence (wherever `NewRateLimiter` is constructed, e.g., `main.go`)
+
+```
+1. config.MustLoad()                             // loads ratelimit.yaml → config.RateLimit (in-memory)
+2. RegisterCacheAdapter(container)
+3. adapter = container.MustResolve(CacheAdapterKey)
+4. rateOpts = CacheOptions{DB: CacheDBRateLimits, PartitionKey: CachePartitionRateLimitConfig}
+5. Write config.RateLimit (as CachedRateLimitConfig JSON) to Redis with 48h TTL
+6. Read back from Redis → verify presence; if miss, log warning (in-memory still available)
+7. app.RateLimiter = middleware.NewRateLimiter(rlCacheProvider, cacheAdapter, config.RateLimit)
+```
+
+#### Cached value schema (stored in Redis as JSON)
+
+```go
+type CachedRateLimitConfig struct {
+    CachedAt time.Time             `json:"cached_at"`
+    Config   config.RateLimitConfig `json:"config"`
+}
+```
+
+#### Runtime request path (inside `RateLimiter.Middleware`)
+
+```
+1. Try cacheAdapter.Get(ctx, "config", rateConfigOpts)
+2a. On SUCCESS:
+    - Parse CachedRateLimitConfig
+    - If time.Since(cachedAt) > (48h - 3min):
+        → Try to acquire refresh lock via rlCacheProvider.SetNX(ctx, "refresh_lock", "1", 5min, lockOpts)
+        → If lock acquired: enqueue EventRefreshRateLimitConfig job on InboxQueue
+    - Use parsed config for this request
+2b. On FAILURE (Redis error or key not found):
+    - Use in-memory config.RateLimit (fallback)
+3. Proceed with rate limit check using resolved config
+```
+
+#### Background refresh job
+
+**Event type** (add to `internal/queue/types/types.go`):
+```go
+EventRefreshRateLimitConfig EventType = "refresh_rate_limit_config"
+```
+
+**Handler** (new file following existing inbox handler pattern):
+- Read `ratelimit.yaml` from disk
+- Parse into `config.RateLimitConfig`
+- Write new `CachedRateLimitConfig` with fresh `CachedAt` to Redis with 48h TTL (overwrite atomically with SET)
+- Log success/failure
+
+---
+
+### Phase 6 — Rate limiter middleware update
+**File:** `internal/middleware/rateLimiter.go`
+
+```go
+type RateLimiter struct {
+    rlCache     types.RateLimitCacheProvider  // for counters (Increment/Expire)
+    configCache types.CacheAdapter            // for config caching (Get/Set)
+    fallback    *config.RateLimitConfig       // in-memory fallback
+}
+```
+
+- Counter key format unchanged: `ratelimit:user:<id>:<method>:<path>`
+  → stored via `Increment(ctx, key, CacheOptions{DB: CacheDBRateLimits, PartitionKey: CachePartitionRateLimitCounters})`
+- Config key: `"config"` with `CacheOptions{DB: CacheDBRateLimits, PartitionKey: CachePartitionRateLimitConfig}`
+- Lock key: `"refresh_lock"` with same DB, `CachePartitionRateLimitConfig` partition
+
+---
+
+### Phase 7 — Migrate activity use cases to CacheAdapter
+
+#### `list_activities.go`
+- Field: `cache types.CacheAdapter`
+- `cache.Get(ctx, cacheKey, CacheOptions{DB: CacheDBActivityData, PartitionKey: CachePartitionActivities})`
+- `cache.Set(ctx, cacheKey, data, cacheTTL, CacheOptions{DB: CacheDBActivityData, PartitionKey: CachePartitionActivities})`
+
+#### `update_activity.go`
+- Field: `cache types.CacheAdapter`
+- `cache.Del(ctx, key, CacheOptions{DB: CacheDBActivityData, PartitionKey: CachePartitionActivities})`
+
+#### `di/register.go` (activity)
+- Resolve `cacheDI.CacheAdapterKey`, cast to `types.CacheAdapter` for both `ListActivitiesUCKey` and `UpdateActivityUCKey`
+
+---
+
+### Phase 8 — Env files
+
+**`.env` and `.env.example`:**
+```
+REDIS_DB_ACTIVITY_DATA=1
+REDIS_DB_STATS=2
+REDIS_DB_RATE_LIMITS=3
+```
+
+---
+
+## Files Modified / Created
+
+| File                                                        | Action                                                                 |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `internal/config/redis.go`                                  | Modify — add `CacheDBNumbers`                                          |
+| `internal/cache/types/types.go`                             | Modify — add enums, CacheOptions, CacheAdapter, RateLimitCacheProvider |
+| `internal/cache/adapter/redis/adapter.go`                   | **Create** — Redis impl of both interfaces                             |
+| `internal/cache/di/keys.go`                                 | Modify — add `CacheAdapterKey`                                         |
+| `internal/cache/di/register.go`                             | Modify — add `RegisterCacheAdapter`                                    |
+| `internal/middleware/rateLimiter.go`                        | Modify — use CacheAdapter + stale-while-revalidate logic               |
+| `internal/queue/types/types.go`                             | Modify — add `EventRefreshRateLimitConfig`                             |
+| `internal/application/broker/` (handler file)               | Modify — register refresh handler                                      |
+| `internal/application/activity/usecases/list_activities.go` | Modify — use CacheAdapter                                              |
+| `internal/application/activity/usecases/update_activity.go` | Modify — use CacheAdapter                                              |
+| `internal/application/activity/usecases/di/register.go`     | Modify — inject CacheAdapter                                           |
+| `.env`                                                      | Modify — add 3 DB number vars                                          |
+| `.env.example`                                              | Modify — document new vars                                             |
+
+`CacheProvider` + its DI registration → **untouched**.
 
 ---
 
 ## Verification
 
-1. **Build:** `go build ./...` — no compile errors after `go get github.com/nats-io/nats.go`
-2. **Migration:** Run `010_create_webhook_deliveries.up.sql`; verify table + partial index exist
-3. **Redis Streams path:**
-   - `WEBHOOK_PROVIDER=redis` — register webhook, trigger activity event
-   - `redis-cli XLEN webhook:events` — should show stream entries
-   - `redis-cli XPENDING webhook:events webhook-delivery - + 10` — empty after ACK
-   - Check `webhook_deliveries` table for new rows
-4. **NATS path:**
-   - `WEBHOOK_PROVIDER=nats` + `NATS_URL=nats://localhost:4222` (run `nats-server -js`)
-   - Same trigger; verify delivery record + HTTP call
-5. **Retry:** Point webhook at URL returning 500; check `status=failed` rows with advancing `next_retry_at`
-6. **Exhaustion:** After 5 failures, verify `status=exhausted`, retry worker skips row
-7. **Crash recovery:** Kill app after `CreateDelivery` but before XACK/Ack; restart; verify message reprocessed (delivery record may duplicate — acceptable for now)
+1. `go build ./...` — zero errors
+2. Start app — expect:
+   - `"Cache adapter initialized: Redis multi-DB"` log line
+   - `"Rate limit config cached to Redis (DB 3)"` log line
+   - `"Rate limit config verified from Redis"` log line
+3. `redis-cli -p 6377 -n 1 keys '*'` — confirm activity keys prefixed with `activities:`
+4. `redis-cli -p 6377 -n 3 keys '*'` — confirm `ratelimit:config:config` key present with TTL ~48h
+5. `GET /activities` twice — first miss, second hit (check `X-Cache` headers)
+6. `PUT /activities/:id` — subsequent GET returns fresh data (cache invalidated)
+7. Simulate near-expiry (short TTL in test) — verify refresh job is enqueued exactly once (lock prevents double-enqueue)

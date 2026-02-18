@@ -3,7 +3,7 @@ package di
 import (
 	"github.com/valentinesamuel/activelog/internal/application/activity/usecases"
 	cacheDI "github.com/valentinesamuel/activelog/internal/cache/di"
-	"github.com/valentinesamuel/activelog/internal/cache/types"
+	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
 	"github.com/valentinesamuel/activelog/internal/container"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	repoDI "github.com/valentinesamuel/activelog/internal/repository/di"
@@ -26,11 +26,11 @@ func RegisterActivityUseCases(c *container.Container) {
 	c.Register(UpdateActivityUCKey, func(c *container.Container) (interface{}, error) {
 		svc := c.MustResolve(serviceDI.ActivityServiceKey).(service.ActivityServiceInterface)
 		repo := c.MustResolve(repoDI.ActivityRepoKey).(repository.ActivityRepositoryInterface)
-		var cacheProvider types.CacheProvider
-		if resolved := c.MustResolve(cacheDI.CacheProviderKey); resolved != nil {
-			cacheProvider = resolved.(types.CacheProvider)
+		var cacheAdapter cacheTypes.CacheAdapter
+		if resolved := c.MustResolve(cacheDI.CacheAdapterKey); resolved != nil {
+			cacheAdapter = resolved.(cacheTypes.CacheAdapter)
 		}
-		return usecases.NewUpdateActivityUseCase(svc, repo, cacheProvider), nil
+		return usecases.NewUpdateActivityUseCase(svc, repo, cacheAdapter), nil
 	})
 
 	c.Register(DeleteActivityUCKey, func(c *container.Container) (interface{}, error) {
@@ -50,12 +50,12 @@ func RegisterActivityUseCases(c *container.Container) {
 	c.Register(ListActivitiesUCKey, func(c *container.Container) (interface{}, error) {
 		svc := c.MustResolve(serviceDI.ActivityServiceKey).(service.ActivityServiceInterface)
 		repo := c.MustResolve(repoDI.ActivityRepoKey).(repository.ActivityRepositoryInterface)
-		// Cache provider may be nil if not configured - handle gracefully
-		var cacheProvider types.CacheProvider
-		if resolved := c.MustResolve(cacheDI.CacheProviderKey); resolved != nil {
-			cacheProvider = resolved.(types.CacheProvider)
+		// Cache adapter may be nil if not configured — handle gracefully
+		var cacheAdapter cacheTypes.CacheAdapter
+		if resolved := c.MustResolve(cacheDI.CacheAdapterKey); resolved != nil {
+			cacheAdapter = resolved.(cacheTypes.CacheAdapter)
 		}
-		return usecases.NewListActivitiesUseCase(svc, repo, cacheProvider), nil
+		return usecases.NewListActivitiesUseCase(svc, repo, cacheAdapter), nil
 	})
 
 	c.Register(GetActivityStatsUCKey, func(c *container.Container) (interface{}, error) {

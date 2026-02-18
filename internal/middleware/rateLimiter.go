@@ -1,13 +1,18 @@
 package middleware
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/valentinesamuel/activelog/internal/cache/types"
+	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
 	"github.com/valentinesamuel/activelog/internal/config"
+	queueTypes "github.com/valentinesamuel/activelog/internal/queue/types"
 	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
 )
 
@@ -35,15 +40,92 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
-type RateLimiter struct {
-	cache  types.CacheProvider
-	config *config.RateLimitConfig
+// cachedRateLimitConfig is the schema stored in Redis.
+type cachedRateLimitConfig struct {
+	CachedAt time.Time              `json:"cached_at"`
+	Config   config.RateLimitConfig `json:"config"`
 }
 
-func NewRateLimiter(cache types.CacheProvider, cfg *config.RateLimitConfig) *RateLimiter {
+var (
+	rateLimitConfigOpts = cacheTypes.CacheOptions{
+		DB:           cacheTypes.CacheDBRateLimits,
+		PartitionKey: cacheTypes.CachePartitionRateLimitConfig,
+	}
+	rateLimitLockOpts = cacheTypes.CacheOptions{
+		DB:           cacheTypes.CacheDBRateLimits,
+		PartitionKey: cacheTypes.CachePartitionRateLimitConfig,
+	}
+	rateLimitCounterOpts = cacheTypes.CacheOptions{
+		DB:           cacheTypes.CacheDBRateLimits,
+		PartitionKey: cacheTypes.CachePartitionRateLimitCounters,
+	}
+)
+
+const (
+	rateLimitConfigTTL  = 48 * time.Hour
+	refreshLockTTL      = 5 * time.Minute
+	staleThreshold      = 3 * time.Minute
+)
+
+type RateLimiter struct {
+	rlCache     cacheTypes.RateLimitCacheProvider
+	configCache cacheTypes.CacheAdapter
+	queue       queueTypes.QueueProvider
+	fallback    *config.RateLimitConfig
+}
+
+func NewRateLimiter(
+	rlCache cacheTypes.RateLimitCacheProvider,
+	configCache cacheTypes.CacheAdapter,
+	queue queueTypes.QueueProvider,
+	cfg *config.RateLimitConfig,
+) *RateLimiter {
 	return &RateLimiter{
-		cache:  cache,
-		config: cfg,
+		rlCache:     rlCache,
+		configCache: configCache,
+		queue:       queue,
+		fallback:    cfg,
+	}
+}
+
+// resolveConfig returns the rate limit config, preferring the cached value
+// from Redis. Falls back to the in-memory config on any error.
+// If the cached value is near expiry, it triggers a background refresh.
+func (rl *RateLimiter) resolveConfig(ctx context.Context) *config.RateLimitConfig {
+	raw, err := rl.configCache.Get(ctx, "config", rateLimitConfigOpts)
+	if err != nil || raw == "" {
+		return rl.fallback
+	}
+
+	var cached cachedRateLimitConfig
+	if err := json.Unmarshal([]byte(raw), &cached); err != nil {
+		return rl.fallback
+	}
+
+	// Recompile patterns (lost during JSON round-trip due to unexported field)
+	cached.Config.CompilePatterns()
+
+	// Check if near expiry — trigger stale-while-revalidate in background
+	age := time.Since(cached.CachedAt)
+	if age > rateLimitConfigTTL-staleThreshold {
+		go rl.tryEnqueueRefresh()
+	}
+
+	return &cached.Config
+}
+
+// tryEnqueueRefresh tries to acquire a refresh lock and enqueues the refresh
+// job if successful. Runs in a goroutine so it never blocks requests.
+func (rl *RateLimiter) tryEnqueueRefresh() {
+	ctx := context.Background()
+	acquired, err := rl.rlCache.SetNX(ctx, "refresh_lock", "1", refreshLockTTL, rateLimitLockOpts)
+	if err != nil || !acquired {
+		return
+	}
+
+	payload := queueTypes.JobPayload{Event: queueTypes.EventRefreshRateLimitConfig}
+	if _, err := rl.queue.Enqueue(ctx, queueTypes.InboxQueue, payload); err != nil {
+		log.Printf("Warning: failed to enqueue rate limit config refresh: %v", err)
 	}
 }
 
@@ -51,8 +133,11 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
+		// Resolve config (cached or fallback)
+		cfg := rl.resolveConfig(ctx)
+
 		// Look up limit for this method + path
-		limit, window := rl.config.FindRule(r.Method, r.URL.Path)
+		limit, window := cfg.FindRule(r.Method, r.URL.Path)
 
 		// Build key with method for separate counters
 		var key string
@@ -63,14 +148,14 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		}
 
 		// Increment counter
-		count, err := rl.cache.Increment(key)
+		count, err := rl.rlCache.Increment(ctx, key, rateLimitCounterOpts)
 		if err != nil {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		if count == 1 {
-			rl.cache.Expire(key, window)
+			rl.rlCache.Expire(ctx, key, window, rateLimitCounterOpts)
 		}
 
 		if count > int64(limit) {

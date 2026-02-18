@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -28,6 +29,8 @@ import (
 	"github.com/valentinesamuel/activelog/internal/handlers"
 	handlerDI "github.com/valentinesamuel/activelog/internal/handlers/di"
 	"github.com/valentinesamuel/activelog/internal/middleware"
+	queueDI "github.com/valentinesamuel/activelog/internal/queue/di"
+	queueTypes "github.com/valentinesamuel/activelog/internal/queue/types"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/scheduler"
 	schedulerDI "github.com/valentinesamuel/activelog/internal/scheduler/di"
@@ -111,6 +114,43 @@ func run() error {
 	return app.serve(server)
 }
 
+// cacheRateLimitConfig writes the in-memory rate limit config to Redis at
+// startup with a 48-hour TTL, then reads it back to verify it was stored.
+func (app *Application) cacheRateLimitConfig(adapter cacheTypes.CacheAdapter) {
+	ctx := context.Background()
+	opts := cacheTypes.CacheOptions{
+		DB:           cacheTypes.CacheDBRateLimits,
+		PartitionKey: cacheTypes.CachePartitionRateLimitConfig,
+	}
+
+	cached := struct {
+		CachedAt time.Time              `json:"cached_at"`
+		Config   *config.RateLimitConfig `json:"config"`
+	}{
+		CachedAt: time.Now(),
+		Config:   config.RateLimit,
+	}
+
+	data, err := json.Marshal(cached)
+	if err != nil {
+		log.Printf("Warning: Failed to marshal rate limit config: %v", err)
+		return
+	}
+
+	if err := adapter.Set(ctx, "config", string(data), 48*time.Hour, opts); err != nil {
+		log.Printf("Warning: Failed to cache rate limit config to Redis: %v", err)
+		return
+	}
+	log.Printf("Rate limit config cached to Redis (DB %d)", config.Cache.DBs.RateLimits)
+
+	// Verify by reading back
+	if val, err := adapter.Get(ctx, "config", opts); err == nil && val != "" {
+		log.Printf("Rate limit config verified from Redis")
+	} else {
+		log.Printf("Warning: Rate limit config not found in Redis after write, using in-memory fallback")
+	}
+}
+
 // setupDependencies initializes all repositories and handlers using DI container
 // All dependencies are registered and resolved through the centralized container
 func (app *Application) setupDependencies() {
@@ -129,9 +169,16 @@ func (app *Application) setupDependencies() {
 	// Resolve core dependencies from container
 	app.Broker = app.Container.MustResolve(di.BrokerKey).(*broker.Broker)
 
-	// Setup rate limiter with cache from container
-	cache := app.Container.MustResolve(cacheDI.CacheProviderKey).(cacheTypes.CacheProvider)
-	app.RateLimiter = middleware.NewRateLimiter(cache, config.RateLimit)
+	// Setup rate limiter using the multi-DB cache adapter
+	resolvedAdapter := app.Container.MustResolve(cacheDI.CacheAdapterKey)
+	cacheAdapter := resolvedAdapter.(cacheTypes.CacheAdapter)
+	rlCacheProvider := resolvedAdapter.(cacheTypes.RateLimitCacheProvider)
+	queueProvider := app.Container.MustResolve(queueDI.QueueProviderKey).(queueTypes.QueueProvider)
+
+	// Write rate limit config to Redis at startup with 48h TTL
+	app.cacheRateLimitConfig(cacheAdapter)
+
+	app.RateLimiter = middleware.NewRateLimiter(rlCacheProvider, cacheAdapter, queueProvider, config.RateLimit)
 
 	// Resolve scheduler from container
 	app.Scheduler = app.Container.MustResolve(schedulerDI.SchedulerKey).(*scheduler.Scheduler)
