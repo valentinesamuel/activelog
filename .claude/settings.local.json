@@ -29,7 +29,8 @@
       "Bash(air -v:*)",
       "Bash(swag init:*)",
       "Bash(go vet:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(cat:*)"
     ]
   }
 }

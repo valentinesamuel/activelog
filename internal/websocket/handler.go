@@ -32,7 +32,7 @@ func NewHandler(hub *Hub) *Handler {
 func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	user, ok := requestcontext.FromContext(r.Context())
 	if !ok {
-		response.Error(w, http.StatusUnauthorized, "Unauthorized")
+		response.Fail(w, r, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 

@@ -1,285 +1,316 @@
-# Webhook Delivery: Async + Persistence + Retry (Redis Streams + NATS)
+# Plan: Standardized Response Interceptor
 
 ## Context
 
-The current webhook system uses Redis pub/sub (no durability — messages are lost if no subscriber is active at publish time) and delivers webhooks **synchronously** inside the subscriber goroutine, blocking event processing while HTTP calls are in flight. There is no audit trail; if the app crashes mid-delivery, all in-flight work is lost. Retry logic only exists in memory (3 short attempts: 1s/2s/4s).
+Currently, handlers write responses using three different patterns:
+- `response.SendJSON(w, statusCode, data)` for success
+- `response.Error(w, statusCode, message)` for errors
+- Inline `json.NewEncoder(w).Encode(...)` for validation errors
 
-**Goals:**
-1. Replace Redis pub/sub with **two durable providers**: Redis Streams (XADD/XREADGROUP/XACK) and **NATS JetStream** (pull consumer with Ack/Nak).
-2. Make HTTP delivery **asynchronous** — subscriber returns immediately after creating DB records.
-3. Persist every delivery attempt in a `webhook_deliveries` table (audit trail + crash recovery).
-4. Retry with **exponential backoff** (1m → 5m → 30m → 2h → 24h, max 5 attempts) via a polling retry worker.
+These produce inconsistent shapes with no `statusCode`, `success`, `path`, or `duration` fields. The goal is to standardize every response into one of three envelopes:
 
----
+**Success:** `{ statusCode, success: true, message: "Request successful", result: {...}, path, duration }`
+**Error:** `{ statusCode, success: false, message, errors: [], path, duration }`
+**Validation:** `{ statusCode: 400, success: false, message: "Bad Request", errors: [{field, errors:[]}], path, duration }`
 
-## New Architecture
-
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                         WEBHOOK DELIVERY SYSTEM                            ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-  Activity Handler
-       │
-       │  broker.Publish(event)
-       ▼
-  ┌─────────────────────────────────────────────────────────────────────────┐
-  │                       WebhookBusProvider interface                      │
-  │                  Publish(ctx, event) / Subscribe(ctx, handler)          │
-  └──────────┬──────────────────────────────────┬───────────────────────────┘
-             │                                  │
-    WEBHOOK_PROVIDER=redis             WEBHOOK_PROVIDER=nats
-             │                                  │
-             ▼                                  ▼
-  ┌──────────────────────┐          ┌───────────────────────────┐
-  │   Redis Streams      │          │   NATS JetStream          │
-  │                      │          │                           │
-  │  XADD webhook:events │          │  js.Publish("webhook.     │
-  │  XREADGROUP GROUP    │          │    events", data)         │
-  │    webhook-delivery  │          │  sub.Fetch(10)            │
-  │  XACK <msg-id>       │          │  msg.Ack()                │
-  └──────────┬───────────┘          └───────────┬───────────────┘
-             │                                  │
-             └───────────────┬──────────────────┘
-                             │
-                             │  handler(ctx, event)
-                             ▼
-               ┌─────────────────────────────┐
-               │         Delivery.Handle()   │
-               │                             │
-               │  1. ListByEvent(eventType)  │
-               │  2. For each webhook:       │
-               │     CreateDelivery(DB)  ────┼──► webhook_deliveries table
-               │     go dispatchAsync()  ────┼──► goroutine (non-blocking)
-               │  3. Return immediately      │
-               │     (XACK / msg.Ack sent)   │
-               └─────────────────────────────┘
-                             │
-                ┌────────────┴────────────┐
-                │                         │
-                ▼                         ▼
-          HTTP 2xx                   HTTP error / timeout
-                │                         │
-     MarkDeliverySucceeded       MarkDeliveryFailed
-      (status=succeeded)          (status=failed,
-                                   next_retry_at=now+delay)
-                                         │
-                             ┌───────────┴───────────┐
-                             │     RetryWorker        │
-                             │                        │
-                             │  Polls every 30s       │
-                             │  ListPendingRetries()  │
-                             │   WHERE next_retry_at  │
-                             │     <= NOW()           │
-                             │  go retryDelivery()    │
-                             └───────────────────────┘
-
-  BACKOFF SCHEDULE:
-  ┌──────────┬────────────────────┬──────────────────────────────────┐
-  │ Attempt  │  Delay             │  Status after failure            │
-  ├──────────┼────────────────────┼──────────────────────────────────┤
-  │ 1st      │ 1 minute           │ failed, next_retry_at = now+1m   │
-  │ 2nd      │ 5 minutes          │ failed, next_retry_at = now+5m   │
-  │ 3rd      │ 30 minutes         │ failed, next_retry_at = now+30m  │
-  │ 4th      │ 2 hours            │ failed, next_retry_at = now+2h   │
-  │ 5th      │ 24 hours           │ failed, next_retry_at = now+24h  │
-  │ after 5  │ —                  │ exhausted (terminal, no retry)   │
-  └──────────┴────────────────────┴──────────────────────────────────┘
-
-  PROVIDERS (selected via WEBHOOK_PROVIDER env var):
-  ┌──────────────┬─────────────────┬──────────────┬───────────────────────┐
-  │ Provider     │ Durability      │ Multi-node   │ Dev dependency        │
-  ├──────────────┼─────────────────┼──────────────┼───────────────────────┤
-  │ memory       │ None (dev only) │ No           │ None                  │
-  │ redis        │ Yes (streams)   │ Yes (groups) │ Redis already present │
-  │ nats         │ Yes (JetStream) │ Yes (pull)   │ Add nats.go           │
-  └──────────────┴─────────────────┴──────────────┴───────────────────────┘
-```
+> **Note on `"error"` vs `"errors"`:** The todo.md uses `"errors"` (plural, empty `[]`) for simple errors but `"error"` (singular) for validation errors. This plan uses `"errors"` (plural) consistently for API consistency.
 
 ---
 
-## Key Design Decisions
+## Implementation Steps
 
-**XACK / msg.Ack() timing:** Sent after `Handle()` returns (after DB delivery records are written, before HTTP completes). The DB is the source of truth for retry state. The stream stays clean; crashes are recovered by the retry worker polling `status IN ('pending','failed')`.
+### Step 1 — Update `pkg/response/json.go`
 
-**Malformed messages:** ACK'd and dropped immediately (non-retryable at stream level).
+Add to the file:
+1. **Private context key type** to avoid collisions:
+   ```go
+   type contextKey int
+   var RequestStartKey contextKey = 0
+   ```
+2. **`WithStartTime` helper** (used by timing middleware):
+   ```go
+   func WithStartTime(ctx context.Context, t time.Time) context.Context {
+       return context.WithValue(ctx, RequestStartKey, t)
+   }
+   ```
+3. **`ValidationErrorItem` struct**:
+   ```go
+   type ValidationErrorItem struct {
+       Field  string   `json:"field"`
+       Errors []string `json:"errors"`
+   }
+   ```
+4. **Three new response helpers** (all read `r.URL.RequestURI()` for path, compute duration from context start time in milliseconds):
+   - `Success(w, r, statusCode, result)` → success envelope
+   - `Fail(w, r, statusCode, message)` → error envelope with `errors: []`
+   - `ValidationFail(w, r, []ValidationErrorItem)` → validation envelope
 
-**Retry worker vs. asynq:** The polling worker reads DB state directly, making crash recovery automatic — no separate queue message needed. 30-second poll interval gives adequate freshness given delays are in minutes/hours.
+Add imports: `"context"` and `"time"`.
 
-**Goroutine management:** One goroutine per webhook endpoint per event. Acceptable at current scale. Future: bounded semaphore `make(chan struct{}, N)`.
+Keep `SendJSON`, `Error`, `AppError` in place until all call sites are migrated (removed at the end of Step 6).
 
----
-
-## New Dependency
-
-```
-github.com/nats-io/nats.go v1.38.0   (add to go.mod)
-```
-
----
-
-## Database Migration
-
-### `migrations/010_create_webhook_deliveries.up.sql`
-```sql
-CREATE TYPE webhook_delivery_status AS ENUM ('pending', 'succeeded', 'failed', 'exhausted');
-
-CREATE TABLE webhook_deliveries (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    webhook_id       UUID NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
-    event_type       TEXT NOT NULL,
-    payload          JSONB NOT NULL,
-    status           webhook_delivery_status NOT NULL DEFAULT 'pending',
-    attempt_count    INTEGER NOT NULL DEFAULT 0,
-    max_attempts     INTEGER NOT NULL DEFAULT 5,
-    last_http_status INTEGER,
-    last_error       TEXT,
-    next_retry_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
-CREATE INDEX idx_webhook_deliveries_status_retry ON webhook_deliveries(status, next_retry_at)
-    WHERE status IN ('pending', 'failed');
-```
-
-### `migrations/010_create_webhook_deliveries.down.sql`
-```sql
-DROP TABLE IF EXISTS webhook_deliveries;
-DROP TYPE IF EXISTS webhook_delivery_status;
-```
+**File:** `pkg/response/json.go`
 
 ---
 
-## Files to Create
+### Step 2 — Update `internal/validator/validator.go`
 
-### `internal/webhook/nats/provider.go`
-NATS JetStream pull-consumer-based provider:
-- `New(url string) (*Provider, error)` — `nats.Connect(url)`, get JetStream context, create/bind stream `WEBHOOK_EVENTS` on subject `webhook.events`, create durable pull consumer `webhook-delivery`
-- `Publish(ctx, event)` — `js.PublishMsg` with JSON-serialized event
-- `Subscribe(ctx, handler)` — starts `go readLoop()`
-- `readLoop()` — `sub.Fetch(10, nats.MaxWait(5s))` in a loop; for each message: deserialize → call `handler(ctx, event)` → `msg.Ack()`; on deserialize error: `msg.Ack()` (drop malformed); on context cancel: return
+Change `FormatValidationErrors` return type from `map[string]string` to `[]response.ValidationErrorItem`.
 
-### `internal/webhook/retry_worker.go` (`webhook` package)
-- `RetryWorker{webhookRepo, delivery}` struct
-- `NewRetryWorker(repo, delivery) *RetryWorker`
-- `Start(ctx)` — `go run(ctx)`
-- `run(ctx)` — `time.NewTicker(retryPollInterval)` loop, calls `poll(ctx)` on each tick
-- `poll(ctx)` — `ListPendingRetries(100)`, for each: `GetByID(webhookID)` + deserialize payload + `go retryDelivery()`
-- `retryDelivery(wh, delivery, event)` — `delivery.attemptHTTP()` + write result to DB (same logic as `dispatchAsync`)
+New logic: iterate `validator.ValidationErrors`, group messages by field into a `map[string][]string` accumulator preserving insertion order, then convert to `[]response.ValidationErrorItem`.
 
-### `migrations/010_create_webhook_deliveries.up.sql` — see above
-### `migrations/010_create_webhook_deliveries.down.sql` — see above
+Updated tag messages:
+- `required` → `"<field> should not be empty"`
+- `min` → `"<field> must be at least <param>"`
+- `max` → `"<field> must be at most <param> characters"`
+- `email` → `"<field> must be a valid email"`
+- default → `"<field> is invalid"`
+
+Add import: `"github.com/valentinesamuel/activelog/pkg/response"`
+
+**File:** `internal/validator/validator.go`
 
 ---
 
-## Files to Modify
+### Step 3 — Create `internal/middleware/timing.go` (new file)
 
-### `internal/webhook/types/types.go`
-Add `DeliveryStatus` enum constants and `WebhookDelivery` struct with all DB fields.
-
-### `internal/webhook/redis/provider.go` — REWRITE (pub/sub → streams)
-- Constants: `streamName="webhook:events"`, `groupName="webhook-delivery"`, `consumerName="activelog-worker-1"`, `blockDuration=5s`
-- `ensureConsumerGroup(ctx)` — `XGroupCreateMkStream(..., "$")` idempotent
-- `Publish(ctx, event)` — `XADD MaxLen=10000 Approx=true field="event" value=<json>`
-- `Subscribe(ctx, handler)` — `ensureConsumerGroup` + `go readLoop()`
-- `readLoop()` — `XREADGROUP Block=5s Count=10 Streams=[stream, ">"]`; on timeout: continue; on error: sleep 1s + continue
-- `processMessage(ctx, msg, handler)` — deserialize → `handler()` → `XACK`; on bad message: `XACK` + drop
-
-### `internal/webhook/delivery.go` — REWRITE (sync → async)
 ```go
-var retryDelays = []time.Duration{1*time.Minute, 5*time.Minute, 30*time.Minute, 2*time.Hour, 24*time.Hour}
-const maxAttempts = 5
-```
-- `Handle(ctx, event)` — creates DB records + `go dispatchAsync()` per webhook, returns immediately
-- `dispatchAsync(wh, delivery, event)` — uses `context.Background()`, calls `attemptHTTP()`, writes outcome
-- `attemptHTTP(ctx, url, eventType, sig, body) (int, error)` — single HTTP POST, 10s timeout, HMAC headers; returns `(statusCode, error)`
-- `computeSignature(secret, body) string` — HMAC-SHA256, unchanged logic
+package middleware
 
-### `internal/repository/webhook_repository.go`
-Add 4 methods (existing 5 methods unchanged):
-- `CreateDelivery(ctx, *WebhookDelivery) error` — INSERT RETURNING id/timestamps
-- `MarkDeliverySucceeded(ctx, id, httpStatus) error`
-- `MarkDeliveryFailed(ctx, id, *httpStatus, errMsg, *nextRetryAt) error` — status=failed or exhausted
-- `ListPendingRetries(ctx, limit) ([]*WebhookDelivery, error)` — JOIN webhooks WHERE active AND status IN ('pending','failed') AND next_retry_at <= NOW() ORDER BY next_retry_at LIMIT $1
+import (
+    "net/http"
+    "time"
+    "github.com/valentinesamuel/activelog/pkg/response"
+)
 
-### `internal/config/webhook.go`
-Add fields to `WebhookConfigType`:
-```go
-StreamMaxLen   int64  // WEBHOOK_STREAM_MAX_LEN, default 10000
-RetryPollSecs  int    // WEBHOOK_RETRY_POLL_SECONDS, default 30
-NATSUrl        string // NATS_URL, default "nats://localhost:4222"
+func TimingMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        ctx := response.WithStartTime(r.Context(), time.Now())
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
 ```
 
-### `internal/config/schema.go`
-Add optional env var entries: `WEBHOOK_STREAM_MAX_LEN` (int), `WEBHOOK_RETRY_POLL_SECONDS` (int), `NATS_URL` (string). Add `"nats"` to `ValidValues` for `WEBHOOK_PROVIDER`.
-
-### `internal/webhook/di/keys.go`
-Add constants:
-```go
-WebhookDeliveryKey = "WebhookDelivery"
-RetryWorkerKey     = "WebhookRetryWorker"
-```
-
-### `internal/webhook/di/register.go`
-- `RegisterWebhookBus(c)` — factory updated with `case "nats": webhookNATS.New(config.Webhook.NATSUrl)`
-- Add `RegisterWebhookDelivery(c)` — resolves `WebhookRepoKey`, constructs `webhook.NewDelivery(repo)`
-- Add `RegisterRetryWorker(c)` — resolves `WebhookRepoKey` + `WebhookDeliveryKey`, constructs `webhook.NewRetryWorker(repo, delivery)`
-- `createProvider()` switch: `"redis"` → Redis Streams, `"nats"` → NATS JetStream, default → memory
-
-### `cmd/api/container.go`
-After `RegisterWebhookBus(c)`:
-```go
-webhookDI.RegisterWebhookDelivery(c)
-webhookDI.RegisterRetryWorker(c)
-```
-
-### `cmd/api/main.go`
-- Add `WebhookRetryWorker *webhook.RetryWorker` field to `Application` struct
-- Resolve from container in `setupDependencies()`
-- After existing subscribe block in `serve()`:
-  ```go
-  app.WebhookRetryWorker.Start(webhookCtx)  // same ctx as bus subscription
-  ```
+**File:** `internal/middleware/timing.go`
 
 ---
 
-## Complete File Summary
+### Step 4 — Register `TimingMiddleware` in `cmd/api/main.go`
 
-| File                                                | Action                                           |
-| --------------------------------------------------- | ------------------------------------------------ |
-| `migrations/010_create_webhook_deliveries.up.sql`   | CREATE                                           |
-| `migrations/010_create_webhook_deliveries.down.sql` | CREATE                                           |
-| `internal/webhook/nats/provider.go`                 | CREATE                                           |
-| `internal/webhook/retry_worker.go`                  | CREATE                                           |
-| `internal/webhook/types/types.go`                   | MODIFY — add `DeliveryStatus`, `WebhookDelivery` |
-| `internal/webhook/redis/provider.go`                | REWRITE — pub/sub → streams                      |
-| `internal/webhook/delivery.go`                      | REWRITE — sync → async + persistence             |
-| `internal/repository/webhook_repository.go`         | MODIFY — 4 new delivery methods                  |
-| `internal/config/webhook.go`                        | MODIFY — add 3 new config fields                 |
-| `internal/config/schema.go`                         | MODIFY — add 3 new env var entries               |
-| `internal/webhook/di/keys.go`                       | MODIFY — add 2 new keys                          |
-| `internal/webhook/di/register.go`                   | MODIFY — add nats case + 2 new registrations     |
-| `cmd/api/container.go`                              | MODIFY — register delivery + retry worker        |
-| `cmd/api/main.go`                                   | MODIFY — add retry worker field + start          |
+In `setupRoutes()`, add as the very first `router.Use` call (before `MetricsMiddleware`):
 
-**Total:** 4 new files, 10 modified files. All changes contained within webhook subsystem and its DI wiring.
+```go
+router.Use(middleware.TimingMiddleware)   // FIRST
+router.Use(middleware.MetricsMiddleware)
+// ... rest unchanged
+```
+
+**File:** `cmd/api/main.go`
+
+---
+
+### Step 5 — Update middleware error responses
+
+**`internal/middleware/jwt.go`** — two occurrences (lines 20, 34):
+```go
+response.Error(w, http.StatusUnauthorized, "Unauthorized request")
+→ response.Fail(w, r, http.StatusUnauthorized, "Unauthorized request")
+```
+
+**`internal/middleware/rateLimiter.go`** — one occurrence:
+```go
+http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+→ response.Fail(w, r, http.StatusTooManyRequests, "Rate limit exceeded")
+```
+(add `"github.com/valentinesamuel/activelog/pkg/response"` import)
+
+---
+
+### Step 6 — Migrate all handler call sites
+
+Apply these substitutions across all handler files. After all call sites are migrated, remove the old `SendJSON`, `Error`, and `AppError` helpers from `pkg/response/json.go`.
+
+#### `internal/handlers/activity.go`
+
+| Line    | Before                                                                                    | After                                                                  |
+| ------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 83      | `response.Error(w, http.StatusBadRequest, "Invalid request body")`                        | `response.Fail(w, r, ...)`                                             |
+| 90–97   | inline validation block                                                                   | `response.ValidationFail(w, r, validator.FormatValidationErrors(err))` |
+| 113     | `response.Error(w, http.StatusInternalServerError, "Failed to create activity")`          | `response.Fail(w, r, ...)`                                             |
+| 118     | `response.SendJSON(w, http.StatusCreated, result.Activity)`                               | `response.Success(w, r, ...)`                                          |
+| 140     | `response.Error(w, http.StatusBadRequest, "Invalid activity ID")`                         | `response.Fail(w, r, ...)`                                             |
+| 156     | `response.Error(w, http.StatusNotFound, "Activity not found")`                            | `response.Fail(w, r, ...)`                                             |
+| 161     | `response.Error(w, http.StatusInternalServerError, "Failed to fetch activity")`           | `response.Fail(w, r, ...)`                                             |
+| 165     | `response.SendJSON(w, http.StatusOK, result.Activity)`                                    | `response.Success(w, r, ...)`                                          |
+| 193     | `response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")`         | `response.Fail(w, r, ...)`                                             |
+| 200     | `response.Error(w, http.StatusBadRequest, "Invalid query parameters")`                    | `response.Fail(w, r, ...)`                                             |
+| 264     | `response.Error(w, http.StatusBadRequest, err.Error())`                                   | `response.Fail(w, r, ...)`                                             |
+| 272     | `response.Error(w, http.StatusBadRequest, err.Error())`                                   | `response.Fail(w, r, ...)`                                             |
+| 289     | `response.Error(w, http.StatusInternalServerError, "Failed to fetch activities")`         | `response.Fail(w, r, ...)`                                             |
+| 301–304 | `response.SendJSON(w, http.StatusOK, map[string]interface{}{...})`                        | `response.Success(w, r, ...)`                                          |
+| 328     | `response.Error(w, http.StatusBadRequest, "Invalid activity ID")`                         | `response.Fail(w, r, ...)`                                             |
+| 334     | `response.Error(w, http.StatusBadRequest, "Invalid JSON")`                                | `response.Fail(w, r, ...)`                                             |
+| 340–347 | inline validation block                                                                   | `response.ValidationFail(w, r, validator.FormatValidationErrors(err))` |
+| 366     | `response.Error(w, http.StatusInternalServerError, "Failed to update activity")`          | `response.Fail(w, r, ...)`                                             |
+| 368     | `response.SendJSON(w, http.StatusOK, result.Activity)`                                    | `response.Success(w, r, ...)`                                          |
+| 390     | `response.Error(w, http.StatusBadRequest, "Invalid activity ID")`                         | `response.Fail(w, r, ...)`                                             |
+| 407     | `response.Error(w, http.StatusNotFound, "Activity not found")`                            | `response.Fail(w, r, ...)`                                             |
+| 411     | `w.WriteHeader(http.StatusNoContent)`                                                     | **leave as-is** (HTTP 204 has no body)                                 |
+| 449     | `response.Error(w, http.StatusBadRequest, "Invalid request body")`                        | `response.Fail(w, r, ...)`                                             |
+| 453     | `response.Error(w, http.StatusBadRequest, "activities must have between 1 and 50 items")` | `response.Fail(w, r, ...)`                                             |
+| 483     | `response.SendJSON(w, http.StatusMultiStatus, results)`                                   | `response.Success(w, r, ...)`                                          |
+| 506     | `response.Error(w, http.StatusBadRequest, "Invalid request body")`                        | `response.Fail(w, r, ...)`                                             |
+| 509     | `response.Error(w, http.StatusBadRequest, "ids must have between 1 and 50 items")`        | `response.Fail(w, r, ...)`                                             |
+| 538     | `response.SendJSON(w, http.StatusMultiStatus, results)`                                   | `response.Success(w, r, ...)`                                          |
+| 584     | `response.Error(w, http.StatusInternalServerError, "Failed to get statistics")`           | `response.Fail(w, r, ...)`                                             |
+| 588     | `response.SendJSON(w, http.StatusOK, result.Stats)`                                       | `response.Success(w, r, ...)`                                          |
+
+#### `internal/handlers/user.go`
+
+| Line    | Before                                                                         | After                                                                  |
+| ------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| 33      | `response.Error(w, http.StatusBadRequest, "Invalid request body")`             | `response.Fail(w, r, ...)`                                             |
+| 38–46   | inline validation block                                                        | `response.ValidationFail(w, r, validator.FormatValidationErrors(err))` |
+| 58      | `response.Error(w, http.StatusBadRequest, "User already exists")`              | `response.Fail(w, r, ...)`                                             |
+| 68      | `response.Error(w, http.StatusInternalServerError, "Invalid password")`        | `response.Fail(w, r, ...)`                                             |
+| 79      | `response.Error(w, http.StatusInternalServerError, "❌ Failed to create user")` | `response.Fail(w, r, ...)`                                             |
+| 84–89   | `response.SendJSON(w, http.StatusCreated, ...)`                                | `response.Success(w, r, ...)`                                          |
+| 98      | `response.Error(w, http.StatusBadRequest, "Invalid request body")`             | `response.Fail(w, r, ...)`                                             |
+| 103–111 | inline validation block                                                        | `response.ValidationFail(w, r, validator.FormatValidationErrors(err))` |
+| 119     | `response.Error(w, http.StatusNotFound, "User not found")`                     | `response.Fail(w, r, ...)`                                             |
+| 123     | `response.Error(w, http.StatusInternalServerError, "Invalid Credentials")`     | `response.Fail(w, r, ...)`                                             |
+| 130–132 | `response.Error(w, http.StatusInternalServerError, "Invalid Credentials")`     | `response.Fail(w, r, ...)`                                             |
+| 136–138 | `response.Error(w, http.StatusInternalServerError, "Invalid credentials")`     | `response.Fail(w, r, ...)`                                             |
+| 143–145 | `response.Error(w, http.StatusInternalServerError, "Server error")`            | `response.Fail(w, r, ...)`                                             |
+| 148–151 | `response.SendJSON(w, http.StatusOK, ...)`                                     | `response.Success(w, r, ...)`                                          |
+
+#### `internal/handlers/stats.go`
+
+| Line | Before                                                   | After                         |
+| ---- | -------------------------------------------------------- | ----------------------------- |
+| 29   | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`    |
+| 33   | `response.SendJSON(w, http.StatusOK, weeklyStats)`       | `response.Success(w, r, ...)` |
+| 43   | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`    |
+| 46   | `response.SendJSON(w, http.StatusOK, monthlyStats)`      | `response.Success(w, r, ...)` |
+| 56   | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`    |
+| 60   | `response.SendJSON(w, http.StatusOK, activitySummary)`   | `response.Success(w, r, ...)` |
+| 80   | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`    |
+| 90   | `response.SendJSON(w, http.StatusOK, responseData)`      | `response.Success(w, r, ...)` |
+| 100  | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`    |
+| 116  | `response.SendJSON(w, http.StatusOK, responseData)`      | `response.Success(w, r, ...)` |
+
+#### `internal/handlers/webhook_handler.go`
+
+| Line | Before                                                                       | After                         |
+| ---- | ---------------------------------------------------------------------------- | ----------------------------- |
+| 38   | `response.Error(w, http.StatusBadRequest, "Invalid request body")`           | `response.Fail(w, r, ...)`    |
+| 42   | `response.Error(w, http.StatusBadRequest, "URL is required")`                | `response.Fail(w, r, ...)`    |
+| 46   | `response.Error(w, http.StatusBadRequest, "At least one event is required")` | `response.Fail(w, r, ...)`    |
+| 52   | `response.Error(w, http.StatusInternalServerError, ...)`                     | `response.Fail(w, r, ...)`    |
+| 64   | `response.Error(w, http.StatusInternalServerError, ...)`                     | `response.Fail(w, r, ...)`    |
+| 73   | `response.SendJSON(w, http.StatusCreated, webhookResponse{...})`             | `response.Success(w, r, ...)` |
+| 83   | `response.Error(w, http.StatusInternalServerError, ...)`                     | `response.Fail(w, r, ...)`    |
+| 89   | `response.SendJSON(w, http.StatusOK, webhooks)`                              | `response.Success(w, r, ...)` |
+| 99   | `response.Error(w, http.StatusNotFound, "Webhook not found")`                | `response.Fail(w, r, ...)`    |
+| 102  | `w.WriteHeader(http.StatusNoContent)`                                        | **leave as-is**               |
+
+#### `internal/handlers/photo_handler.go`
+
+| Line | Before                                                            | After                         |
+| ---- | ----------------------------------------------------------------- | ----------------------------- |
+| 49   | `response.Error(w, http.StatusBadRequest, "Invalid activity ID")` | `response.Fail(w, r, ...)`    |
+| 59   | `response.Error(w, http.StatusBadRequest, err.Error())`           | `response.Fail(w, r, ...)`    |
+| 65   | `response.Error(w, http.StatusBadRequest, "Too many files")`      | `response.Fail(w, r, ...)`    |
+| 117  | `response.Error(w, http.StatusBadRequest, v.err.Error())`         | `response.Fail(w, r, ...)`    |
+| 136  | `response.Error(w, http.StatusInternalServerError, ...)`          | `response.Fail(w, r, ...)`    |
+| 141  | `response.SendJSON(w, http.StatusCreated, result.ActivityPhotos)` | `response.Success(w, r, ...)` |
+| 152  | `response.Error(w, http.StatusBadRequest, "Invalid activity ID")` | `response.Fail(w, r, ...)`    |
+| 167  | `response.Error(w, http.StatusInternalServerError, ...)`          | `response.Fail(w, r, ...)`    |
+| 172  | `response.SendJSON(w, http.StatusOK, result.Photos)`              | `response.Success(w, r, ...)` |
+
+#### `internal/handlers/export_handler.go`
+
+| Line    | Before                                                   | After                                                                           |
+| ------- | -------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 51      | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)` (before CSV headers set — safe)                      |
+| 59      | `response.Error(w, http.StatusInternalServerError, ...)` | **leave as-is** (after `text/csv` headers written — cannot switch Content-Type) |
+| 76      | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`                                                      |
+| 87      | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`                                                      |
+| 97      | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`                                                      |
+| 101–103 | `response.SendJSON(w, http.StatusAccepted, ...)`         | `response.Success(w, r, ...)`                                                   |
+| 113     | `response.Error(w, http.StatusNotFound, ...)`            | `response.Fail(w, r, ...)`                                                      |
+| 118     | `response.SendJSON(w, http.StatusOK, record)`            | `response.Success(w, r, ...)`                                                   |
+| 129     | `response.Error(w, http.StatusNotFound, ...)`            | `response.Fail(w, r, ...)`                                                      |
+| 134     | `response.Error(w, http.StatusConflict, ...)`            | `response.Fail(w, r, ...)`                                                      |
+| 139     | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`                                                      |
+| 150     | `response.Error(w, http.StatusInternalServerError, ...)` | `response.Fail(w, r, ...)`                                                      |
+| 153–155 | `response.SendJSON(w, http.StatusOK, ...)`               | `response.Success(w, r, ...)`                                                   |
+
+#### `internal/handlers/features_handler.go`
+
+| Line | Before                                          | After                         |
+| ---- | ----------------------------------------------- | ----------------------------- |
+| 29   | `response.SendJSON(w, http.StatusOK, features)` | `response.Success(w, r, ...)` |
+
+#### `internal/handlers/health.go`
+
+| Line | Before                                              | After                         |
+| ---- | --------------------------------------------------- | ----------------------------- |
+| 32   | `response.SendJSON(w, http.StatusOK, responseData)` | `response.Success(w, r, ...)` |
+
+---
+
+## Critical Files Summary
+
+| File                                    | Change Type                                                        |
+| --------------------------------------- | ------------------------------------------------------------------ |
+| `pkg/response/json.go`                  | Add types + 3 new helpers + context key; remove old helpers at end |
+| `internal/validator/validator.go`       | Change return type of `FormatValidationErrors`                     |
+| `internal/middleware/timing.go`         | **New file**                                                       |
+| `cmd/api/main.go`                       | Register `TimingMiddleware` first                                  |
+| `internal/middleware/jwt.go`            | `response.Error` → `response.Fail` (2 calls)                       |
+| `internal/middleware/rateLimiter.go`    | `http.Error` → `response.Fail` (1 call)                            |
+| `internal/handlers/activity.go`         | 26 call sites migrated                                             |
+| `internal/handlers/user.go`             | 14 call sites migrated                                             |
+| `internal/handlers/stats.go`            | 10 call sites migrated                                             |
+| `internal/handlers/webhook_handler.go`  | 10 call sites migrated                                             |
+| `internal/handlers/photo_handler.go`    | 9 call sites migrated                                              |
+| `internal/handlers/export_handler.go`   | 12 call sites migrated (1 left as-is)                              |
+| `internal/handlers/features_handler.go` | 1 call site migrated                                               |
+| `internal/handlers/health.go`           | 1 call site migrated                                               |
+
+---
+
+## Import Safety (No Circular Deps)
+
+```
+pkg/response     (adds: "context", "time" — no internal/ imports)
+    ↑
+internal/validator  (adds: pkg/response import)
+    ↑
+internal/middleware (already imports pkg/response — no change needed)
+    ↑
+internal/handlers   (already imports pkg/response and internal/validator)
+```
 
 ---
 
 ## Verification
 
-1. **Build:** `go build ./...` — no compile errors after `go get github.com/nats-io/nats.go`
-2. **Migration:** Run `010_create_webhook_deliveries.up.sql`; verify table + partial index exist
-3. **Redis Streams path:**
-   - `WEBHOOK_PROVIDER=redis` — register webhook, trigger activity event
-   - `redis-cli XLEN webhook:events` — should show stream entries
-   - `redis-cli XPENDING webhook:events webhook-delivery - + 10` — empty after ACK
-   - Check `webhook_deliveries` table for new rows
-4. **NATS path:**
-   - `WEBHOOK_PROVIDER=nats` + `NATS_URL=nats://localhost:4222` (run `nats-server -js`)
-   - Same trigger; verify delivery record + HTTP call
-5. **Retry:** Point webhook at URL returning 500; check `status=failed` rows with advancing `next_retry_at`
-6. **Exhaustion:** After 5 failures, verify `status=exhausted`, retry worker skips row
-7. **Crash recovery:** Kill app after `CreateDelivery` but before XACK/Ack; restart; verify message reprocessed (delivery record may duplicate — acceptable for now)
+1. `go build ./...` — must compile with zero errors
+2. Run the server: `go run ./cmd/api/`
+3. **Success response test:**
+   ```
+   POST /api/v1/auth/register with valid body
+   → { "statusCode": 201, "success": true, "message": "Request successful", "result": {...}, "path": "/api/v1/auth/register", "duration": <ms> }
+   ```
+4. **Validation error test:**
+   ```
+   POST /api/v1/auth/register with empty body
+   → { "statusCode": 400, "success": false, "message": "Bad Request", "errors": [{"field": "username", "errors": ["username should not be empty"]}, ...], "path": "...", "duration": <ms> }
+   ```
+5. **Generic error test:**
+   ```
+   GET /api/v1/activities/999999
+   → { "statusCode": 404, "success": false, "message": "Activity not found", "errors": [], "path": "...", "duration": <ms> }
+   ```

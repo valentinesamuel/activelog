@@ -30,19 +30,13 @@ func (ua *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var requestPayload models.CreateUserRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&requestPayload); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid request body")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	err := validator.Validate(&requestPayload)
 	if err != nil {
-		validationError := validator.FormatValidationErrors(err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":  "validation failed",
-			"fields": validationError,
-		})
+		response.ValidationFail(w, r, validator.FormatValidationErrors(err))
 		return
 	}
 
@@ -55,33 +49,27 @@ func (ua *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	if existingUser != nil {
 		log.Error().Err(err).Str("email", requestPayload.Email).Msg("User already exists")
-		err := response.Error(w, http.StatusBadRequest, "User already exists")
-		if err != nil {
-			return
-		}
+		response.Fail(w, r, http.StatusBadRequest, "User already exists")
 		return
 	}
 
 	encodedHash, err := auth.HashPassword(requestPayload.Password)
 	if err != nil {
-		log.Error().Err(err).Msg("❌ Failed to hash password")
-		err := response.Error(w, http.StatusInternalServerError, "Invalid password")
-		if err != nil {
-			return
-		}
+		log.Error().Err(err).Msg("Failed to hash password")
+		response.Fail(w, r, http.StatusInternalServerError, "Invalid password")
 		return
 	}
 
 	user.PasswordHash = encodedHash
 
 	if err := ua.repo.CreateUser(ctx, user); err != nil {
-		log.Error().Err(err).Msg("❌ Failed to create user")
-		response.Error(w, http.StatusInternalServerError, "❌ Failed to create user")
+		log.Error().Err(err).Msg("Failed to create user")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to create user")
 		return
 	}
 
-	log.Info().Str("email", user.Email).Msg("✅ Activity Created")
-	response.SendJSON(w, http.StatusCreated, map[string]map[string]string{
+	log.Info().Str("email", user.Email).Msg("Activity Created")
+	response.Success(w, r, http.StatusCreated, map[string]map[string]string{
 		"user": {
 			"email":    user.Email,
 			"username": user.Username,
@@ -95,19 +83,13 @@ func (ua *UserHandler) LoginUser(w http.ResponseWriter, r *http.Request) {
 	var requestPayload models.LoginUserRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&requestPayload); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid request body")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	err := validator.Validate(&requestPayload)
 	if err != nil {
-		validationError := validator.FormatValidationErrors(err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":  "validation failed",
-			"fields": validationError,
-		})
+		response.ValidationFail(w, r, validator.FormatValidationErrors(err))
 		return
 	}
 
@@ -115,37 +97,37 @@ func (ua *UserHandler) LoginUser(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, appErrors.ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "User not found")
+			response.Fail(w, r, http.StatusNotFound, "User not found")
 			return
 		}
 
 		log.Error().Err(err).Str("email", requestPayload.Email).Msg("User not found")
-		response.Error(w, http.StatusInternalServerError, "Invalid Credentials")
+		response.Fail(w, r, http.StatusInternalServerError, "Invalid Credentials")
 		return
 	}
 
 	passwordMatch, err := auth.VerifyPassword(requestPayload.Password, user.PasswordHash)
 
 	if err != nil {
-		log.Error().Err(err).Msg("❌ Password comparison failed")
-		response.Error(w, http.StatusInternalServerError, "Invalid Credentials")
+		log.Error().Err(err).Msg("Password comparison failed")
+		response.Fail(w, r, http.StatusInternalServerError, "Invalid Credentials")
 		return
 	}
 
 	if !passwordMatch {
-		log.Error().Err(err).Msg("❌ Password mismatch")
-		response.Error(w, http.StatusInternalServerError, "Invalid credentials")
+		log.Error().Err(err).Msg("Password mismatch")
+		response.Fail(w, r, http.StatusInternalServerError, "Invalid credentials")
 		return
 	}
 
 	token, err := auth.GenerateJwtToken(int(user.ID), user.Email)
 	if err != nil {
-		log.Error().Err(err).Msg("❌ Failed to generate jwt")
-		response.Error(w, http.StatusInternalServerError, "Server error")
+		log.Error().Err(err).Msg("Failed to generate jwt")
+		response.Fail(w, r, http.StatusInternalServerError, "Server error")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, map[string]interface{}{
+	response.Success(w, r, http.StatusOK, map[string]interface{}{
 		"token": token,
 		"email": user.Email,
 	})

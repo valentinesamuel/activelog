@@ -35,21 +35,21 @@ func (h *WebhookHandler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 
 	var req createWebhookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid request body")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 	if req.URL == "" {
-		response.Error(w, http.StatusBadRequest, "URL is required")
+		response.Fail(w, r, http.StatusBadRequest, "URL is required")
 		return
 	}
 	if len(req.Events) == 0 {
-		response.Error(w, http.StatusBadRequest, "At least one event is required")
+		response.Fail(w, r, http.StatusBadRequest, "At least one event is required")
 		return
 	}
 
 	secret, err := generateSecret()
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to generate webhook secret")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to generate webhook secret")
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *WebhookHandler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 		Active: true,
 	}
 	if err := h.webhookRepo.Create(ctx, wh); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create webhook")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to create webhook")
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *WebhookHandler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 		*webhookTypes.Webhook
 		Secret string `json:"secret"`
 	}
-	response.SendJSON(w, http.StatusCreated, webhookResponse{Webhook: wh, Secret: secret})
+	response.Success(w, r, http.StatusCreated, webhookResponse{Webhook: wh, Secret: secret})
 }
 
 // ListWebhooks handles GET /api/v1/webhooks
@@ -80,13 +80,13 @@ func (h *WebhookHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 
 	webhooks, err := h.webhookRepo.ListByUserID(ctx, user.Id)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to list webhooks")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to list webhooks")
 		return
 	}
 	if webhooks == nil {
 		webhooks = []*webhookTypes.Webhook{}
 	}
-	response.SendJSON(w, http.StatusOK, webhooks)
+	response.Success(w, r, http.StatusOK, webhooks)
 }
 
 // DeleteWebhook handles DELETE /api/v1/webhooks/{id}
@@ -96,7 +96,7 @@ func (h *WebhookHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
 	if err := h.webhookRepo.Delete(ctx, id, user.Id); err != nil {
-		response.Error(w, http.StatusNotFound, "Webhook not found")
+		response.Fail(w, r, http.StatusNotFound, "Webhook not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/valentinesamuel/activelog/internal/cache/types"
+	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	"github.com/valentinesamuel/activelog/internal/service"
@@ -25,13 +25,13 @@ type UpdateActivityOutput struct {
 type UpdateActivityUseCase struct {
 	service service.ActivityServiceInterface
 	repo    repository.ActivityRepositoryInterface
-	cache   types.CacheProvider
+	cache   cacheTypes.CacheAdapter
 }
 
 func NewUpdateActivityUseCase(
 	svc service.ActivityServiceInterface,
 	repo repository.ActivityRepositoryInterface,
-	cache types.CacheProvider,
+	cache cacheTypes.CacheAdapter,
 ) *UpdateActivityUseCase {
 	return &UpdateActivityUseCase{
 		service: svc,
@@ -59,8 +59,14 @@ func (uc *UpdateActivityUseCase) Execute(
 		return UpdateActivityOutput{}, fmt.Errorf("failed to update activity: %w", err)
 	}
 
-	uc.cache.Del(fmt.Sprintf("activities:user:%d", activity.UserID))
-	uc.cache.Del(fmt.Sprintf("activity:%d", activity.UserID))
+	if uc.cache != nil {
+		opts := cacheTypes.CacheOptions{
+			DB:           cacheTypes.CacheDBActivityData,
+			PartitionKey: cacheTypes.CachePartitionActivities,
+		}
+		uc.cache.Del(ctx, fmt.Sprintf("user:%d", activity.UserID), opts)
+		uc.cache.Del(ctx, fmt.Sprintf("activity:%d", activity.UserID), opts)
+	}
 
 	return UpdateActivityOutput{
 		Activity: activity,

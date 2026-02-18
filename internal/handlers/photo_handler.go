@@ -46,7 +46,7 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to upload activity photo")
-		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid activity ID")
 		return
 	}
 
@@ -56,13 +56,13 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	err = r.ParseMultipartForm(50 << 20)
 	if err != nil {
 		logger.Error().Err(err).Str("content_type", contentType).Msg("Failed to parse multipart form")
-		response.Error(w, http.StatusBadRequest, err.Error())
+		response.Fail(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	photos := r.MultipartForm.File["photos"]
 	if len(photos) > 5 {
-		response.Error(w, http.StatusBadRequest, "Too many files")
+		response.Fail(w, r, http.StatusBadRequest, "Too many files")
 		return
 	}
 
@@ -114,7 +114,7 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	for v := range validationCh {
 		if v.err != nil {
-			response.Error(w, http.StatusBadRequest, v.err.Error())
+			response.Fail(w, r, http.StatusBadRequest, v.err.Error())
 			return
 		}
 	}
@@ -133,12 +133,12 @@ func (h *ActivityPhotoHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to upload activity photo")
-		response.Error(w, http.StatusInternalServerError, "Failed to upload activity photo")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to upload activity photo")
 		return
 	}
 
 	log.Info().Int("activityId", result.ActivityID).Msg("Activity Photos Created")
-	response.SendJSON(w, http.StatusCreated, result.ActivityPhotos)
+	response.Success(w, r, http.StatusCreated, result.ActivityPhotos)
 }
 
 func (h *ActivityPhotoHandler) GetActivityPhoto(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +148,7 @@ func (h *ActivityPhotoHandler) GetActivityPhoto(w http.ResponseWriter, r *http.R
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to get activity photo")
-		response.Error(w, http.StatusBadRequest, "Invalid activity ID")
+		response.Fail(w, r, http.StatusBadRequest, "Invalid activity ID")
 		return
 	}
 
@@ -164,10 +164,10 @@ func (h *ActivityPhotoHandler) GetActivityPhoto(w http.ResponseWriter, r *http.R
 
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to get activity photos")
-		response.Error(w, http.StatusInternalServerError, "Failed to get activity photos")
+		response.Fail(w, r, http.StatusInternalServerError, "Failed to get activity photos")
 		return
 	}
 
 	log.Info().Int("activityId", id).Int("count", len(result.Photos)).Msg("Activity Photos retrieved")
-	response.SendJSON(w, http.StatusOK, result.Photos)
+	response.Success(w, r, http.StatusOK, result.Photos)
 }

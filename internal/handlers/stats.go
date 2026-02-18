@@ -26,11 +26,11 @@ func (sh *StatsHandler) GetWeeklyStats(w http.ResponseWriter, r *http.Request) {
 
 	weeklyStats, err := sh.repo.GetWeeklyStats(ctx, userID)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Error fetching weekly stats")
+		response.Fail(w, r, http.StatusInternalServerError, "Error fetching weekly stats")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, weeklyStats)
+	response.Success(w, r, http.StatusOK, weeklyStats)
 }
 
 func (sh *StatsHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
@@ -39,11 +39,11 @@ func (sh *StatsHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) 
 
 	monthlyStats, err := sh.repo.GetMonthlyStats(ctx, requestUser.Id)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Error fetching monthly stats")
+		response.Fail(w, r, http.StatusInternalServerError, "Error fetching monthly stats")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, monthlyStats)
+	response.Success(w, r, http.StatusOK, monthlyStats)
 }
 
 func (sh *StatsHandler) GetUserActivitySummary(w http.ResponseWriter, r *http.Request) {
@@ -53,11 +53,11 @@ func (sh *StatsHandler) GetUserActivitySummary(w http.ResponseWriter, r *http.Re
 	activitySummary, err := sh.repo.GetUserActivitySummary(ctx, requestUser.Id)
 	if err != nil {
 		fmt.Println(err)
-		response.Error(w, http.StatusInternalServerError, "Error fetching user activity stats")
+		response.Fail(w, r, http.StatusInternalServerError, "Error fetching user activity stats")
 		return
 	}
 
-	response.SendJSON(w, http.StatusOK, activitySummary)
+	response.Success(w, r, http.StatusOK, activitySummary)
 }
 
 func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +77,7 @@ func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
 	topTags, err := sh.repo.GetTopTagsByUser(ctx, requestUser.Id, limit)
 	if err != nil {
 		fmt.Println(err)
-		response.Error(w, http.StatusInternalServerError, "Error fetching top tags")
+		response.Fail(w, r, http.StatusInternalServerError, "Error fetching top tags")
 		return
 	}
 
@@ -87,7 +87,7 @@ func (sh *StatsHandler) GetTopTags(w http.ResponseWriter, r *http.Request) {
 		"total_unique_tags": len(topTags),
 	}
 
-	response.SendJSON(w, http.StatusOK, responseData)
+	response.Success(w, r, http.StatusOK, responseData)
 }
 
 func (sh *StatsHandler) GetActivityCountByType(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +97,7 @@ func (sh *StatsHandler) GetActivityCountByType(w http.ResponseWriter, r *http.Re
 	activityBreakdown, err := sh.repo.GetActivityCountByType(ctx, requestUser.Id)
 	if err != nil {
 		fmt.Println(err)
-		response.Error(w, http.StatusInternalServerError, "Error fetching activity breakdown")
+		response.Fail(w, r, http.StatusInternalServerError, "Error fetching activity breakdown")
 		return
 	}
 
@@ -113,5 +113,5 @@ func (sh *StatsHandler) GetActivityCountByType(w http.ResponseWriter, r *http.Re
 		"total_activities":   totalActivities,
 	}
 
-	response.SendJSON(w, http.StatusOK, responseData)
+	response.Success(w, r, http.StatusOK, responseData)
 }

@@ -17,7 +17,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		// Extract token from Authorization header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			response.Error(w, http.StatusUnauthorized, "Unauthorized request")
+			response.Fail(w, r, http.StatusUnauthorized, "Unauthorized request")
 			return
 		}
 
@@ -31,7 +31,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		})
 
 		if err != nil || !token.Valid {
-			response.Error(w, http.StatusUnauthorized, "Unauthorized request")
+			response.Fail(w, r, http.StatusUnauthorized, "Unauthorized request")
 			return
 		}
 

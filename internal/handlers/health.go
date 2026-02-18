@@ -29,5 +29,5 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"service": "activelog-api",
 	}
 
-	response.SendJSON(w, http.StatusOK, responseData)
+	response.Success(w, r, http.StatusOK, responseData)
 }
