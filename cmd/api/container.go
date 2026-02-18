@@ -34,7 +34,6 @@ func setupContainer(db repository.DBConn, hub *websocket.Hub) *container.Contain
 
 	// Register storage provider (uses config globals)
 	storageRegister.RegisterStorage(c)
-	cacheRegister.RegisterCache(c)
 	cacheRegister.RegisterCacheAdapter(c)
 	queueRegister.RegisterQueue(c)
 	emailRegister.RegisterEmail(c)
@@ -44,7 +43,6 @@ func setupContainer(db repository.DBConn, hub *websocket.Hub) *container.Contain
 
 	// Eagerly resolve dependedncies
 	c.MustResolve(storageRegister.StorageProviderKey)
-	c.MustResolve(cacheRegister.CacheProviderKey)
 	c.MustResolve(cacheRegister.CacheAdapterKey)
 	c.MustResolve(queueRegister.QueueProviderKey)
 	c.MustResolve(emailRegister.EmailProviderKey)
