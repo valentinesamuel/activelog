@@ -31,7 +31,8 @@
       "Bash(go vet:*)",
       "Bash(git log:*)",
       "Bash(cat:*)",
-      "Bash(BASE=\"github.com/valentinesamuel/activelog\")"
+      "Bash(BASE=\"github.com/valentinesamuel/activelog\")",
+      "Bash(head:*)"
     ]
   }
 }

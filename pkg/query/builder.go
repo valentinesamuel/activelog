@@ -27,6 +27,25 @@ type QueryBuilder struct {
 	joins     []JoinConfig
 }
 
+// resolveColumnForSQL translates a multi-level dot-notation path to a valid SQL column.
+// For paths with 3+ segments (e.g., "tags.parent.name"), the last 2 segments are used
+// so the result maps to the aliased JOIN table (e.g., "parent.name").
+// Shorter paths (e.g., "tags.name", "activity_type") are returned unchanged.
+//
+// Examples:
+//
+//	"tags.parent.name"           → "parent.name"
+//	"users.company.dept.title"   → "dept.title"
+//	"tags.name"                  → "tags.name"
+//	"activity_type"              → "activity_type"
+func resolveColumnForSQL(column string) string {
+	segments := strings.Split(column, ".")
+	if len(segments) >= 3 {
+		return segments[len(segments)-2] + "." + segments[len(segments)-1]
+	}
+	return column
+}
+
 // NewQueryBuilder creates a new query builder for the specified table.
 //
 // Parameters:
@@ -83,7 +102,7 @@ func (qb *QueryBuilder) WithJoins(joins []JoinConfig) *QueryBuilder {
 //   - "lte" : Less Than or Equal (<=)
 func (qb *QueryBuilder) ApplyFilterConditions() *QueryBuilder {
 	for _, condition := range qb.options.FilterConditions {
-		column := condition.Column
+		column := resolveColumnForSQL(condition.Column)
 		value := condition.Value
 
 		switch condition.Operator {
@@ -118,7 +137,8 @@ func (qb *QueryBuilder) ApplyFilterConditions() *QueryBuilder {
 //   - {"type": []string{"running", "cycling"}} → WHERE type IN ($1, $2)
 //   - {"user_id": 123, "status": "active"} → WHERE user_id = $1 AND status = $2
 func (qb *QueryBuilder) ApplyFilters() *QueryBuilder {
-	for column, value := range qb.options.Filter {
+	for rawColumn, value := range qb.options.Filter {
+		column := resolveColumnForSQL(rawColumn)
 		switch v := value.(type) {
 		case []interface{}:
 			// WHERE column IN (val1, val2, val3)
@@ -156,7 +176,8 @@ func (qb *QueryBuilder) ApplyFiltersOr() *QueryBuilder {
 	}
 
 	orConditions := sq.Or{}
-	for column, value := range qb.options.FilterOr {
+	for rawColumn, value := range qb.options.FilterOr {
+		column := resolveColumnForSQL(rawColumn)
 		switch v := value.(type) {
 		case []interface{}:
 			orConditions = append(orConditions, sq.Eq{column: v})
@@ -192,7 +213,8 @@ func (qb *QueryBuilder) ApplySearch() *QueryBuilder {
 	}
 
 	searchConditions := sq.Or{}
-	for column, value := range qb.options.Search {
+	for rawColumn, value := range qb.options.Search {
+		column := resolveColumnForSQL(rawColumn)
 		pattern := fmt.Sprintf("%%%v%%", value)
 		// Use ILike for PostgreSQL case-insensitive search
 		searchConditions = append(searchConditions, sq.ILike{column: pattern})
@@ -225,7 +247,8 @@ func (qb *QueryBuilder) ApplyOrder() *QueryBuilder {
 	// Note: map iteration order is not guaranteed in Go, but for sorting
 	// this usually doesn't matter. For strict ordering, consider using
 	// a slice of structs instead.
-	for column, direction := range qb.options.Order {
+	for rawColumn, direction := range qb.options.Order {
+		column := resolveColumnForSQL(rawColumn)
 		// Validate direction (should be done in validator, but double-check here)
 		upperDir := strings.ToUpper(direction)
 		if upperDir != "ASC" && upperDir != "DESC" {
@@ -312,7 +335,7 @@ func (qb *QueryBuilder) BuildCount() (string, []interface{}, error) {
 
 	// Apply FilterConditions (operator-based filtering - NEW in v1.1.0)
 	for _, condition := range qb.options.FilterConditions {
-		column := condition.Column
+		column := resolveColumnForSQL(condition.Column)
 		value := condition.Value
 
 		switch condition.Operator {
@@ -332,7 +355,8 @@ func (qb *QueryBuilder) BuildCount() (string, []interface{}, error) {
 	}
 
 	// Apply Filter (AND conditions - LEGACY, kept for backward compatibility)
-	for column, value := range qb.options.Filter {
+	for rawColumn, value := range qb.options.Filter {
+		column := resolveColumnForSQL(rawColumn)
 		switch v := value.(type) {
 		case []interface{}:
 			countQuery = countQuery.Where(sq.Eq{column: v})
@@ -352,7 +376,8 @@ func (qb *QueryBuilder) BuildCount() (string, []interface{}, error) {
 	// Apply FilterOr (OR conditions)
 	if len(qb.options.FilterOr) > 0 {
 		orConditions := sq.Or{}
-		for column, value := range qb.options.FilterOr {
+		for rawColumn, value := range qb.options.FilterOr {
+			column := resolveColumnForSQL(rawColumn)
 			switch v := value.(type) {
 			case []interface{}:
 				orConditions = append(orConditions, sq.Eq{column: v})
@@ -374,7 +399,8 @@ func (qb *QueryBuilder) BuildCount() (string, []interface{}, error) {
 	// Apply Search conditions
 	if len(qb.options.Search) > 0 {
 		searchConditions := sq.Or{}
-		for column, value := range qb.options.Search {
+		for rawColumn, value := range qb.options.Search {
+			column := resolveColumnForSQL(rawColumn)
 			pattern := fmt.Sprintf("%%%v%%", value)
 			searchConditions = append(searchConditions, sq.ILike{column: pattern})
 		}

@@ -9,4 +9,5 @@ const (
 	StatsRepoKey         = "statsRepo"
 	ExportRepoKey        = "exportRepo"
 	WebhookRepoKey       = "webhookRepo"
+	CommentRepoKey       = "commentRepo"
 )

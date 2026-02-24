@@ -209,6 +209,14 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 		// Relationship columns (natural names - auto-JOINs!)
 		"tags.name", // Filter by tag name - automatically JOINs tags table
 		"tags.id",   // Filter by tag ID
+
+		// Cross-registry: activities → users (Feature 2)
+		"users.id",
+		"users.username",
+		"users.email",
+
+		// Deep nesting: activities → tags → parent tag (Feature 3)
+		"tags.parent.name",
 	}
 
 	allowedSearch := []string{
@@ -219,6 +227,13 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 
 		// Relationship columns (natural names - auto-JOINs!)
 		"tags.name", // Search tag names
+
+		// Cross-registry search (Feature 2)
+		"users.username",
+		"users.email",
+
+		// Deep nesting search (Feature 3)
+		"tags.parent.name",
 	}
 
 	allowedOrder := []string{
@@ -250,6 +265,14 @@ func (h *ActivityHandler) ListActivities(w http.ResponseWriter, r *http.Request)
 		// Relationship columns
 		"tags.name": query.EqualityOperators(),  // eq, ne for tag names
 		"tags.id":   query.StrictEqualityOnly(), // eq only for tag IDs
+
+		// Cross-registry columns (Feature 2)
+		"users.id":       query.StrictEqualityOnly(),
+		"users.email":    query.StrictEqualityOnly(),
+		"users.username": query.EqualityOperators(),
+
+		// Deep nesting columns (Feature 3)
+		"tags.parent.name": query.EqualityOperators(),
 	}
 
 	// Validate query options against whitelists

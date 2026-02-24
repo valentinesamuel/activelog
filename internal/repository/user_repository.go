@@ -7,16 +7,27 @@ import (
 
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/pkg/errors"
+	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
 type UserRepository struct {
-	db DBConn
+	db       DBConn
+	registry *query.RelationshipRegistry
 }
 
 func NewUserRepository(db DBConn) *UserRepository {
+	registry := query.NewRelationshipRegistry("users")
+	// Users registry is minimal; extend here when cross-registry paths through users are needed
 	return &UserRepository{
-		db: db,
+		db:       db,
+		registry: registry,
 	}
+}
+
+// GetRegistry returns the RelationshipRegistry for this repository (v3.0)
+// Used by RegistryManager so paths like "users.company.name" can be resolved
+func (ur *UserRepository) GetRegistry() *query.RelationshipRegistry {
+	return ur.registry
 }
 
 func (ar *UserRepository) CreateUser(ctx context.Context, user *models.User) error {

@@ -18,7 +18,14 @@ func RegisterRepositories(c *container.Container) {
 	// Tag repository (no dependencies besides DB)
 	c.Register(TagRepoKey, func(c *container.Container) (interface{}, error) {
 		db := c.MustResolve(CoreDBKey).(repository.DBConn)
-		return repository.NewTagRepository(db), nil
+		manager := c.MustResolve(CoreRegistryManagerKey).(*query.RegistryManager)
+
+		tagRepo := repository.NewTagRepository(db)
+
+		// Register tags registry for cross-registry deep nesting (e.g., activities→tags→parent)
+		manager.RegisterTable("tags", tagRepo.GetRegistry())
+
+		return tagRepo, nil
 	})
 
 	// Activity repository (depends on TagRepository and RegistryManager)
@@ -53,7 +60,27 @@ func RegisterRepositories(c *container.Container) {
 	// User repository
 	c.Register(UserRepoKey, func(c *container.Container) (interface{}, error) {
 		db := c.MustResolve(CoreDBKey).(repository.DBConn)
-		return repository.NewUserRepository(db), nil
+		manager := c.MustResolve(CoreRegistryManagerKey).(*query.RegistryManager)
+
+		userRepo := repository.NewUserRepository(db)
+
+		// Register users registry for cross-registry resolution (e.g., activities→users→*)
+		manager.RegisterTable("users", userRepo.GetRegistry())
+
+		return userRepo, nil
+	})
+
+	// Comment repository (polymorphic relationship support)
+	c.Register(CommentRepoKey, func(c *container.Container) (interface{}, error) {
+		db := c.MustResolve(CoreDBKey).(repository.DBConn)
+		manager := c.MustResolve(CoreRegistryManagerKey).(*query.RegistryManager)
+
+		commentRepo := repository.NewCommentRepository(db)
+
+		// Register comments registry for cross-registry resolution
+		manager.RegisterTable("comments", commentRepo.GetRegistry())
+
+		return commentRepo, nil
 	})
 
 	// Stats repository

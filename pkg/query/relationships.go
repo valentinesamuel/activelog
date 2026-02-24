@@ -166,8 +166,10 @@ func OneToManyRelationship(name, targetTable, foreignKey string) Relationship {
 
 // SelfReferentialRelationship creates a self-referential relationship (v3.0)
 // Example: Comments table with parent_id referencing other comments
+// The alias is set to the relationship name so filter keys like "parent.author"
+// map directly to SQL columns like "parent.author" (not "parent_comments.author")
 func SelfReferentialRelationship(name, table, foreignKey string, maxDepth int) Relationship {
-	alias := name + "_" + table // e.g., "parent_comments"
+	alias := name // Use name as alias so "parent.col" maps to "parent.col" in SQL
 	if maxDepth == 0 {
 		maxDepth = 3 // Default max depth
 	}
@@ -424,7 +426,16 @@ func (rr *RelationshipRegistry) getPolymorphicType(rel Relationship, opts *Query
 }
 
 // buildConditionSQL converts an AdditionalCondition to SQL (v3.0)
+// Nil values are rendered as IS NULL / IS NOT NULL to produce valid SQL
 func (rr *RelationshipRegistry) buildConditionSQL(cond AdditionalCondition) string {
+	// Handle nil values as IS NULL / IS NOT NULL
+	if cond.Value == nil {
+		if cond.Operator == "ne" {
+			return fmt.Sprintf("%s IS NOT NULL", cond.Column)
+		}
+		return fmt.Sprintf("%s IS NULL", cond.Column)
+	}
+
 	opMap := map[string]string{
 		"eq":  "=",
 		"ne":  "!=",
@@ -439,7 +450,6 @@ func (rr *RelationshipRegistry) buildConditionSQL(cond AdditionalCondition) stri
 		sqlOp = "=" // Default
 	}
 
-	// Simple formatting - in production, use parameterized queries
 	return fmt.Sprintf("%s %s %v", cond.Column, sqlOp, cond.Value)
 }
 

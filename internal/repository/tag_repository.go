@@ -12,13 +12,27 @@ import (
 )
 
 type TagRepository struct {
-	db DBConn
+	db       DBConn
+	registry *query.RelationshipRegistry
 }
 
 func NewTagRepository(db DBConn) *TagRepository {
+	registry := query.NewRelationshipRegistry("tags")
+
+	// Self-referential: tags can have a parent tag (parent_tag_id)
+	// Alias = "parent" so filter key "tags.parent.name" maps to SQL "parent.name"
+	registry.Register(query.SelfReferentialRelationship("parent", "tags", "parent_tag_id", 3))
+
 	return &TagRepository{
-		db: db,
+		db:       db,
+		registry: registry,
 	}
+}
+
+// GetRegistry returns the RelationshipRegistry for this repository (v3.0)
+// Used by RegistryManager for cross-registry deep nesting (e.g., activities→tags→parent)
+func (tr *TagRepository) GetRegistry() *query.RelationshipRegistry {
+	return tr.registry
 }
 
 func (tr *TagRepository) GetOrCreateTag(ctx context.Context, tx TxConn, name string) (int, error) {
@@ -121,13 +135,16 @@ func (tr *TagRepository) LinkActivityTag(ctx context.Context, tx TxConn, activit
 }
 
 // scanTag is a reusable function to scan a single tag row
-// This is used by the new dynamic filtering approach
+// Scans all columns from SELECT tags.*: id, name, created_at, deleted_at, parent_tag_id
 func (tr *TagRepository) scanTag(rows *sql.Rows) (*models.Tag, error) {
 	tag := &models.Tag{}
+	var parentTagID sql.NullInt64 // parent_tag_id is nullable; not exposed on model yet
 	err := rows.Scan(
 		&tag.ID,
 		&tag.Name,
 		&tag.CreatedAt,
+		&tag.DeletedAt,
+		&parentTagID,
 	)
 	return tag, err
 }

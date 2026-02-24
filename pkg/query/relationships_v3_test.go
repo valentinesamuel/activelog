@@ -84,9 +84,9 @@ func TestRelationshipRegistry_SelfReferential_v3(t *testing.T) {
 		t.Fatalf("Expected 1 JOIN for self-referential, got %d", len(joins))
 	}
 
-	// Verify alias usage
-	expectedTable := "comments AS parent_comments"
-	expectedCondition := "parent_comments.id = comments.parent_id"
+	// Verify alias usage: alias = relationship name so "parent.col" maps to SQL "parent.col"
+	expectedTable := "comments AS parent"
+	expectedCondition := "parent.id = comments.parent_id"
 
 	if joins[0].Table != expectedTable {
 		t.Errorf("Expected table %s, got %s", expectedTable, joins[0].Table)

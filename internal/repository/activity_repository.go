@@ -30,17 +30,22 @@ func NewActivityRepository(db DBConn, tagRepo *TagRepository) *ActivityRepositor
 	registry := query.NewRelationshipRegistry("activities")
 
 	// Register Many-to-Many relationship: activities <-> tags
+	// WithConditions ensures soft-deleted tags/junctions are auto-excluded from JOINs
 	registry.Register(query.ManyToManyRelationship(
 		"tags",          // Relationship name (users write: tags.name)
 		"tags",          // Target table
 		"activity_tags", // Junction table
 		"activity_id",   // FK to activities
 		"tag_id",        // FK to tags
+	).WithConditions(
+		query.AdditionalCondition{Column: "tags.deleted_at", Operator: "eq", Value: nil},
+		query.AdditionalCondition{Column: "activity_tags.deleted_at", Operator: "eq", Value: nil},
 	))
 
 	// Register Many-to-One relationship: activities -> users
+	// Name matches table name so "users.col" maps correctly to SQL "users.col"
 	registry.Register(query.ManyToOneRelationship(
-		"user",    // Relationship name (users write: user.username)
+		"users",   // Relationship name matches table name for SQL WHERE correctness
 		"users",   // Target table
 		"user_id", // FK in activities table
 	))
