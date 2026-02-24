@@ -4,7 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/valentinesamuel/activelog/internal/application/broker"
-	"github.com/valentinesamuel/activelog/internal/container"
+	"github.com/valentinesamuel/activelog/internal/platform/container"
 )
 
 // CoreRawDBKey is the key for the raw database connection singleton

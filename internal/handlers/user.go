@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/internal/repository"
-	"github.com/valentinesamuel/activelog/internal/validator"
+	"github.com/valentinesamuel/activelog/internal/platform/validator"
 	"github.com/valentinesamuel/activelog/pkg/auth"
 	appErrors "github.com/valentinesamuel/activelog/pkg/errors"
 	"github.com/valentinesamuel/activelog/pkg/response"
@@ -63,6 +63,10 @@ func (ua *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	user.PasswordHash = encodedHash
 
 	if err := ua.repo.CreateUser(ctx, user); err != nil {
+		if errors.Is(err, appErrors.ErrAlreadyExists) {
+			response.Fail(w, r, http.StatusConflict, "User already exists")
+			return
+		}
 		log.Error().Err(err).Msg("Failed to create user")
 		response.Fail(w, r, http.StatusInternalServerError, "Failed to create user")
 		return
@@ -110,13 +114,13 @@ func (ua *UserHandler) LoginUser(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Error().Err(err).Msg("Password comparison failed")
-		response.Fail(w, r, http.StatusInternalServerError, "Invalid Credentials")
+		response.Fail(w, r, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
 	if !passwordMatch {
-		log.Error().Err(err).Msg("Password mismatch")
-		response.Fail(w, r, http.StatusInternalServerError, "Invalid credentials")
+		log.Warn().Msg("Password mismatch")
+		response.Fail(w, r, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 

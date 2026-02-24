@@ -6,18 +6,18 @@ import (
 	"github.com/valentinesamuel/activelog/internal/application/broker/di"
 	statsUsecases "github.com/valentinesamuel/activelog/internal/application/stats/usecases/di"
 	tagUsecases "github.com/valentinesamuel/activelog/internal/application/tag/usecases/di"
-	cacheRegister "github.com/valentinesamuel/activelog/internal/cache/di"
-	"github.com/valentinesamuel/activelog/internal/container"
-	emailRegister "github.com/valentinesamuel/activelog/internal/email/di"
-	webhookRegister "github.com/valentinesamuel/activelog/internal/webhook/di"
+	cacheRegister "github.com/valentinesamuel/activelog/internal/adapters/cache/di"
+	"github.com/valentinesamuel/activelog/internal/platform/container"
+	emailRegister "github.com/valentinesamuel/activelog/internal/adapters/email/di"
 	handlerRegister "github.com/valentinesamuel/activelog/internal/handlers/di"
-	queueRegister "github.com/valentinesamuel/activelog/internal/queue/di"
+	queueRegister "github.com/valentinesamuel/activelog/internal/adapters/queue/di"
 	"github.com/valentinesamuel/activelog/internal/repository"
 	repositoryRegister "github.com/valentinesamuel/activelog/internal/repository/di"
-	schedulerRegister "github.com/valentinesamuel/activelog/internal/scheduler/di"
+	schedulerRegister "github.com/valentinesamuel/activelog/internal/platform/scheduler/di"
 	serviceRegister "github.com/valentinesamuel/activelog/internal/service/di"
-	storageRegister "github.com/valentinesamuel/activelog/internal/storage/di"
-	"github.com/valentinesamuel/activelog/internal/websocket"
+	storageRegister "github.com/valentinesamuel/activelog/internal/adapters/storage/di"
+	webhookRegister "github.com/valentinesamuel/activelog/internal/adapters/webhook/di"
+	"github.com/valentinesamuel/activelog/internal/adapters/websocket"
 	"github.com/valentinesamuel/activelog/pkg/query"
 )
 
@@ -54,9 +54,9 @@ func setupContainer(db repository.DBConn, hub *websocket.Hub) *container.Contain
 	// Eagerly resolve webhook delivery and retry worker (depends on repositories)
 	c.MustResolve(webhookRegister.WebhookDeliveryKey)
 	c.MustResolve(webhookRegister.RetryWorkerKey)
-	serviceRegister.RegisterServices(c)        // Layer 2: Business logic
-	di.RegisterBroker(c)                       // Layer 3: Use case orchestration
-	schedulerRegister.RegisterScheduler(c)     // Scheduler (cron jobs)
+	serviceRegister.RegisterServices(c)    // Layer 2: Business logic
+	di.RegisterBroker(c)                   // Layer 3: Use case orchestration
+	schedulerRegister.RegisterScheduler(c) // Scheduler (cron jobs)
 
 	// Register use cases by domain
 	activityUsecases.RegisterActivityUseCases(c)
@@ -83,13 +83,6 @@ func registerCoreDependencies(c *container.Container, db repository.DBConn, hub 
 // All table registries are registered here for deep nesting support
 func setupRegistryManager() *query.RegistryManager {
 	manager := query.NewRegistryManager()
-
-	// Activities registry will be registered later (needs TagRepository)
-	// See repository.RegisterRepositories() for actual registration
-
-	// Future: Register other table registries here as needed
-	// manager.RegisterTable("users", usersRegistry)
-	// manager.RegisterTable("companies", companiesRegistry)
 
 	return manager
 }

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	webhookTypes "github.com/valentinesamuel/activelog/internal/webhook/types"
+	webhookTypes "github.com/valentinesamuel/activelog/internal/adapters/webhook/types"
 )
 
 // WebhookRepository handles database operations for webhooks

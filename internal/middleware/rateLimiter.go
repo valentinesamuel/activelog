@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	cacheTypes "github.com/valentinesamuel/activelog/internal/cache/types"
-	"github.com/valentinesamuel/activelog/internal/config"
-	queueTypes "github.com/valentinesamuel/activelog/internal/queue/types"
-	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
+	cacheTypes "github.com/valentinesamuel/activelog/internal/adapters/cache/types"
+	"github.com/valentinesamuel/activelog/internal/platform/config"
+	queueTypes "github.com/valentinesamuel/activelog/internal/adapters/queue/types"
+	requestcontext "github.com/valentinesamuel/activelog/internal/platform/requestcontext"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 

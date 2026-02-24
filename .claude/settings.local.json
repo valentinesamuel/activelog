@@ -30,7 +30,8 @@
       "Bash(swag init:*)",
       "Bash(go vet:*)",
       "Bash(git log:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(BASE=\"github.com/valentinesamuel/activelog\")"
     ]
   }
 }

@@ -11,8 +11,8 @@ import (
 	"github.com/valentinesamuel/activelog/internal/application/activityPhoto/usecases"
 	"github.com/valentinesamuel/activelog/internal/application/broker"
 	"github.com/valentinesamuel/activelog/internal/repository"
-	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
-	"github.com/valentinesamuel/activelog/internal/utils"
+	requestcontext "github.com/valentinesamuel/activelog/internal/platform/requestcontext"
+	"github.com/valentinesamuel/activelog/internal/platform/utils"
 	"github.com/valentinesamuel/activelog/pkg/logger"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )

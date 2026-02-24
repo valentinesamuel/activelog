@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	exportPkg "github.com/valentinesamuel/activelog/internal/export"
-	"github.com/valentinesamuel/activelog/internal/jobs"
-	queueTypes "github.com/valentinesamuel/activelog/internal/queue/types"
+	"github.com/valentinesamuel/activelog/internal/models"
+	"github.com/valentinesamuel/activelog/internal/platform/jobs"
+	queueTypes "github.com/valentinesamuel/activelog/internal/adapters/queue/types"
 	"github.com/valentinesamuel/activelog/internal/repository"
-	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
-	storageTypes "github.com/valentinesamuel/activelog/internal/storage/types"
+	requestcontext "github.com/valentinesamuel/activelog/internal/platform/requestcontext"
+	"github.com/valentinesamuel/activelog/internal/service"
+	storageTypes "github.com/valentinesamuel/activelog/internal/adapters/storage/types"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 
@@ -55,7 +56,7 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="activities.csv"`)
 
-	if err := exportPkg.ExportActivitiesCSV(ctx, activities, w); err != nil {
+	if err := service.ExportActivitiesCSV(ctx, activities, w); err != nil {
 		// CSV headers already written, cannot switch to JSON — use stdlib http.Error
 		http.Error(w, "Failed to generate CSV export", http.StatusInternalServerError)
 		return
@@ -68,10 +69,10 @@ func (h *ExportHandler) EnqueuePDFExport(w http.ResponseWriter, r *http.Request)
 	user, _ := requestcontext.FromContext(ctx)
 
 	// Create export record
-	record := &exportPkg.ExportRecord{
+	record := &models.ExportRecord{
 		UserID: user.Id,
-		Format: exportPkg.FormatPDF,
-		Status: exportPkg.StatusPending,
+		Format: models.FormatPDF,
+		Status: models.StatusPending,
 	}
 	if err := h.exportRepo.Create(ctx, record); err != nil {
 		response.Fail(w, r, http.StatusInternalServerError, "Failed to create export record")
@@ -81,7 +82,7 @@ func (h *ExportHandler) EnqueuePDFExport(w http.ResponseWriter, r *http.Request)
 	// Marshal the job payload data
 	payload := jobs.ExportPayload{
 		UserID: user.Id,
-		Format: string(exportPkg.FormatPDF),
+		Format: string(models.FormatPDF),
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -131,7 +132,7 @@ func (h *ExportHandler) GetDownloadURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if record.Status != exportPkg.StatusCompleted {
+	if record.Status != models.StatusCompleted {
 		response.Fail(w, r, http.StatusConflict, "Export is not yet completed")
 		return
 	}

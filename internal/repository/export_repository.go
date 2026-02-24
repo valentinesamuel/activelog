@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	exportTypes "github.com/valentinesamuel/activelog/internal/export"
+	"github.com/valentinesamuel/activelog/internal/models"
 )
 
 // ExportRepository handles database operations for export records.
@@ -20,7 +20,7 @@ func NewExportRepository(db DBConn) *ExportRepository {
 }
 
 // Create inserts a new export record and sets its ID from RETURNING.
-func (r *ExportRepository) Create(ctx context.Context, record *exportTypes.ExportRecord) error {
+func (r *ExportRepository) Create(ctx context.Context, record *models.ExportRecord) error {
 	query := `
 		INSERT INTO exports (user_id, format, status)
 		VALUES ($1, $2, $3)
@@ -39,9 +39,9 @@ func (r *ExportRepository) Create(ctx context.Context, record *exportTypes.Expor
 }
 
 // UpdateStatus updates the status, s3_key, error_message, and completed_at fields.
-func (r *ExportRepository) UpdateStatus(ctx context.Context, id string, status exportTypes.ExportStatus, s3Key *string, errMsg *string) error {
+func (r *ExportRepository) UpdateStatus(ctx context.Context, id string, status models.ExportStatus, s3Key *string, errMsg *string) error {
 	var completedAt *time.Time
-	if status == exportTypes.StatusCompleted || status == exportTypes.StatusFailed {
+	if status == models.StatusCompleted || status == models.StatusFailed {
 		now := time.Now()
 		completedAt = &now
 	}
@@ -68,13 +68,13 @@ func (r *ExportRepository) UpdateStatus(ctx context.Context, id string, status e
 }
 
 // GetByID fetches an export record by UUID string.
-func (r *ExportRepository) GetByID(ctx context.Context, id string) (*exportTypes.ExportRecord, error) {
+func (r *ExportRepository) GetByID(ctx context.Context, id string) (*models.ExportRecord, error) {
 	query := `
 		SELECT id, user_id, format, status, s3_key, error_message, created_at, completed_at
 		FROM exports
 		WHERE id = $1`
 
-	record := &exportTypes.ExportRecord{}
+	record := &models.ExportRecord{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&record.ID,
 		&record.UserID,
@@ -96,7 +96,7 @@ func (r *ExportRepository) GetByID(ctx context.Context, id string) (*exportTypes
 }
 
 // ListByUser fetches all exports for a user ordered by created_at DESC.
-func (r *ExportRepository) ListByUser(ctx context.Context, userID int) ([]*exportTypes.ExportRecord, error) {
+func (r *ExportRepository) ListByUser(ctx context.Context, userID int) ([]*models.ExportRecord, error) {
 	query := `
 		SELECT id, user_id, format, status, s3_key, error_message, created_at, completed_at
 		FROM exports
@@ -109,9 +109,9 @@ func (r *ExportRepository) ListByUser(ctx context.Context, userID int) ([]*expor
 	}
 	defer rows.Close()
 
-	var records []*exportTypes.ExportRecord
+	var records []*models.ExportRecord
 	for rows.Next() {
-		record := &exportTypes.ExportRecord{}
+		record := &models.ExportRecord{}
 		err := rows.Scan(
 			&record.ID,
 			&record.UserID,

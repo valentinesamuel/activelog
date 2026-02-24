@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
+	requestcontext "github.com/valentinesamuel/activelog/internal/platform/requestcontext"
 	"github.com/valentinesamuel/activelog/internal/repository"
-	webhookTypes "github.com/valentinesamuel/activelog/internal/webhook/types"
+	webhookTypes "github.com/valentinesamuel/activelog/internal/adapters/webhook/types"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 

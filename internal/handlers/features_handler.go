@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/valentinesamuel/activelog/internal/featureflags"
+	"github.com/valentinesamuel/activelog/internal/platform/featureflags"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )
 

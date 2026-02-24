@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/valentinesamuel/activelog/internal/config"
-	requestcontext "github.com/valentinesamuel/activelog/internal/requestContext"
+	"github.com/valentinesamuel/activelog/internal/platform/config"
+	requestcontext "github.com/valentinesamuel/activelog/internal/platform/requestcontext"
 	"github.com/valentinesamuel/activelog/pkg/auth"
 	"github.com/valentinesamuel/activelog/pkg/response"
 )

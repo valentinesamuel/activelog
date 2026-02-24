@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/lib/pq"
 	"github.com/valentinesamuel/activelog/internal/models"
 	"github.com/valentinesamuel/activelog/pkg/errors"
 )
@@ -31,7 +30,10 @@ func (ar *UserRepository) CreateUser(ctx context.Context, user *models.User) err
 	err := ar.db.QueryRowContext(ctx, query, user.Email, user.Username, user.PasswordHash).Scan(&user.Email, &user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
-		return fmt.Errorf("❌ Error creating user %w", err)
+		if mapped := mapPgError(err); mapped != nil {
+			return mapped
+		}
+		return &errors.DatabaseError{Op: "INSERT", Table: "users", Err: err}
 	}
 
 	fmt.Println("✅ User created successfully!")
@@ -56,6 +58,9 @@ func (ar *UserRepository) FindUserByEmail(ctx context.Context, email string) (*m
 	}
 
 	if err != nil {
+		if mapped := mapPgError(err); mapped != nil {
+			return nil, mapped
+		}
 		return nil, &errors.DatabaseError{
 			Op:    "SELECT",
 			Table: "user",
